@@ -29,9 +29,14 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   danger: 'bg-surface text-danger border-line hover:bg-danger-soft',
 };
 
+/**
+ * Sizes are generous on phones and tighten from `sm` up. This app is used
+ * mostly on a phone, often with dirty or gloved hands, so the primary size
+ * clears the ~44px touch target guidance on small screens.
+ */
 const BUTTON_SIZES: Record<ButtonSize, string> = {
-  sm: 'px-2.5 py-1.5 text-xs',
-  md: 'px-3.5 py-2 text-sm',
+  sm: 'px-3 py-2 text-xs sm:px-2.5 sm:py-1.5',
+  md: 'min-h-11 px-4 py-2.5 text-sm sm:min-h-0 sm:px-3.5 sm:py-2',
 };
 
 export function buttonClass(variant: ButtonVariant = 'primary', size: ButtonSize = 'md') {
@@ -123,8 +128,15 @@ export function Field({
   );
 }
 
+/**
+ * `text-base` (16px) on phones is deliberate: iOS Safari zooms the viewport
+ * when a focused input is smaller than that, and does not zoom back out.
+ * globals.css enforces the same rule for any control rendered outside these
+ * components.
+ */
 const CONTROL_CLASS =
-  'w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink ' +
+  'w-full rounded-md border border-line bg-surface px-3 py-2.5 text-base text-ink ' +
+  'sm:py-2 sm:text-sm ' +
   'placeholder:text-muted/70 focus:border-brand focus:outline-2 focus:outline-offset-0 ' +
   'focus:outline-brand/30 disabled:bg-canvas disabled:text-muted';
 

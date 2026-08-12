@@ -4,6 +4,16 @@ import { Mail, MessageCircle, MoreVertical } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { Alert, Button } from '@/components/ui';
+import { cn } from '@/lib/utils';
+
+/**
+ * Sticks to the bottom of the preview, but clears the fixed mobile tab bar
+ * (4rem plus the home indicator). From `md` up the tab bar is gone, so it sits
+ * flush at the bottom.
+ */
+const STICKY_BAR =
+  'sticky bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] z-10 border-t border-line ' +
+  'bg-surface md:bottom-0';
 
 export type SendChannel = 'email' | 'whatsapp' | 'share';
 
@@ -127,7 +137,7 @@ export function SendBar({
           : 'share sheet';
 
     return (
-      <div className="sticky bottom-0 z-10 flex flex-col gap-2 border-t border-line bg-surface p-3">
+      <div className={cn(STICKY_BAR, 'flex flex-col gap-2 p-3')}>
         {error ? <Alert tone="warn">{error}</Alert> : null}
 
         <Alert tone="ok">
@@ -157,7 +167,7 @@ export function SendBar({
   }
 
   return (
-    <div className="sticky bottom-0 z-10 border-t border-line bg-surface p-3">
+    <div className={cn(STICKY_BAR, 'p-3')}>
       <div className="flex items-stretch gap-2">
         <div className="relative flex-1">
           <Button

@@ -119,9 +119,9 @@
       "align": "right"
     },
     "totals.servicesTaxRate": {
-      "x": 462,
+      "x": 505,
       "y": 371.4,
-      "maxWidth": 28,
+      "maxWidth": 62,
       "maxHeight": 11,
       "fontSize": 9.5,
       "minFontSize": 7,
@@ -137,9 +137,9 @@
       "align": "right"
     },
     "totals.partsTaxRate": {
-      "x": 462,
+      "x": 505,
       "y": 174.2,
-      "maxWidth": 28,
+      "maxWidth": 62,
       "maxHeight": 11,
       "fontSize": 9.5,
       "minFontSize": 7,

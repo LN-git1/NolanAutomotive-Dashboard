@@ -1,5 +1,106 @@
 # Changelog
 
+## 12/08/2026 @ 22:24:36 IST — "claude-opus-5"
+
+**Project completion: 95.60%**
+
+Basis: 87 of 91 discrete build requirements. The scope grew by 4 items this session (PWA install,
+mobile navigation, mobile input/viewport handling, mobile PDF preview) and all 4 are done, plus the
+tax-rate placement fix. Also newly resolved: the app now runs verified end-to-end against a real
+PostgreSQL database, which closes 2 of the 6 previously-open deployment items (migrations applied,
+end-to-end verification with real data). The 4 still open are all Supabase/Vercel/DNS account work:
+create the hosted Supabase project, create the two Storage buckets, deploy to Vercel, and point
+`dashboard.nolanautomotive.ie` at it.
+
+### Goal
+
+Run the app for real on localhost, fix what that exposed, and make it a properly installable,
+phone-first PWA — the owner will use it from a home-screen icon on a phone for most of the work.
+
+### Fixed
+
+**Tax rate was printed in the wrong column.** The number sat immediately left of the template's
+pre-printed `%`, leaving it stranded mid-row. The `%` actually behaves like the `€` symbol — a
+prefix label in a fixed column — so the value belongs right-aligned in the same column as the money
+figures, directly beneath the subtotal. Both tax-rate fields moved from `x:462 w:28` to `x:505
+w:62`, matching their subtotals exactly. Verified by rendering and cropping the totals block.
+
+### Added
+
+**Installable PWA.** `app/manifest.ts` (standalone display, brand theme colour, 192/512/maskable
+icons), an icon set generated with ImageMagick from the project's own bundled Noto Sans Bold, and
+the iOS metadata that actually matters — `apple-touch-icon`, `apple-mobile-web-app-title` and a
+translucent status bar.
+
+- The manifest and `/icons/**` had to be **removed from the auth gate**. A browser fetches them
+  before any session exists; behind the gate they 307 to `/login`, the install prompt silently never
+  appears, and iOS uses a screenshot as the home-screen icon. Verified: both return 200 with no
+  cookie while `/jobs` still returns 307.
+- Next emits the standardised `mobile-web-app-capable`, which only Safari 15.4+ honours. The
+  Apple-prefixed original is added explicitly so an older iPhone still launches standalone rather
+  than inside a Safari tab.
+
+**Phone-first layout.** Navigation became a fixed bottom tab bar on phones (thumb reach) with the
+left rail only from `md` up; `viewport-fit=cover` plus `env(safe-area-inset-*)` padding keeps
+content clear of the notch and home indicator in standalone mode.
+
+- **Form controls are now 16px on phones.** Safari zooms the viewport when a focused input is
+  smaller than that and never zooms back out. Controls return to 14px from `sm` up. Verified
+  computed font-size is 16px at a 393px viewport.
+- **The invoice preview no longer relies on an embed on phones.** iOS Safari cannot render a PDF
+  inside `<object>`/`<iframe>` — it renders a blank box. Phones get an explicit "Open invoice
+  preview" action that hands the PDF to the system viewer; the embed is used from `md` up. This
+  would have looked like a broken feature on the owner's primary device.
+- The sticky send bar now sits above the tab bar rather than behind it, and primary buttons clear
+  44px on phones.
+
+### Verification
+
+Run against **real PostgreSQL 16** (local Homebrew instance, `nolan_dashboard`), migrations applied
+and seeded, driven through a real Chrome via CDP:
+
+- Login accepted; wrong password rejected 401; all seven authenticated routes return 200.
+- Created **J-0001** through the UI — job-number allocation works against a real counter row.
+- Generated and sent an invoice: **NA-2026-0001** written, job flipped to `invoiced`, both counters
+  advanced to 2, `sent_via` recorded. Totals correct (€280 services + €148 parts, VAT 0 because the
+  business is not VAT registered = €428).
+- **The duplicate-invoice guard added last session was confirmed working under real conditions**: a
+  second finalize on the same job returned 400 with a clear message, the invoice count stayed at 1,
+  and the counter was *not* burned — the rollback released the number, exactly as designed.
+- **The storage-failure path was exercised for real.** No Supabase runs locally, so the upload
+  genuinely failed; the invoice still committed, the PDF still came back, and the Invoicer showed
+  the warning rather than a 500. That fix earned its keep on its first outing.
+- CSV exports return valid UTF-8 BOM CSV with quoting intact, including an address containing a
+  newline.
+- Mobile at a 393px viewport: no horizontal overflow, tab bar correctly placed, 16px inputs, send
+  bar clearing the nav, and a second job (**J-0002**) created and invoiced entirely on the phone
+  layout. No console or page errors on any screen.
+- `pnpm typecheck` clean, `pnpm lint` clean, 83 tests passing / 4 skipped.
+
+### Files Touched
+
+- `lib/pdf/invoiceTemplateCoords.json` — tax-rate column alignment
+- `app/manifest.ts` (new), `app/layout.tsx` — PWA manifest, iOS metadata, viewport
+- `public/icons/*` (new) — 192, 512, maskable 512, apple-touch 180, favicon
+- `proxy.ts` — manifest and icons excluded from the auth gate
+- `app/globals.css` — safe-area utilities, 16px control rule, momentum scrolling
+- `components/layout/sidebar.tsx` — split into `MobileNav` (bottom tabs) and `Sidebar` (rail)
+- `app/(dashboard)/layout.tsx` — tab-bar clearance, safe-area header
+- `components/ui/index.tsx` — 16px controls, larger touch targets
+- `components/invoicer/{invoicer,send-bar}.tsx` — mobile PDF action, send-bar offset
+- `README.md` — "Mobile and installing to a phone"
+
+### Open / next session
+
+1. Create the hosted Supabase project (EU/Frankfurt) and the two private Storage buckets, then
+   re-test attachment upload and invoice PDF storage against real infrastructure.
+2. Deploy to Vercel; confirm `TEMPLATE_MAPPER` is unset there.
+3. Add the `dashboard` CNAME → `cname.vercel-dns.com`.
+4. Install to an actual iPhone home screen and confirm standalone launch and the icon.
+5. Run the counter concurrency tests with `TEST_DATABASE_URL`.
+
+---
+
 ## 12/08/2026 @ 21:42:33 IST — "claude-opus-5"
 
 **Project completion: 93.10%**

@@ -45,6 +45,42 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/**
+ * Installed to a home screen the app runs standalone with a translucent status
+ * bar, so the page extends under the notch and the home indicator. These keep
+ * content clear of both. They collapse to zero in a normal browser tab.
+ */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Height of the mobile tab bar, plus whatever the home indicator needs. */
+.pb-navbar {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+}
+
+/**
+ * iOS Safari zooms the viewport when a focused input's font-size is under 16px,
+ * and never zooms back out. Every control is therefore 16px on phones and drops
+ * to 14px only from `sm` up, where the zoom behaviour does not apply.
+ */
+@media (max-width: 639px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Momentum scrolling for the horizontally scrollable tables. */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Only ever used to hide the native file input behind a styled label. */
 .visually-hidden {
   position: absolute;

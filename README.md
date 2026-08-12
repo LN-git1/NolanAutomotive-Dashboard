@@ -160,6 +160,41 @@ The apex `nolanautomotive.ie` is untouched by this and remains free for the main
 
 ---
 
+## Mobile and installing to a phone
+
+The dashboard is built phone-first — most of the work happens on a phone in the workshop, not at a
+desk. It is an installable PWA.
+
+### Installing
+
+**iPhone / iPad (Safari):** open the site → Share → **Add to Home Screen**. It then launches
+full-screen with no browser chrome, its own icon and its own app switcher entry.
+
+**Android (Chrome):** open the site → menu → **Install app** (or accept the install prompt).
+
+> The manifest (`/manifest.webmanifest`) and everything under `/icons` are deliberately **outside
+> the auth gate** in `proxy.ts`. A browser fetches them before any session exists — if they
+> redirected to `/login`, the install prompt would silently never appear and iOS would fall back to
+> a screenshot as the home-screen icon. Neither exposes anything beyond the app's name and logo.
+
+### What was done for mobile specifically
+
+| Concern | Handling |
+|---|---|
+| Navigation | A fixed **bottom tab bar** on phones, within thumb reach; the left rail only appears from `md` up. |
+| iOS zoom-on-focus | Every form control is **16px** on phones. Safari zooms the viewport when a focused input is smaller and never zooms back out — this is the single most common mobile-web annoyance. Controls drop to 14px from `sm` up, where the behaviour does not apply. |
+| Notch and home indicator | `viewport-fit=cover` plus `env(safe-area-inset-*)` padding on the header and the tab bar, so nothing sits under the status bar or the home indicator in standalone mode. |
+| PDF preview | iOS Safari **cannot render a PDF inside `<object>`/`<iframe>`** — it shows a blank box. Phones therefore get an explicit "Open invoice preview" action that hands the file to the system PDF viewer; the inline embed is used from `md` up. |
+| Send bar | Sticks above the tab bar (`bottom-[calc(4rem+safe-area)]`) rather than behind it. |
+| Touch targets | Primary buttons are ≥44px tall on phones. |
+| Tables | Scroll horizontally inside their own container with momentum scrolling; the page body never scrolls sideways. |
+| Phone-number autolinking | Disabled, so registrations, mileages and job numbers are not turned into tap-to-call links. |
+
+Sharing an invoice is also **better** on a phone than on a desktop: the Web Share API can hand
+WhatsApp or Mail the actual PDF, which desktop browsers largely cannot do.
+
+---
+
 ## How invoicing works
 
 The invoice is **never rebuilt as HTML**. The supplied PDF is loaded as an immutable background and

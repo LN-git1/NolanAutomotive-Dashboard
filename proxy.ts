@@ -32,9 +32,16 @@ export default async function proxy(request: NextRequest) {
 
 export const config = {
   /**
-   * Everything except the login page, the login endpoint, Next.js build assets
-   * and the favicon. This deliberately DOES cover `/api/**` — file access and
-   * CSV exports must be gated too, not just pages.
+   * Everything except the login page, the login endpoint, Next.js build assets,
+   * and the PWA install assets. This deliberately DOES cover `/api/**` — file
+   * access and CSV exports must be gated too, not just pages.
+   *
+   * The manifest and icons MUST stay public: a browser fetches them before any
+   * session exists, and if they redirect to the login page the install prompt
+   * silently never appears and the home-screen icon falls back to a screenshot.
+   * They expose nothing beyond the app's name and logo.
    */
-  matcher: ['/((?!login|api/auth/login|_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    '/((?!login|api/auth/login|_next/static|_next/image|favicon.ico|favicon-32.png|manifest.webmanifest|icons/).*)',
+  ],
 };

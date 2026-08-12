@@ -1,12 +1,13 @@
 'use client';
 
-import { Plus, Trash2 } from 'lucide-react';
+import { FileText, Plus, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 import {
   Alert,
   Button,
+  buttonClass,
   Card,
   CardBody,
   CardHeader,
@@ -428,10 +429,35 @@ export function Invoicer({
           </Card>
         ) : (
           <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {/*
+              iOS Safari does not render PDFs inside <object>/<iframe> — it shows
+              a blank box. Since the phone is the primary device here, small
+              screens get an explicit "open in the PDF viewer" action instead of
+              an embed that silently fails, and the embed is used from md up.
+            */}
+            {/* pb-28 keeps this clear of the sticky send bar floating above it. */}
+            <div className="flex flex-col items-start gap-3 p-4 pb-28 md:hidden">
+              <p className="text-sm text-ink">
+                Invoice ready to preview. It opens in your phone&apos;s PDF viewer.
+              </p>
+              <a
+                href={previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={buttonClass('secondary', 'md')}
+              >
+                <FileText aria-hidden className="size-4" />
+                Open invoice preview
+              </a>
+              <p className="text-xs text-muted">
+                Check it before sending — sending creates the invoice and uses an invoice number.
+              </p>
+            </div>
+
             <object
               data={previewUrl}
               type="application/pdf"
-              className="h-[70vh] w-full"
+              className="hidden h-[70vh] w-full md:block"
               aria-label="Invoice preview"
             >
               <div className="p-4 text-sm text-muted">
