@@ -3,7 +3,7 @@ import 'server-only';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '../index';
-import { invoices, jobs, supplierBills, suppliers } from '../schema';
+import { invoices, jobAttachments, jobs, supplierBills, suppliers } from '../schema';
 
 /**
  * Aggregates for the Overview page.
@@ -70,6 +70,30 @@ export async function listSuppliersWithTotals() {
     .leftJoin(supplierBills, eq(supplierBills.supplierId, suppliers.id))
     .groupBy(suppliers.id)
     .orderBy(suppliers.name);
+}
+
+/**
+ * Row counts for the factory-reset confirmation.
+ *
+ * Counts EVERY row, including soft-deleted jobs — the reset removes those too,
+ * so the number shown has to match what actually gets destroyed.
+ */
+export async function getResetCounts() {
+  const [jobRows, invoiceRows, attachmentRows, supplierRows, billRows] = await Promise.all([
+    db.select({ n: sql<number>`count(*)::int` }).from(jobs),
+    db.select({ n: sql<number>`count(*)::int` }).from(invoices),
+    db.select({ n: sql<number>`count(*)::int` }).from(jobAttachments),
+    db.select({ n: sql<number>`count(*)::int` }).from(suppliers),
+    db.select({ n: sql<number>`count(*)::int` }).from(supplierBills),
+  ]);
+
+  return {
+    jobs: Number(jobRows[0]?.n ?? 0),
+    invoices: Number(invoiceRows[0]?.n ?? 0),
+    attachments: Number(attachmentRows[0]?.n ?? 0),
+    suppliers: Number(supplierRows[0]?.n ?? 0),
+    supplierBills: Number(billRows[0]?.n ?? 0),
+  };
 }
 
 export async function getSupplierWithBills(supplierId: string) {

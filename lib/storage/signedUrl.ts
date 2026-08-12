@@ -94,3 +94,28 @@ export async function removeObject(bucket: string, storagePath: string) {
     throw new Error(`Could not delete ${storagePath}: ${error.message}`);
   }
 }
+
+/**
+ * Best-effort bulk delete, used by the factory reset.
+ *
+ * Deliberately does not throw: the database rows are already gone by the time
+ * this runs, and failing the whole reset because one orphaned object could not
+ * be removed would be worse than leaving it. Returns how many paths it was
+ * asked to remove so the caller can report honestly.
+ */
+export async function removeObjects(bucket: string, storagePaths: string[]): Promise<number> {
+  const paths = storagePaths.filter(Boolean);
+  if (paths.length === 0) return 0;
+
+  // Supabase caps a single remove() call, so send it in chunks.
+  const CHUNK = 100;
+  for (let index = 0; index < paths.length; index += CHUNK) {
+    try {
+      await getSupabaseAdmin().storage.from(bucket).remove(paths.slice(index, index + CHUNK));
+    } catch {
+      // Ignored on purpose — see above.
+    }
+  }
+
+  return paths.length;
+}

@@ -195,6 +195,42 @@ WhatsApp or Mail the actual PDF, which desktop browsers largely cannot do.
 
 ---
 
+## Entering a vehicle
+
+Year, make and model are dropdowns, not text fields — the model list narrows to the make you pick,
+so a Ford shows Ford models and nothing else. Choosing a model before a make is not possible; the
+field says "Select a make first" rather than presenting an empty list.
+
+Every make and model also offers **"Other…"**, which swaps in a free-text box. This matters: a
+garage will eventually see something not on any list, and a dropdown-only field would block the job
+outright. The same mechanism means a job whose make was typed before these lists existed still
+opens and saves correctly instead of silently losing its value.
+
+The lists live in `lib/vehicles.ts` and cover the Irish market, including the vans a garage services
+as often as cars (Transit, Transporter, Sprinter, Trafic and so on). Adding a model is a one-line
+edit to that file.
+
+---
+
+## Resetting the dashboard
+
+**Settings → Danger zone → Reset all data** clears every job, invoice, customer record, supplier,
+bill and uploaded file, and restarts job and invoice numbering at `J-0001` / `NA-<year>-0001`.
+
+It is guarded three ways: the panel has to be revealed, an exact phrase (`RESET ALL DATA`) has to be
+typed, and that phrase is re-checked on the server — the client prompt is a speed bump, not the
+control. The current row counts are shown before you confirm, so you can see exactly what is about
+to be destroyed.
+
+> ⚠️ **Only use this to clear test data before going live.** It resets the invoice counter, so
+> running it after real invoices have gone out would reissue numbers customers already hold, which
+> breaks the continuous sequence Revenue expects. There is no undo.
+
+Your business details, VAT settings and default hourly rate are **kept** — those are configuration,
+not data.
+
+---
+
 ## How invoicing works
 
 The invoice is **never rebuilt as HTML**. The supplied PDF is loaded as an immutable background and

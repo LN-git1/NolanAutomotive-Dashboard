@@ -1,5 +1,88 @@
 # Changelog
 
+## 13/08/2026 @ 00:31:39 IST — "claude-opus-5"
+
+**Project completion: 96.81%**
+
+Basis: 91 of 94 discrete build requirements. Scope grew by 3 (vehicle make/model/year pickers,
+factory reset, and the free-text fallback for unlisted vehicles) and all 3 are done. The 3 still
+open are unchanged and all require account access: create the hosted Supabase project and its two
+Storage buckets, deploy to Vercel, and point `dashboard.nolanautomotive.ie` at it.
+
+### Goal
+
+Take typing away from the owner where the data is predictable, and give a safe way to wipe the test
+data accumulated during development before the business starts using this for real.
+
+### Added
+
+**Year, make and model are now dropdowns.** Picking a make narrows the model list to that
+manufacturer — choose Ford and you get Ford models, not a combined list. Selecting a model before a
+make is impossible; the field reads "Select a make first" rather than showing an empty list. Years
+run from next year (dealers pre-register plates) back to 1980.
+
+- **Every make and model keeps an "Other…" escape hatch** that swaps in a free-text box. This is
+  the part that matters: a garage will eventually see something not on any list, and a
+  dropdown-only field would have blocked the job outright. It also means a job whose make was typed
+  before these lists existed still opens and saves correctly instead of silently losing its value —
+  the form detects an unlisted value and starts that field in free-text mode.
+- Lists are Irish-market focused and include the vans a garage services as often as cars (Transit,
+  Transporter, Sprinter, Trafic). `lib/vehicles.ts`, one line per model to extend.
+
+**Factory reset, in Settings → Danger zone.** Clears every job, invoice, customer record, supplier,
+bill and stored file, and restarts numbering at `J-0001` / `NA-<year>-0001`.
+
+- Guarded three ways: the panel must be revealed, the exact phrase `RESET ALL DATA` typed, and that
+  phrase re-checked **on the server** — the client prompt is a speed bump, not the control. Live row
+  counts are shown before confirming so the owner sees exactly what is about to be destroyed.
+- **Settings are deliberately preserved.** Business name, VAT registration and hourly rate are
+  configuration, not data; wiping them would just mean retyping them.
+- Deletion order is explicit rather than relying on cascades: `invoices` references `jobs` *without*
+  ON DELETE CASCADE — deliberate, so an issued invoice can never be silently orphaned by deleting
+  its job — which means invoices must be removed first.
+- Storage objects are collected **before** the rows are deleted (afterwards the paths are gone) and
+  removed best-effort afterwards, so one unreachable file cannot fail a reset whose rows are already
+  committed.
+
+> Flagged in both the UI and the README: this resets the invoice counter, so running it after real
+> invoices have gone out would reissue numbers customers already hold and break the continuous
+> sequence Revenue expects. It is a pre-launch tool.
+
+### Fixed
+
+- `RESET_CONFIRMATION_PHRASE` initially lived in the `'use server'` action file, where only async
+  functions may be exported. Moved to `lib/validation/danger.ts` so the action and its UI share one
+  definition.
+
+### Verification
+
+Driven through a real browser against the live local database:
+
+- Model dropdown disabled until a make is chosen; Ford yields 27 models including Fiesta and
+  excluding Corolla; switching to Toyota swaps the list and clears the stale selection.
+- "Other…" swaps to a text input, and a saved custom vehicle (Piaggio Porter) **reopens in
+  free-text mode on edit** — the legacy-data path works.
+- Factory reset destroyed 2 jobs, 1 invoice, 1 supplier and 1 bill; counters returned to 1;
+  **settings survived** (business name, phone and VAT rate all intact). The confirm button stayed
+  disabled for an empty phrase and for `reset all data` in the wrong case.
+- `pnpm typecheck` clean, `pnpm lint` clean, **96 tests passing / 4 skipped** (13 new covering the
+  vehicle data and year range).
+
+### Files Touched
+
+- `lib/vehicles.ts` (new) — makes, models, year range, known-value checks
+- `components/jobs/vehicle-fields.tsx` (new) — dependent dropdowns with free-text fallback
+- `components/jobs/job-form.tsx` — swapped four text inputs for the picker
+- `lib/actions/danger.ts` (new) — factory reset
+- `lib/validation/danger.ts` (new) — shared confirmation phrase
+- `components/settings/factory-reset.tsx` (new) — danger-zone UI
+- `lib/db/queries/overview.ts` — `getResetCounts()`
+- `lib/storage/signedUrl.ts` — best-effort `removeObjects()`
+- `app/(dashboard)/settings/page.tsx` — danger zone wired in
+- `tests/vehicles.test.ts` (new), `README.md`
+
+---
+
 ## 12/08/2026 @ 22:24:36 IST — "claude-opus-5"
 
 **Project completion: 95.60%**

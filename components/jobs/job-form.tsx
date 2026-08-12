@@ -14,6 +14,7 @@ import {
   Select,
   Textarea,
 } from '@/components/ui';
+import { VehicleFields } from '@/components/jobs/vehicle-fields';
 import { createJob, updateJob } from '@/lib/actions/jobs';
 import { JOB_PRIORITIES, JOB_STATUSES } from '@/lib/validation/job';
 import type { Job } from '@/lib/db/schema';
@@ -103,22 +104,11 @@ export function JobForm({ job }: { job?: Job }) {
             />
           </Field>
 
-          <Field label="Year" htmlFor="vehicleYear">
-            <Input
-              id="vehicleYear"
-              name="vehicleYear"
-              inputMode="numeric"
-              defaultValue={job?.vehicleYear ?? ''}
-            />
-          </Field>
-
-          <Field label="Make" htmlFor="vehicleMake">
-            <Input id="vehicleMake" name="vehicleMake" defaultValue={job?.vehicleMake ?? ''} />
-          </Field>
-
-          <Field label="Model" htmlFor="vehicleModel">
-            <Input id="vehicleModel" name="vehicleModel" defaultValue={job?.vehicleModel ?? ''} />
-          </Field>
+          <VehicleFields
+            defaultYear={job?.vehicleYear}
+            defaultMake={job?.vehicleMake}
+            defaultModel={job?.vehicleModel}
+          />
 
           <Field label="Colour" htmlFor="vehicleColor">
             <Input id="vehicleColor" name="vehicleColor" defaultValue={job?.vehicleColor ?? ''} />

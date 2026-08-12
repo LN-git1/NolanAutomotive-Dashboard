@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 
+import { FactoryReset } from '@/components/settings/factory-reset';
 import { SettingsForm } from '@/components/settings/settings-form';
 import { Card, CardBody, CardHeader } from '@/components/ui';
+import { getResetCounts } from '@/lib/db/queries/overview';
 import { getSettings } from '@/lib/db/queries/settings';
 import { peekNextNumber } from '@/lib/counters';
 import { db } from '@/lib/db';
@@ -21,7 +23,7 @@ const EXPORTS = [
 ] as const;
 
 export default async function SettingsPage() {
-  const settings = await getSettings();
+  const [settings, resetCounts] = await Promise.all([getSettings(), getResetCounts()]);
 
   // Shown so the owner can see where the sequence currently stands.
   let nextInvoiceNumber = '—';
@@ -74,6 +76,8 @@ export default async function SettingsPage() {
           ))}
         </CardBody>
       </Card>
+
+      <FactoryReset counts={resetCounts} />
     </div>
   );
 }
