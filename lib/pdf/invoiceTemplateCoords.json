@@ -1,0 +1,213 @@
+{
+  "_comment": "Generated defaults derived from the pre-printed label positions extracted from invoice-template.pdf. Coordinates are PDF points, origin bottom-left, y = text baseline. Regenerate or fine-tune with the Template Mapper: TEMPLATE_MAPPER=true pnpm dev -> /dev/template-mapper. NOTE: fields that sit on a pre-printed ruled line carry a maxHeight of roughly one line so they SHRINK to fit rather than wrapping onto the row below. Fields absent from this file are simply not stamped (see README 'Template deviations').",
+  "pageSize": { "width": 612, "height": 792 },
+  "fields": {
+    "invoiceNumber": {
+      "x": 155,
+      "y": 691.3,
+      "maxWidth": 200,
+      "maxHeight": 12,
+      "fontSize": 10,
+      "minFontSize": 7,
+      "align": "left",
+      "color": "white",
+      "bold": true
+    },
+    "issueDate": {
+      "x": 477,
+      "y": 691.3,
+      "maxWidth": 110,
+      "maxHeight": 12,
+      "fontSize": 10,
+      "minFontSize": 7,
+      "align": "left",
+      "color": "white",
+      "bold": true
+    },
+
+    "customerName": {
+      "x": 158,
+      "y": 646.2,
+      "maxWidth": 132,
+      "maxHeight": 12,
+      "fontSize": 10,
+      "minFontSize": 6.5,
+      "align": "left"
+    },
+    "customerAddress": {
+      "x": 158,
+      "y": 627.7,
+      "maxWidth": 132,
+      "maxHeight": 30,
+      "fontSize": 8.5,
+      "minFontSize": 6,
+      "align": "left"
+    },
+    "customerPhone": {
+      "x": 158,
+      "y": 590.7,
+      "maxWidth": 132,
+      "maxHeight": 11,
+      "fontSize": 9,
+      "minFontSize": 6.5,
+      "align": "left"
+    },
+
+    "vehicleYear": {
+      "x": 432,
+      "y": 646.2,
+      "maxWidth": 118,
+      "maxHeight": 11,
+      "fontSize": 9.5,
+      "minFontSize": 7,
+      "align": "left"
+    },
+    "vehicleMake": {
+      "x": 432,
+      "y": 627.7,
+      "maxWidth": 118,
+      "maxHeight": 11,
+      "fontSize": 9.5,
+      "minFontSize": 6.5,
+      "align": "left"
+    },
+    "vehicleModel": {
+      "x": 432,
+      "y": 609.2,
+      "maxWidth": 118,
+      "maxHeight": 11,
+      "fontSize": 9.5,
+      "minFontSize": 5.5,
+      "align": "left"
+    },
+    "vehicleColor": {
+      "x": 432,
+      "y": 590.7,
+      "maxWidth": 118,
+      "maxHeight": 11,
+      "fontSize": 9.5,
+      "minFontSize": 6.5,
+      "align": "left"
+    },
+    "vehicleMileage": {
+      "x": 432,
+      "y": 572.1,
+      "maxWidth": 118,
+      "maxHeight": 11,
+      "fontSize": 9.5,
+      "minFontSize": 7,
+      "align": "left"
+    },
+
+    "otherComments": {
+      "x": 64,
+      "y": 160,
+      "maxWidth": 340,
+      "maxHeight": 62,
+      "fontSize": 8.5,
+      "minFontSize": 6,
+      "align": "left"
+    },
+
+    "totals.servicesSubtotal": {
+      "x": 505,
+      "y": 387.9,
+      "maxWidth": 62,
+      "maxHeight": 11,
+      "fontSize": 9.5,
+      "minFontSize": 7,
+      "align": "right"
+    },
+    "totals.servicesTaxRate": {
+      "x": 462,
+      "y": 371.4,
+      "maxWidth": 28,
+      "maxHeight": 11,
+      "fontSize": 9.5,
+      "minFontSize": 7,
+      "align": "right"
+    },
+    "totals.partsSubtotal": {
+      "x": 505,
+      "y": 191.4,
+      "maxWidth": 62,
+      "maxHeight": 11,
+      "fontSize": 9.5,
+      "minFontSize": 7,
+      "align": "right"
+    },
+    "totals.partsTaxRate": {
+      "x": 462,
+      "y": 174.2,
+      "maxWidth": 28,
+      "maxHeight": 11,
+      "fontSize": 9.5,
+      "minFontSize": 7,
+      "align": "right"
+    },
+    "totals.totalServices": {
+      "x": 505,
+      "y": 139.8,
+      "maxWidth": 62,
+      "maxHeight": 11,
+      "fontSize": 9.5,
+      "minFontSize": 7,
+      "align": "right"
+    },
+    "totals.totalParts": {
+      "x": 505,
+      "y": 122.6,
+      "maxWidth": 62,
+      "maxHeight": 11,
+      "fontSize": 9.5,
+      "minFontSize": 7,
+      "align": "right"
+    },
+    "totals.totalTax": {
+      "x": 505,
+      "y": 105.4,
+      "maxWidth": 62,
+      "maxHeight": 11,
+      "fontSize": 9.5,
+      "minFontSize": 7,
+      "align": "right"
+    },
+    "totals.grandTotal": {
+      "x": 505,
+      "y": 87.3,
+      "maxWidth": 62,
+      "maxHeight": 13,
+      "fontSize": 10.5,
+      "minFontSize": 7.5,
+      "align": "right",
+      "bold": true
+    }
+  },
+  "rowTemplates": {
+    "servicesTable": {
+      "startY": 508,
+      "rowHeight": 20,
+      "maxRows": 5,
+      "fontSize": 9,
+      "minFontSize": 6.5,
+      "columns": {
+        "description": { "x": 64, "width": 418, "align": "left" },
+        "amount": { "x": 490, "width": 77, "align": "right" }
+      }
+    },
+    "partsTable": {
+      "startY": 315,
+      "rowHeight": 20,
+      "maxRows": 5,
+      "fontSize": 8.5,
+      "minFontSize": 6.5,
+      "columns": {
+        "partName": { "x": 64, "width": 231, "align": "left" },
+        "partNumber": { "x": 302, "width": 88, "align": "left" },
+        "qty": { "x": 395, "width": 25, "align": "right" },
+        "unitPrice": { "x": 430, "width": 55, "align": "right" },
+        "amount": { "x": 497, "width": 70, "align": "right" }
+      }
+    }
+  }
+}

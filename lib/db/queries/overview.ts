@@ -1,0 +1,84 @@
+import 'server-only';
+
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+
+import { db } from '../index';
+import { invoices, jobs, supplierBills, suppliers } from '../schema';
+
+/**
+ * Aggregates for the Overview page.
+ *
+ * Money is summed in SQL and returned as cents so nothing has to trust
+ * JavaScript float arithmetic on the way to the screen.
+ */
+
+/** Sum of grand totals for invoices whose job is still awaiting payment. */
+export async function getOutstandingInvoiceTotalCents(): Promise<number> {
+  const rows = await db
+    .select({
+      total: sql<string>`COALESCE(SUM(${invoices.grandTotal}) * 100, 0)::bigint`,
+    })
+    .from(invoices)
+    .innerJoin(jobs, eq(invoices.jobId, jobs.id))
+    .where(and(eq(jobs.status, 'invoiced'), isNull(jobs.deletedAt)));
+
+  return Number(rows[0]?.total ?? 0);
+}
+
+/** Sum of supplier bills that have not been marked paid. */
+export async function getOwedToSuppliersCents(): Promise<number> {
+  const rows = await db
+    .select({
+      total: sql<string>`COALESCE(SUM(${supplierBills.amount}) * 100, 0)::bigint`,
+    })
+    .from(supplierBills)
+    .where(isNull(supplierBills.paidAt));
+
+  return Number(rows[0]?.total ?? 0);
+}
+
+export async function listRecentInvoices(limit = 10) {
+  return db
+    .select({
+      id: invoices.id,
+      invoiceNumber: invoices.invoiceNumber,
+      issueDate: invoices.issueDate,
+      grandTotal: invoices.grandTotal,
+      sentVia: invoices.sentVia,
+      jobId: invoices.jobId,
+      jobNumber: jobs.jobNumber,
+      customerName: jobs.customerName,
+      jobStatus: jobs.status,
+    })
+    .from(invoices)
+    .innerJoin(jobs, eq(invoices.jobId, jobs.id))
+    .where(isNull(jobs.deletedAt))
+    .orderBy(desc(invoices.sentAt))
+    .limit(limit);
+}
+
+export async function listSuppliersWithTotals() {
+  return db
+    .select({
+      id: suppliers.id,
+      name: suppliers.name,
+      notes: suppliers.notes,
+      outstandingCents: sql<string>`COALESCE(SUM(${supplierBills.amount}) FILTER (WHERE ${supplierBills.paidAt} IS NULL) * 100, 0)::bigint`,
+      billCount: sql<number>`COUNT(${supplierBills.id})::int`,
+    })
+    .from(suppliers)
+    .leftJoin(supplierBills, eq(supplierBills.supplierId, suppliers.id))
+    .groupBy(suppliers.id)
+    .orderBy(suppliers.name);
+}
+
+export async function getSupplierWithBills(supplierId: string) {
+  return db.query.suppliers.findFirst({
+    where: eq(suppliers.id, supplierId),
+    with: {
+      bills: {
+        orderBy: [desc(supplierBills.billDate)],
+      },
+    },
+  });
+}

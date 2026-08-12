@@ -1,26 +1,59 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/**
+ * Deliberately a single light theme. This is an internal back-office tool used
+ * by one person on a phone in a workshop and on a desktop in an office; a
+ * system-driven dark mode would only add a second set of contrast problems to
+ * verify for no real benefit. Simple and legible beats configurable here.
+ */
+
+@theme {
+  --color-surface: #ffffff;
+  --color-canvas: #f5f6f8;
+  --color-ink: #14181f;
+  --color-muted: #5b6472;
+  --color-line: #dfe3e9;
+
+  --color-brand: #3f7fb3;
+  --color-brand-dark: #33668f;
+
+  --color-ok: #15803d;
+  --color-ok-soft: #e8f5ec;
+  --color-warn: #a16207;
+  --color-warn-soft: #fdf6e3;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdecea;
+  --color-info-soft: #eaf2f8;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numeric columns line up when figures share a width. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Only ever used to hide the native file input behind a styled label. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
