@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 import { requireApiSession } from '@/lib/auth/require-session';
 import { allocateNumber, formatInvoiceNumber } from '@/lib/counters';
@@ -59,6 +59,25 @@ export async function POST(request: Request) {
     });
 
     const result = await db.transaction(async (tx) => {
+      // Lock the job row first. Without this, two finalize calls for the same
+      // job (a double submit, a retry, a second tab) could both pass the
+      // duplicate check below and each allocate a number, leaving one job with
+      // two live invoices. Locking serialises them so the second sees the first.
+      await tx.execute(sql`SELECT id FROM jobs WHERE id = ${draft.jobId} FOR UPDATE`);
+
+      const [existing] = await tx
+        .select({ invoiceNumber: invoices.invoiceNumber })
+        .from(invoices)
+        .where(eq(invoices.jobId, draft.jobId))
+        .limit(1);
+
+      if (existing) {
+        throw new InvoiceBuildError(
+          `This job has already been invoiced as ${existing.invoiceNumber}. ` +
+            `Open the job to download or re-share that invoice.`,
+        );
+      }
+
       const allocated = await allocateNumber(tx, 'invoice');
       const invoiceNumber = formatInvoiceNumber(allocated, issueDate.getFullYear());
       const storagePath = buildInvoicePath(invoiceNumber);
@@ -104,11 +123,24 @@ export async function POST(request: Request) {
     });
     const bytes = await stampInvoice(finalBuild.stampInput);
 
-    await uploadBytes(INVOICES_BUCKET, result.storagePath, bytes, 'application/pdf');
+    /**
+     * The invoice is already committed at this point, so a storage failure must
+     * not be reported as a plain 500: that would hide the PDF the owner just
+     * created behind an opaque error, on an invoice number that has definitely
+     * been consumed. Return the bytes regardless and flag the failure so the
+     * owner can send the invoice now and the file can be re-uploaded later.
+     */
+    let storageFailed = false;
+    try {
+      await uploadBytes(INVOICES_BUCKET, result.storagePath, bytes, 'application/pdf');
+    } catch {
+      storageFailed = true;
+    }
 
     return pdfResponse(bytes, `${result.invoiceNumber}.pdf`, {
       'X-Invoice-Number': result.invoiceNumber,
       'X-Invoice-Id': result.id,
+      ...(storageFailed ? { 'X-Storage-Failed': '1' } : {}),
     });
   } catch (error) {
     const message =

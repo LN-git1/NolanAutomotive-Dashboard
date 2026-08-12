@@ -174,6 +174,15 @@ export function Invoicer({
       setPreviewUrl(URL.createObjectURL(blob));
       setFinalized({ blob, invoiceNumber, invoiceId, channel });
 
+      // The invoice is committed even if storing the PDF failed. Say so plainly
+      // rather than letting the owner discover a broken link on the job later.
+      if (response.headers.get('X-Storage-Failed') === '1') {
+        setError(
+          `Invoice ${invoiceNumber} was created, but the PDF could not be saved to storage. ` +
+            `Download it now with the button below — the copy on the job page will be missing.`,
+        );
+      }
+
       router.refresh();
     } catch {
       setError('Could not reach the server. The invoice was not created.');

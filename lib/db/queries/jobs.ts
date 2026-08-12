@@ -76,6 +76,11 @@ export async function listJobsByStatus(status: JobStatus, limit = 10) {
  * Candidates for the Invoicer picker. Completed jobs are the normal case, but
  * anything not yet paid is allowed so the owner is never blocked by a job whose
  * status they forgot to advance.
+ *
+ * Jobs that already have an invoice are excluded: a job is invoiced once, and
+ * offering it again would only lead to a rejected finalize. The authoritative
+ * guard is in the finalize transaction — this just keeps the owner from
+ * choosing a job that cannot proceed.
  */
 export async function listInvoiceableJobs() {
   return db
@@ -87,7 +92,13 @@ export async function listInvoiceableJobs() {
       status: jobs.status,
     })
     .from(jobs)
-    .where(and(notDeleted, sql`${jobs.status} <> 'paid'`))
+    .where(
+      and(
+        notDeleted,
+        sql`${jobs.status} <> 'paid'`,
+        sql`NOT EXISTS (SELECT 1 FROM ${invoices} WHERE ${invoices.jobId} = ${jobs.id})`,
+      ),
+    )
     .orderBy(sql`CASE WHEN ${jobs.status} = 'completed' THEN 0 ELSE 1 END`, desc(jobs.updatedAt))
     .limit(300);
 }

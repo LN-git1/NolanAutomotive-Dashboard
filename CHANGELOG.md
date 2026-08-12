@@ -1,5 +1,70 @@
 # Changelog
 
+## 12/08/2026 @ 21:42:33 IST — "claude-opus-5"
+
+**Project completion: 93.10%**
+
+Basis: unchanged at 81 of 87 discrete build requirements — this entry fixes defects in already-built
+functionality rather than adding scope. The same 6 deployment-chain items remain open (Supabase
+project, migration against a real database, Storage buckets, Vercel deploy, DNS, end-to-end
+verification with real data).
+
+### Goal
+
+Close two defects found reviewing the finalize path. Neither was reachable by the checks run
+previously — one needs a page refresh to trigger, the other needs an infrastructure failure.
+
+### Fixed
+
+**A job could be invoiced twice, consuming two invoice numbers.** The only server-side guard was
+`job.status === 'paid'`, but finalising sets a job to `invoiced`, not `paid` — and the Invoicer
+picker deliberately offers every non-paid job. The client locked its own form after finalising, so
+in normal use nothing went wrong, but that lock was the *only* thing preventing a repeat: a page
+refresh, a second tab, a retry after a flaky connection, or a double submit racing past the pending
+flag would each produce a second invoice on the same job, with a second number burned. Since one
+job with two live invoices is exactly the data-integrity failure the numbering design exists to
+prevent, this was worth fixing properly rather than tightening the client.
+
+Fix: `finalize` now takes `SELECT … FOR UPDATE` on the job row as the first statement in its
+transaction, then checks for an existing invoice before allocating. Locking is what makes it
+race-safe — a plain check outside the lock races with itself, and two concurrent calls would both
+pass it. Jobs that already have an invoice are also filtered out of the picker so the situation is
+not normally reachable, but the transaction is the authoritative guard. Documented in the README,
+including where to relax it if credit notes are ever needed.
+
+**A storage failure after commit surfaced as an opaque 500, hiding the invoice.** The commit-then-
+upload ordering is deliberate (a recorded invoice with a missing file is recoverable; an orphaned
+file nobody knows about is not), but there was no handling for the upload actually failing. The
+invoice row and the consumed number were already committed, yet the owner would have seen only a
+500 — no PDF returned, so they could not even send the invoice they had just created, and the job
+page would later show a broken PDF link with no explanation.
+
+Fix: the upload is caught separately. The generated PDF is returned either way, with an
+`X-Storage-Failed` header, and the Invoicer states plainly that the invoice exists but the stored
+copy is missing so it should be downloaded now.
+
+### Changed
+
+- `/api/invoices/[id]/pdf` uses `NextResponse.redirect` instead of the bare Web `Response.redirect`,
+  which is stricter about cross-origin targets from a Route Handler — the redirect points at a
+  Supabase signed URL and cannot be exercised locally without a real bucket.
+
+### Verification
+
+`pnpm typecheck` clean, `pnpm lint` clean, 83 tests passing / 4 skipped. The duplicate-invoice guard
+is not covered by an automated test: like the counter concurrency tests it needs a real Postgres to
+mean anything, and it is listed in the README's next-session checks.
+
+### Files Touched
+
+- `app/api/invoices/finalize/route.ts` — job row lock, duplicate guard, upload failure handling
+- `app/api/invoices/[id]/pdf/route.ts` — `NextResponse.redirect`
+- `lib/db/queries/jobs.ts` — exclude already-invoiced jobs from `listInvoiceableJobs()`
+- `components/invoicer/invoicer.tsx` — surface the storage-failure warning
+- `README.md` — "One invoice per job" and "If storing the PDF fails"
+
+---
+
 ## 12/08/2026 @ 21:34:55 IST — "claude-opus-5"
 
 **Project completion: 93.10%**

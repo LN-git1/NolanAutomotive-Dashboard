@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { NextResponse } from 'next/server';
 
 import { requireApiSession } from '@/lib/auth/require-session';
 import { db } from '@/lib/db';
@@ -33,7 +34,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       DOWNLOAD_TTL_SECONDS,
     );
 
-    return Response.redirect(url, 307);
+    // NextResponse rather than the bare Web `Response.redirect`, which is
+    // stricter about cross-origin targets from a Route Handler.
+    return NextResponse.redirect(url, 307);
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : 'Could not open the invoice PDF' },

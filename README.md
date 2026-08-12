@@ -178,6 +178,26 @@ run. If a number were allocated at preview time, every abandoned preview would b
 `finalize` has no `[id]` in its path because it *creates* the invoice; there is nothing to address
 until it has run.
 
+### One invoice per job
+
+A job can be invoiced **once**. Jobs that already have an invoice disappear from the Invoicer
+picker, and `finalize` refuses them outright — it locks the job row and re-checks inside the
+transaction, so a double submit, a retry or a second browser tab cannot slip two invoices (and two
+consumed numbers) onto the same job. To re-send an existing invoice, open the job and use the PDF
+link; that does not create anything new.
+
+If credit notes or corrective invoices are ever needed, that guard in
+`app/api/invoices/finalize/route.ts` is the single place to relax — deliberately, and with a plan
+for how the second document is numbered.
+
+### If storing the PDF fails
+
+The invoice is committed before the PDF is uploaded, so a storage outage cannot leave a file with
+no record of it. If the upload does fail, the endpoint still returns the generated PDF along with an
+`X-Storage-Failed` header, and the Invoicer tells the owner plainly that the invoice exists but the
+stored copy is missing — so they can download and send it immediately rather than meeting an opaque
+error on an invoice number that has already been consumed.
+
 ### Invoice numbering
 
 Format `NA-YYYY-0001`. The year segment reflects the year of issue, but the numeric segment is
