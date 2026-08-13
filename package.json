@@ -21,7 +21,8 @@
     "db:migrate:prod": "tsx --env-file=.env.production.local scripts/migrate.ts",
     "db:seed:prod": "tsx --env-file=.env.production.local drizzle/seed.ts",
     "invoice:preview": "NODE_OPTIONS=--conditions=react-server tsx scripts/preview-invoice.ts",
-    "mapper": "TEMPLATE_MAPPER=true next dev"
+    "mapper": "TEMPLATE_MAPPER=true next dev",
+    "r2:check": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.production.local scripts/check-r2.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1109.0",

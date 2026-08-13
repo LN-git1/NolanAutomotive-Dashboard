@@ -50,10 +50,15 @@ export function buildInvoicePath(invoiceNumber: string): string {
  * exceeds that. Proxying the bytes would break on exactly the files the owner
  * most wants to attach.
  *
- * `contentType` is part of the signature, not a hint. The browser MUST send the
- * identical `Content-Type` header on its PUT or R2 rejects it as a signature
- * mismatch — which is why the upload-url endpoint takes the file's MIME type
- * from the client rather than guessing.
+ * `contentType` is signed into the URL and becomes the stored object's
+ * Content-Type, which is what decides whether a browser later renders an
+ * attachment inline or offers it as a download. Send the same value on the PUT.
+ *
+ * (Tested against R2: unlike AWS S3, it does NOT reject a mismatched
+ * Content-Type on the PUT — so a mismatch degrades the stored metadata rather
+ * than failing the upload. The endpoint still requires the client to send its
+ * real MIME type, because getting it wrong makes photos download instead of
+ * displaying.)
  */
 export async function createSignedUploadUrl(
   bucket: string,

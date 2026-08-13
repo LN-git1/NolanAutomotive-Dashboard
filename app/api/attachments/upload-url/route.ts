@@ -11,10 +11,11 @@ import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
 export const runtime = 'nodejs';
 
 /**
- * `mimeType` is required, not optional: R2 signs the upload URL *for* a specific
- * Content-Type, and the browser's PUT must send exactly the same header or the
- * signature is rejected. Letting the client omit it would produce uploads that
- * fail with an opaque 403.
+ * `mimeType` is required rather than optional because it becomes the stored
+ * object's Content-Type, which decides whether the browser later renders a job
+ * photo inline or forces a download. R2 itself does not reject a mismatch
+ * (verified — AWS S3 would), so getting this wrong degrades the experience
+ * silently instead of failing loudly. Requiring it removes the guesswork.
  */
 const requestSchema = z.discriminatedUnion('kind', [
   z.object({
