@@ -40,8 +40,12 @@ export const config = {
    * session exists, and if they redirect to the login page the install prompt
    * silently never appears and the home-screen icon falls back to a screenshot.
    * They expose nothing beyond the app's name and logo.
+   *
+   * `/api/health` is excluded because Vercel Cron calls it with no session. It
+   * is not unprotected — it carries its own CRON_SECRET and answers 404 to
+   * anything without it.
    */
   matcher: [
-    '/((?!login|api/auth/login|_next/static|_next/image|favicon.ico|favicon-32.png|manifest.webmanifest|icons/).*)',
+    '/((?!login|api/auth/login|api/health|_next/static|_next/image|favicon.ico|favicon-32.png|manifest.webmanifest|icons/).*)',
   ],
 };
