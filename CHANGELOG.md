@@ -1,5 +1,138 @@
 # Changelog
 
+## 13/08/2026 @ 01:12:43 IST — "claude-opus-5"
+
+**Project completion: 93.94%**
+
+Basis: 93 of 99 discrete build requirements. Scope grew by 8 for deployment (R2 storage swap,
+keep-alive cron, production migration runner, and five serverless-hardening fixes) and all 8 are
+done. Note the percentage went *down* from 96.81% — that is honest rather than flattering: the
+denominator grew because deployment turned out to need real code changes, not just configuration.
+The 6 open items are all account work that cannot be done from here: create the client's Supabase
+project, Cloudflare R2 buckets and GitHub repo, deploy to Vercel, point DNS, and verify live.
+
+### Goal
+
+Prepare the app to actually run on the internet at `dashboard.nolanautomotive.ie`, on a stack that
+costs **€0/month** and lives entirely in client-owned accounts rather than the developer's personal
+ones.
+
+### Changed
+
+**File storage moved from Supabase Storage to Cloudflare R2.** Supabase's free Storage is 1GB and —
+the deciding factor — pauses along with the database project. R2 gives 10GB free with no egress
+fees and stays up regardless. Supabase is now a plain managed Postgres host with nothing
+proprietary left in the code; `@supabase/supabase-js` is gone entirely, which also means moving to
+any other Postgres later is a connection-string change.
+
+The subtle part is content-type: a presigned PUT is signed **for** a specific `Content-Type`, so the
+browser must send exactly that header or R2 rejects it as a signature mismatch. `mimeType` is
+therefore threaded from the client through the upload endpoint and is required rather than
+optional — making it optional would produce uploads failing with an opaque 403.
+
+Every exported function in `lib/storage/` kept its name and shape, so nothing outside that directory
+changed beyond an import path.
+
+### Added
+
+**A daily keep-alive cron.** Supabase free pauses a project after ~7 idle days, which for a garage
+that has had a quiet week means finding the dashboard down. `vercel.json` schedules a daily hit on
+`/api/health`, which runs a `SELECT 1` — the query is the point, since a static 200 would satisfy
+Vercel while letting Postgres go idle anyway. It requires `CRON_SECRET` as a bearer token (Vercel
+Cron sends it automatically) and answers **404** rather than 401, so an unauthenticated caller
+cannot even confirm the route exists. All three paths verified.
+
+**A production migration runner** (`scripts/migrate.ts`) reading a gitignored
+`.env.production.local`, so no production credential is typed into a shell or left in history. It
+refuses `DIRECT_DATABASE_URL` pointing at port 6543 outright — the pooler breaks DDL *partway
+through*, leaving a half-migrated database, so failing before starting is much better than
+discovering it mid-run.
+
+### Fixed — from a production-build audit
+
+None of these would have shown up in `next dev`, `tsc --noEmit`, or the 96 passing tests.
+
+**A missing admin credential failed silently and permanently.** `assertCredentialsConfigured()`
+existed but nothing called it. With `ADMIN_USERNAME` or `ADMIN_PASSWORD` absent on Vercel, the site
+would deploy looking completely healthy and reject every login with *"Incorrect username or
+password"* — no error, no log, nothing in the build output. The natural response is to assume the
+password is wrong and rotate it repeatedly. Worse, the test suite actively masked it: a passing test
+asserts the guard throws, which reads as coverage for something never wired up. The login route now
+calls it.
+
+**The database client broke the build.** `lib/db/index.ts` threw at *module scope*, and
+`force-dynamic` does not help — that governs rendering, not module evaluation, and `next build`
+imports these modules to collect route config. The first casualty would likely have been a Preview
+deployment where the variable was scoped to Production only.
+
+Worth recording the trap: wrapping the connection in a `getSql()` function does **not** fix this,
+because the call still runs at import. The laziness has to reach the export itself, so `db` is now a
+`Proxy` resolving on first property access — all 13 import sites untouched. Verified in both
+directions: imports cleanly with the variable absent, still throws a clear error when queried
+without it.
+
+**Connection pool sized for the wrong architecture.** `max: 10` per lambda instance would mean
+hundreds of Supavisor clients under concurrency, past the free tier's limit. The pooler *is* the
+pool; now `max: 1`.
+
+**Function duration was unbounded.** Checked the real limit rather than assuming: Hobby is 300s
+default **and** maximum under Fluid Compute. So `maxDuration = 60` on the invoice routes lowers a
+ceiling rather than raising one — a hung database or storage call is cut off after a minute instead
+of holding a slot for five. (The original plan assumed a 10s default and a timeout risk; that was
+wrong, and the fix now serves the opposite purpose.)
+
+**Node version undeclared.** `pdfjs-dist` needs `>=22.13.0`, a higher floor than Next 16's own
+`>=20.9`, and pnpm only warns without an `engines` field. Pinned.
+
+**File tracing missed a page.** `/invoicer` imports from `lib/pdf/stamp` but was not covered by
+`outputFileTracingIncludes`. Safe today only because it calls `partsRowCapacity()`, which reads
+bundled JSON — but the day anything there calls `stampInvoice`, it would `ENOENT` in production
+while working perfectly in dev. Covered now, while the reason is understood.
+
+**`/jobs/new` relied on inference** to be dynamic. Declared explicitly so its per-request auth check
+does not depend on the layout's `cookies()` call opting the subtree out of static generation.
+
+### Verification
+
+`pnpm typecheck` clean, `pnpm lint` clean, 96 tests passing / 4 skipped. Against the live local
+database: login accepted, wrong password 401, all six dashboard pages 200 with the lazy client in
+play, health endpoint 200, CSV export valid. The health endpoint's secret was verified across all
+three paths (no bearer → 404, wrong bearer → 404, correct → 200) and other API routes confirmed
+still 401.
+
+**Not yet verified: the R2 code itself.** It is ~100 lines whose first execution needs real buckets.
+That happens locally against the client's real R2 — the CORS rule deliberately whitelists
+`localhost:3000` — *before* anything ships, rather than discovering a signature or CORS mistake on
+the client's live site.
+
+### Files Touched
+
+- `lib/storage/r2.ts` (new, replaces `supabaseAdmin.ts`), `lib/storage/signedUrl.ts`
+- `app/api/attachments/upload-url/route.ts`, `components/jobs/attachment-manager.tsx`,
+  `components/suppliers/bill-form.tsx` — thread `mimeType`
+- `app/api/health/route.ts` (new), `vercel.json` (new), `proxy.ts`
+- `scripts/migrate.ts` (new), `package.json` — prod scripts + `engines`
+- `lib/db/index.ts` — lazy Proxy, `max: 1`
+- `app/api/auth/login/route.ts` — call the credential guard
+- `app/api/invoices/{generate,finalize}/route.ts` — `maxDuration`
+- `app/(dashboard)/jobs/new/page.tsx` — `force-dynamic`
+- `next.config.ts` — tracing for `/invoicer`
+- `.env.example`, `README.md`
+
+### Open / next session
+
+All blocked on client-owned accounts, in this order:
+
+1. **Cloudflare R2** — buckets, API token, CORS. Needed *first*, so the storage rewrite can be
+   tested locally against real buckets.
+2. **Supabase** — project in EU (Ireland), then `pnpm db:migrate:prod` and `pnpm db:seed:prod`.
+3. **GitHub** — private repo under the client account, push.
+4. **Vercel** — import, set env vars for Production *and* Preview, deploy, fix the first build.
+5. **DNS** — `dashboard` CNAME → `cname.vercel-dns.com`.
+6. Verify live, install to the owner's iPhone, then factory-reset the test data before handover.
+
+---
+
 ## 13/08/2026 @ 00:31:39 IST — "claude-opus-5"
 
 **Project completion: 96.81%**
