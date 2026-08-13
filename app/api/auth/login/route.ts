@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { z } from 'zod';
 
 import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from '@/lib/auth/constants';
-import { checkCredentials } from '@/lib/auth/credentials';
+import { assertCredentialsConfigured, checkCredentials } from '@/lib/auth/credentials';
 import { createSessionToken } from '@/lib/auth/session';
 
 /**
@@ -17,6 +17,18 @@ const loginSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  /**
+   * Fail loudly if the credentials are not configured.
+   *
+   * Without this, a missing ADMIN_USERNAME or ADMIN_PASSWORD makes
+   * `checkCredentials` simply return false, so the deployment looks completely
+   * healthy and rejects every login with "Incorrect username or password"
+   * forever — no error, no log, nothing in the build output. The natural
+   * response is to assume the password is wrong and rotate it repeatedly. A 500
+   * with a real message is far kinder than a silent lie.
+   */
+  assertCredentialsConfigured();
+
   let payload: unknown;
 
   const contentType = request.headers.get('content-type') ?? '';

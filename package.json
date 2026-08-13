@@ -2,6 +2,10 @@
   "name": "nolan-automotive-dashboard",
   "version": "0.1.0",
   "private": true,
+  "//engines": "pdfjs-dist requires >=22.13.0, a higher floor than Next 16's own >=20.9. Without this, pnpm only warns and Vercel's Node version drifts with its default.",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

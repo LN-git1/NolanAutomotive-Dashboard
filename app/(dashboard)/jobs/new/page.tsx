@@ -4,6 +4,13 @@ import { JobForm } from '@/components/jobs/job-form';
 
 export const metadata: Metadata = { title: 'New job' };
 
+/**
+ * The layout's `requireSession()` calls `cookies()`, which should opt this
+ * subtree out of static generation anyway. Declaring it explicitly means the
+ * per-request auth check does not depend on that inference holding.
+ */
+export const dynamic = 'force-dynamic';
+
 export default function NewJobPage() {
   return (
     <div className="flex max-w-4xl flex-col gap-4">

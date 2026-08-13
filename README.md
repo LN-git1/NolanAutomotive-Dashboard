@@ -14,6 +14,7 @@ Intended to run at **https://dashboard.nolanautomotive.ie**.
 - [Quick start](#quick-start)
 - [Environment variables](#environment-variables)
 - [Supabase setup](#supabase-setup)
+- [Cloudflare R2 setup](#cloudflare-r2-setup)
 - [Deploying to Vercel](#deploying-to-vercel)
 - [DNS: pointing dashboard.nolanautomotive.ie](#dns-pointing-dashboardnolanautomotiveie)
 - [How invoicing works](#how-invoicing-works)
@@ -33,9 +34,9 @@ Intended to run at **https://dashboard.nolanautomotive.ie**.
 | Framework | Next.js 16 (App Router) + TypeScript |
 | Styling | Tailwind CSS v4, single light theme |
 | UI | Hand-rolled primitives in `components/ui` — no component library |
-| Database | PostgreSQL via Supabase (EU region) |
+| Database | PostgreSQL via Supabase (EU region) — used as a managed Postgres host only |
 | ORM | Drizzle |
-| File storage | Supabase Storage, two **private** buckets |
+| File storage | Cloudflare R2 (S3-compatible), two **private** buckets |
 | PDF | `pdf-lib` + `@pdf-lib/fontkit`, coordinate stamping onto the supplied template |
 | Auth | Single admin from env vars, stateless JWT session cookie (`jose`) |
 | Hosting | Vercel |
@@ -54,7 +55,7 @@ pnpm install
 # 1. Configure the environment
 cp .env.example .env.local
 #    then fill in DATABASE_URL, DIRECT_DATABASE_URL, SESSION_SECRET,
-#    ADMIN_USERNAME, ADMIN_PASSWORD, NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+#    ADMIN_USERNAME, ADMIN_PASSWORD, and the R2_* credentials
 
 # 2. Create the tables and the rows the app cannot start without
 pnpm db:migrate
@@ -93,9 +94,20 @@ pnpm dev
 | `SESSION_SECRET` | yes | ≥32 chars. Signs the session cookie — a secret, not a credential. `openssl rand -base64 32` |
 | `DATABASE_URL` | yes | **Pooled** connection, port `6543`, must include `?pgbouncer=true`. Runtime queries. |
 | `DIRECT_DATABASE_URL` | yes | **Direct** connection, port `5432`. Migrations and seeding only. |
-| `NEXT_PUBLIC_SUPABASE_URL` | yes | Project URL. Safe to expose. |
-| `SUPABASE_SERVICE_ROLE_KEY` | yes | **Server only.** Bypasses row-level security — never prefix with `NEXT_PUBLIC_`. |
+| `R2_ACCOUNT_ID` | yes | Cloudflare account ID. |
+| `R2_ACCESS_KEY_ID` | yes | **Server only.** |
+| `R2_SECRET_ACCESS_KEY` | yes | **Server only.** Full read/write on both buckets. |
+| `R2_ATTACHMENTS_BUCKET` | yes | Default `nolan-attachments`. |
+| `R2_INVOICES_BUCKET` | yes | Default `nolan-invoices`. |
+| `CRON_SECRET` | prod | Bearer token for the daily keep-alive cron. |
 | `TEMPLATE_MAPPER` | no | `true` enables the mapper locally. **Must be unset in production.** |
+
+> **No variable here may be prefixed `NEXT_PUBLIC_`.** That prefix inlines the value into the client
+> bundle at *build* time — it would both leak the credential and read as "not set" at runtime even
+> when the runtime environment has it.
+
+Set every variable for **Production and Preview** in Vercel. `DATABASE_URL` in particular is read
+during the build, so scoping it to Production only makes Preview deployments fail.
 
 ### Why two database URLs
 
@@ -108,32 +120,83 @@ the same reason. Mixing these up produces confusing "prepared statement already 
 
 ## Supabase setup
 
-1. Create a project in an **EU region** (Frankfurt) — customer personal data should stay in the EU.
-2. Storage → create two buckets, both with **Public access disabled**:
-   - `attachments` — job photos/receipts and supplier bill receipts
-   - `invoices` — finalised invoice PDFs
-3. Project Settings → Database → copy both the pooled (6543) and direct (5432) connection strings.
-4. Project Settings → API → copy the project URL and the **service_role** key.
-5. Run `pnpm db:migrate` then `pnpm db:seed`.
+Supabase is used **only as a managed Postgres host** — not for storage, not for auth. Nothing
+proprietary to it appears in the code, so moving to any other Postgres is a connection-string change.
 
-Nothing is ever served from a public URL. The browser only ever receives short-lived signed URLs
-minted server-side (120s to view, 900s to download).
+1. Create a project in an **EU region** (Ireland, `eu-west-1`) — customer personal data should stay
+   in the EU.
+2. Project Settings → Database → copy both connection strings:
+   - **Pooled** (port `6543`) → `DATABASE_URL`, and append `?pgbouncer=true`
+   - **Direct** (port `5432`) → `DIRECT_DATABASE_URL`
+3. Run `pnpm db:migrate` then `pnpm db:seed`.
+
+### The free tier pauses — and why that is handled
+
+Supabase pauses a free project after roughly a week of inactivity, which for a garage that has had a
+quiet week would mean finding the dashboard down and needing a manual restore.
+
+`vercel.json` schedules a daily cron against `/api/health`, which runs a `SELECT 1`. The query is the
+point — a static 200 would satisfy Vercel while letting Postgres go idle anyway. After deploying,
+check **Vercel → Project → Cron Jobs** at least once to confirm it actually ran; if that cron ever
+stops, the pause problem comes back silently.
+
+---
+
+## Cloudflare R2 setup
+
+Chosen over Supabase Storage because the free tier is 10GB rather than 1GB, egress is free, and —
+critically — it does not pause with the database project.
+
+1. Cloudflare account → R2 → enable it. **A payment method is required on file even for the free
+   tier**; nothing is charged below 10GB.
+2. Create two buckets, both **private** (no public access, no custom domain):
+   - `nolan-attachments` — job photos/receipts and supplier bill receipts
+   - `nolan-invoices` — finalised invoice PDFs
+3. Create an **R2 API token** scoped to *Object Read & Write* on those two buckets only. Record the
+   Account ID, Access Key ID and Secret Access Key.
+4. **Set CORS on `nolan-attachments`.** The browser PUTs directly to R2, so without this every upload
+   fails with an opaque CORS error:
+   ```json
+   [{
+     "AllowedOrigins": ["https://dashboard.nolanautomotive.ie", "http://localhost:3000"],
+     "AllowedMethods": ["PUT", "GET"],
+     "AllowedHeaders": ["content-type"],
+     "MaxAgeSeconds": 3600
+   }]
+   ```
+   The `localhost` entry is deliberate — it lets the upload path be tested locally against the real
+   buckets rather than first exercising it on the live site.
+
+Nothing is ever served from a public URL. The browser only receives short-lived presigned URLs minted
+server-side (120s to view, 900s to download, 300s to upload).
+
+> **Content-Type is part of the signature.** A presigned PUT is signed for one specific
+> `Content-Type`, and the browser must send exactly that header or R2 rejects it. This is why the
+> upload-url endpoint requires `mimeType` from the client rather than guessing it.
 
 ---
 
 ## Deploying to Vercel
 
 1. Push the repository, then import it in Vercel.
-2. Add every variable from the table above. Mark `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET` and
-   `ADMIN_PASSWORD` as **Sensitive**.
+2. Add every variable from the table above, for **Production and Preview**. Mark
+   `R2_SECRET_ACCESS_KEY`, `SESSION_SECRET`, `ADMIN_PASSWORD`, `CRON_SECRET` and both database URLs
+   as **Sensitive**.
 3. Confirm `TEMPLATE_MAPPER` is **not set**. The mapper writes a file into the source tree, which a
    serverless filesystem cannot do.
 4. Deploy.
 
-> **Licensing caveat — please decide before going live.** Vercel's free **Hobby** tier is licensed
-> for non-commercial use. A dashboard running a for-profit business's day-to-day operations is
-> commercial use, so this most likely requires **Vercel Pro (~$20/month)** to be within Vercel's
-> terms. This is flagged, not worked around.
+### After the first deploy
+
+- Run `pnpm db:migrate:prod` then `pnpm db:seed:prod`. **The seed is not optional** — without the
+  settings singleton and the two counter rows, creating a job or an invoice throws.
+- In the build log's route summary, confirm `/jobs/new` shows `ƒ` (Dynamic), not `○` (Static).
+
+> **Licensing caveat, accepted knowingly.** Vercel's free **Hobby** tier is licensed for
+> non-commercial use, and a dashboard running a business's day-to-day operations is commercial use.
+> This deployment uses Hobby anyway: a single-user internal tool is the least likely thing to be
+> enforced against, and the fallback is upgrading to Pro or migrating — not a data-loss event.
+> Recorded here so the decision is visible rather than buried.
 
 ---
 
@@ -414,7 +477,7 @@ Separately, the template prints **Make** and **Model** on separate lines, so job
 - **Files:** both buckets private; access only via short-lived signed URLs generated with the
   service-role key server-side. That key never reaches the browser (`server-only` makes an accidental
   client import a build error).
-- **Uploads bypass the app server** — the browser PUTs straight to Supabase Storage using a signed
+- **Uploads bypass the app server** — the browser PUTs straight to Cloudflare R2 using a presigned
   upload URL. Vercel caps a serverless request body at roughly 4.5MB, which a phone photo exceeds.
 - **Input validation:** every mutation is validated with Zod on the server. Browser `required`
   attributes are convenience only.
@@ -490,7 +553,7 @@ lib/
   actions/                   Server Actions — all mutations
   pdf/                       stamp · textFit · coords · fieldKeys · template/ · fonts/
   invoices/build.ts          Shared by generate and finalize so they cannot drift
-  storage/                   Supabase admin client · signed URLs
+  storage/                   R2 client · presigned URLs
   counters.ts                Atomic allocator for invoice and job numbers
   money.ts                   All euro arithmetic, integer cents
   validation/                Zod schemas
