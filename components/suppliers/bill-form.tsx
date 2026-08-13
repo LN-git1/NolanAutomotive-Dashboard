@@ -22,10 +22,13 @@ export function BillForm({ supplierId }: { supplierId: string }) {
   const [uploading, setUploading] = useState(false);
 
   async function uploadAttachment(file: File): Promise<string | null> {
+    // Must match the Content-Type on the PUT below — R2 signs for that value.
+    const mimeType = file.type || 'application/octet-stream';
+
     const urlResponse = await fetch('/api/attachments/upload-url', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: 'supplier-bill', supplierId, fileName: file.name }),
+      body: JSON.stringify({ kind: 'supplier-bill', supplierId, fileName: file.name, mimeType }),
     });
 
     if (!urlResponse.ok) throw new Error('Could not start the receipt upload.');
@@ -37,7 +40,7 @@ export function BillForm({ supplierId }: { supplierId: string }) {
 
     const putResponse = await fetch(uploadUrl, {
       method: 'PUT',
-      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      headers: { 'Content-Type': mimeType },
       body: file,
     });
 

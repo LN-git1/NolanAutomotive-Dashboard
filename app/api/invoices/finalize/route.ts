@@ -8,7 +8,7 @@ import { InvoiceBuildError, buildInvoice, pdfResponse } from '@/lib/invoices/bui
 import { fromCents } from '@/lib/money';
 import { stampInvoice } from '@/lib/pdf/stamp';
 import { buildInvoicePath, uploadBytes } from '@/lib/storage/signedUrl';
-import { INVOICES_BUCKET } from '@/lib/storage/supabaseAdmin';
+import { INVOICES_BUCKET } from '@/lib/storage/r2';
 import { invoiceFinalizeSchema } from '@/lib/validation/invoice';
 import { todayIsoDate } from '@/lib/format';
 

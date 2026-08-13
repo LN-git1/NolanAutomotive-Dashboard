@@ -45,10 +45,14 @@ export function AttachmentManager({
 
     try {
       for (const file of Array.from(files)) {
+        // mimeType must match the Content-Type sent on the PUT below — R2 signs
+        // the URL for that exact value and rejects a mismatch.
+        const mimeType = file.type || 'application/octet-stream';
+
         const urlResponse = await fetch('/api/attachments/upload-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ kind: 'job', jobId, fileName: file.name }),
+          body: JSON.stringify({ kind: 'job', jobId, fileName: file.name, mimeType }),
         });
 
         if (!urlResponse.ok) {
@@ -63,7 +67,7 @@ export function AttachmentManager({
 
         const putResponse = await fetch(uploadUrl, {
           method: 'PUT',
-          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+          headers: { 'Content-Type': mimeType },
           body: file,
         });
 

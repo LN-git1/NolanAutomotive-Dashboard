@@ -5,7 +5,7 @@ import { requireApiSession } from '@/lib/auth/require-session';
 import { db } from '@/lib/db';
 import { invoices } from '@/lib/db/schema';
 import { DOWNLOAD_TTL_SECONDS, createSignedDownloadUrl } from '@/lib/storage/signedUrl';
-import { INVOICES_BUCKET } from '@/lib/storage/supabaseAdmin';
+import { INVOICES_BUCKET } from '@/lib/storage/r2';
 
 export const runtime = 'nodejs';
 

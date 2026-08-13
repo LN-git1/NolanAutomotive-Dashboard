@@ -8,7 +8,7 @@ import {
   VIEW_TTL_SECONDS,
   createSignedDownloadUrl,
 } from '@/lib/storage/signedUrl';
-import { ATTACHMENTS_BUCKET } from '@/lib/storage/supabaseAdmin';
+import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
 
 export const runtime = 'nodejs';
 

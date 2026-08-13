@@ -2,17 +2,26 @@ import 'server-only';
 
 import { randomUUID } from 'node:crypto';
 
-import { getSupabaseAdmin } from './supabaseAdmin';
+import {
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+
+import { getR2 } from './r2';
 
 /**
- * All file access goes through short-lived signed URLs minted here, server-side.
- * Buckets stay private; no anon key or public bucket is ever involved.
+ * All file access goes through short-lived presigned URLs minted here,
+ * server-side. Buckets stay private; no public URL is ever involved.
  */
 
 /** Inline viewing (image previews). Short — the page re-mints on reload. */
 export const VIEW_TTL_SECONDS = 120;
 /** Explicit download click; longer so a slow connection still completes. */
 export const DOWNLOAD_TTL_SECONDS = 900;
+/** Upload window. Long enough for a large photo on workshop signal. */
+export const UPLOAD_TTL_SECONDS = 300;
 
 /** Strip anything that could escape the intended prefix or break a URL. */
 export function sanitiseFileName(fileName: string): string {
@@ -34,23 +43,30 @@ export function buildInvoicePath(invoiceNumber: string): string {
 }
 
 /**
- * Mint a signed URL the browser can PUT bytes directly to.
+ * Mint a presigned URL the browser can PUT bytes directly to.
  *
  * Uploads deliberately bypass the Next.js server: Vercel caps serverless
  * request bodies at roughly 4.5MB, and a photo from a phone camera routinely
  * exceeds that. Proxying the bytes would break on exactly the files the owner
  * most wants to attach.
+ *
+ * `contentType` is part of the signature, not a hint. The browser MUST send the
+ * identical `Content-Type` header on its PUT or R2 rejects it as a signature
+ * mismatch — which is why the upload-url endpoint takes the file's MIME type
+ * from the client rather than guessing.
  */
-export async function createSignedUploadUrl(bucket: string, storagePath: string) {
-  const { data, error } = await getSupabaseAdmin()
-    .storage.from(bucket)
-    .createSignedUploadUrl(storagePath);
+export async function createSignedUploadUrl(
+  bucket: string,
+  storagePath: string,
+  contentType: string,
+) {
+  const signedUrl = await getSignedUrl(
+    getR2(),
+    new PutObjectCommand({ Bucket: bucket, Key: storagePath, ContentType: contentType }),
+    { expiresIn: UPLOAD_TTL_SECONDS },
+  );
 
-  if (error || !data) {
-    throw new Error(`Could not create upload URL: ${error?.message ?? 'unknown error'}`);
-  }
-
-  return { signedUrl: data.signedUrl, token: data.token, path: storagePath };
+  return { signedUrl, path: storagePath };
 }
 
 export async function createSignedDownloadUrl(
@@ -59,15 +75,19 @@ export async function createSignedDownloadUrl(
   ttlSeconds: number = VIEW_TTL_SECONDS,
   options?: { download?: string },
 ) {
-  const { data, error } = await getSupabaseAdmin()
-    .storage.from(bucket)
-    .createSignedUrl(storagePath, ttlSeconds, options?.download ? { download: options.download } : undefined);
-
-  if (error || !data) {
-    throw new Error(`Could not create download URL: ${error?.message ?? 'unknown error'}`);
-  }
-
-  return data.signedUrl;
+  return getSignedUrl(
+    getR2(),
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: storagePath,
+      // Turns the response into a download with the original filename rather
+      // than the opaque UUID-prefixed storage key.
+      ...(options?.download
+        ? { ResponseContentDisposition: `attachment; filename="${options.download}"` }
+        : {}),
+    }),
+    { expiresIn: ttlSeconds },
+  );
 }
 
 /** Upload bytes generated on the server (used for finalised invoice PDFs). */
@@ -77,22 +97,25 @@ export async function uploadBytes(
   bytes: Uint8Array,
   contentType: string,
 ) {
-  const { error } = await getSupabaseAdmin()
-    .storage.from(bucket)
-    .upload(storagePath, bytes, { contentType, upsert: true });
-
-  if (error) {
-    throw new Error(`Could not upload ${storagePath}: ${error.message}`);
-  }
+  await getR2().send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: storagePath,
+      Body: bytes,
+      ContentType: contentType,
+    }),
+  );
 
   return storagePath;
 }
 
 export async function removeObject(bucket: string, storagePath: string) {
-  const { error } = await getSupabaseAdmin().storage.from(bucket).remove([storagePath]);
-  if (error) {
-    throw new Error(`Could not delete ${storagePath}: ${error.message}`);
-  }
+  await getR2().send(
+    new DeleteObjectsCommand({
+      Bucket: bucket,
+      Delete: { Objects: [{ Key: storagePath }] },
+    }),
+  );
 }
 
 /**
@@ -107,11 +130,16 @@ export async function removeObjects(bucket: string, storagePaths: string[]): Pro
   const paths = storagePaths.filter(Boolean);
   if (paths.length === 0) return 0;
 
-  // Supabase caps a single remove() call, so send it in chunks.
-  const CHUNK = 100;
+  // S3/R2 cap a single DeleteObjects call at 1000 keys.
+  const CHUNK = 1000;
   for (let index = 0; index < paths.length; index += CHUNK) {
     try {
-      await getSupabaseAdmin().storage.from(bucket).remove(paths.slice(index, index + CHUNK));
+      await getR2().send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: paths.slice(index, index + CHUNK).map((Key) => ({ Key })) },
+        }),
+      );
     } catch {
       // Ignored on purpose — see above.
     }

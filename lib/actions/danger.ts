@@ -7,7 +7,7 @@ import { requireSession } from '@/lib/auth/require-session';
 import { db } from '@/lib/db';
 import { invoices, jobAttachments, jobs, supplierBills, suppliers } from '@/lib/db/schema';
 import { removeObjects } from '@/lib/storage/signedUrl';
-import { ATTACHMENTS_BUCKET, INVOICES_BUCKET } from '@/lib/storage/supabaseAdmin';
+import { ATTACHMENTS_BUCKET, INVOICES_BUCKET } from '@/lib/storage/r2';
 import { RESET_CONFIRMATION_PHRASE } from '@/lib/validation/danger';
 
 /**

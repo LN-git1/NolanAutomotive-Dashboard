@@ -7,7 +7,7 @@ import { requireSession } from '@/lib/auth/require-session';
 import { allocateNumber, formatJobNumber } from '@/lib/counters';
 import { db } from '@/lib/db';
 import { jobAttachments, jobs } from '@/lib/db/schema';
-import { ATTACHMENTS_BUCKET } from '@/lib/storage/supabaseAdmin';
+import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
 import { removeObject } from '@/lib/storage/signedUrl';
 import { jobInputSchema, jobStatusSchema } from '@/lib/validation/job';
 

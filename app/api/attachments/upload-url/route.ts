@@ -6,22 +6,34 @@ import {
   buildSupplierBillPath,
   createSignedUploadUrl,
 } from '@/lib/storage/signedUrl';
-import { ATTACHMENTS_BUCKET } from '@/lib/storage/supabaseAdmin';
+import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
 
 export const runtime = 'nodejs';
 
+/**
+ * `mimeType` is required, not optional: R2 signs the upload URL *for* a specific
+ * Content-Type, and the browser's PUT must send exactly the same header or the
+ * signature is rejected. Letting the client omit it would produce uploads that
+ * fail with an opaque 403.
+ */
 const requestSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('job'), jobId: z.string().uuid(), fileName: z.string().min(1) }),
+  z.object({
+    kind: z.literal('job'),
+    jobId: z.string().uuid(),
+    fileName: z.string().min(1),
+    mimeType: z.string().min(1),
+  }),
   z.object({
     kind: z.literal('supplier-bill'),
     supplierId: z.string().uuid(),
     fileName: z.string().min(1),
+    mimeType: z.string().min(1),
   }),
 ]);
 
 /**
- * Mint a one-shot signed upload URL so the browser can PUT the file straight to
- * Supabase Storage.
+ * Mint a one-shot presigned upload URL so the browser can PUT the file straight
+ * to Cloudflare R2.
  *
  * The bytes deliberately do NOT pass through this server: Vercel caps a
  * serverless request body at roughly 4.5MB, and photos taken on a phone in the
@@ -44,16 +56,9 @@ export async function POST(request: Request) {
       : buildSupplierBillPath(input.supplierId, input.fileName);
 
   try {
-    const signed = await createSignedUploadUrl(ATTACHMENTS_BUCKET, storagePath);
+    const signed = await createSignedUploadUrl(ATTACHMENTS_BUCKET, storagePath, input.mimeType);
 
-    // supabase-js has returned this as both an absolute URL and a bare path
-    // across versions; normalise so the client never has to care.
-    const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-    const uploadUrl = signed.signedUrl.startsWith('http')
-      ? signed.signedUrl
-      : `${base.replace(/\/$/, '')}/storage/v1${signed.signedUrl}`;
-
-    return Response.json({ uploadUrl, storagePath: signed.path, token: signed.token });
+    return Response.json({ uploadUrl: signed.signedUrl, storagePath: signed.path });
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : 'Could not create upload URL' },
