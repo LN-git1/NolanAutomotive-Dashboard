@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { LoginForm } from '@/components/auth/login-form';
+import { ThemeToggle } from '@/components/layout/theme-toggle';
 
 export const metadata: Metadata = { title: 'Sign in' };
 
@@ -18,6 +19,10 @@ export default function LoginPage() {
         <p className="mt-6 text-center text-xs text-muted">
           Authorised access only. This system holds customer personal data.
         </p>
+
+        <div className="mt-4 flex justify-center">
+          <ThemeToggle />
+        </div>
       </div>
     </main>
   );

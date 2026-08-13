@@ -1,5 +1,6 @@
 import { LogoutButton } from '@/components/layout/logout-button';
 import { MobileNav, Sidebar } from '@/components/layout/sidebar';
+import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { requireSession } from '@/lib/auth/require-session';
 
 /**
@@ -25,7 +26,8 @@ export default async function DashboardLayout({ children }: LayoutProps<'/'>) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="pt-safe sticky top-0 z-30 flex items-center justify-between border-b border-line bg-surface px-4 py-2 md:static">
           <span className="text-sm font-semibold text-ink md:hidden">Nolan Automotive</span>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
+            <ThemeToggle />
             <LogoutButton />
           </div>
         </header>

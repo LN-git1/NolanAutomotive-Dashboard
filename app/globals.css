@@ -1,41 +1,120 @@
 @import "tailwindcss";
 
 /**
- * Deliberately a single light theme. This is an internal back-office tool used
- * by one person on a phone in a workshop and on a desktop in an office; a
- * system-driven dark mode would only add a second set of contrast problems to
- * verify for no real benefit. Simple and legible beats configurable here.
+ * Two themes, switched by `data-theme` on <html>.
+ *
+ * The tokens below are declared with `@theme inline`, which makes Tailwind emit
+ * `var(--surface)` rather than a literal colour. That indirection is what lets
+ * the palette swap at runtime — a plain `@theme` block bakes the values in at
+ * build time and cannot be re-themed by a class or attribute.
+ *
+ * The default is whatever the operating system prefers; an explicit choice is
+ * remembered in localStorage and applied before first paint by the inline
+ * script in app/layout.tsx, so there is no flash of the wrong theme.
  */
 
-@theme {
-  --color-surface: #ffffff;
-  --color-canvas: #f5f6f8;
-  --color-ink: #14181f;
-  --color-muted: #5b6472;
-  --color-line: #dfe3e9;
+@theme inline {
+  --color-surface: var(--surface);
+  --color-canvas: var(--canvas);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
 
-  --color-brand: #3f7fb3;
-  --color-brand-dark: #33668f;
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-dark: var(--brand-text);
 
-  --color-ok: #15803d;
-  --color-ok-soft: #e8f5ec;
-  --color-warn: #a16207;
-  --color-warn-soft: #fdf6e3;
-  --color-danger: #b42318;
-  --color-danger-soft: #fdecea;
-  --color-info-soft: #eaf2f8;
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info-soft: var(--info-soft);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
 }
 
-html {
+/* Light — the default, and what the printed invoice is designed against. */
+:root {
+  --surface: #ffffff;
+  --canvas: #f5f6f8;
+  --ink: #14181f;
+  --muted: #5b6472;
+  --line: #dfe3e9;
+
+  --brand: #3f7fb3;
+  --brand-hover: #33668f;
+  /* Used as TEXT on a light background (links, active nav), not as a fill. */
+  --brand-text: #33668f;
+
+  --ok: #15803d;
+  --ok-soft: #e8f5ec;
+  --warn: #a16207;
+  --warn-soft: #fdf6e3;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  --info-soft: #eaf2f8;
+
   color-scheme: light;
 }
 
+/**
+ * Dark. Note `--brand-text` inverts: on a dark background the readable form of
+ * the brand colour is lighter, not darker. The soft accent fills become deep
+ * tints rather than pale washes so badges keep their meaning without glowing.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #171b22;
+    --canvas: #0f1319;
+    --ink: #e8ecf1;
+    --muted: #98a2b3;
+    --line: #2a3039;
+
+    --brand: #3d7fb5;
+    --brand-hover: #4b91cb;
+    --brand-text: #8cc3ea;
+
+    --ok: #4ade80;
+    --ok-soft: #12271b;
+    --warn: #fbbf24;
+    --warn-soft: #2c2210;
+    --danger: #f87171;
+    --danger-soft: #2e1719;
+    --info-soft: #16252f;
+
+    color-scheme: dark;
+  }
+}
+
+/* An explicit choice always wins over the system preference. */
+:root[data-theme="dark"] {
+  --surface: #171b22;
+  --canvas: #0f1319;
+  --ink: #e8ecf1;
+  --muted: #98a2b3;
+  --line: #2a3039;
+
+  --brand: #3d7fb5;
+  --brand-hover: #4b91cb;
+  --brand-text: #8cc3ea;
+
+  --ok: #4ade80;
+  --ok-soft: #12271b;
+  --warn: #fbbf24;
+  --warn-soft: #2c2210;
+  --danger: #f87171;
+  --danger-soft: #2e1719;
+  --info-soft: #16252f;
+
+  color-scheme: dark;
+}
+
 body {
-  background: var(--color-canvas);
-  color: var(--color-ink);
+  background: var(--canvas);
+  color: var(--ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }

@@ -59,9 +59,23 @@ export const viewport: Viewport = {
   themeColor: '#3f7fb3',
 };
 
+/**
+ * Applies the saved theme before the browser paints anything.
+ *
+ * This has to be a blocking inline script in <head>. Doing it in an effect, or
+ * anywhere in React's lifecycle, means the page renders in the default theme
+ * first and then snaps — a white flash on every single load for a dark-mode
+ * user. Wrapped in try/catch because localStorage throws in some private
+ * browsing modes, and a theme preference is not worth breaking the page over.
+ */
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('nolan-theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.dataset.theme=t;var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',t==='dark'?'#0f1319':'#3f7fb3');}catch(e){}})();`;
+
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="en-IE" className="h-full">
+    <html lang="en-IE" className="h-full" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-full">{children}</body>
     </html>
   );

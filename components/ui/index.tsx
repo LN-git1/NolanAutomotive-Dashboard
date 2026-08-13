@@ -23,7 +23,10 @@ const BUTTON_BASE =
   'focus-visible:outline-offset-2 focus-visible:outline-brand';
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'bg-brand text-white border-brand hover:bg-brand-dark',
+  // `brand-hover` rather than `brand-dark`: the latter is the *text* role and
+  // inverts to a light blue in dark mode, which would be unreadable as a fill
+  // behind white text.
+  primary: 'bg-brand text-white border-brand hover:bg-brand-hover',
   secondary: 'bg-surface text-ink border-line hover:bg-canvas',
   ghost: 'bg-transparent text-muted border-transparent hover:bg-canvas hover:text-ink',
   danger: 'bg-surface text-danger border-line hover:bg-danger-soft',
