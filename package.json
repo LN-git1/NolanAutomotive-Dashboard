@@ -14,6 +14,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx --env-file-if-exists=.env.local drizzle/seed.ts",
+    "db:migrate:prod": "tsx --env-file=.env.production.local scripts/migrate.ts",
+    "db:seed:prod": "tsx --env-file=.env.production.local drizzle/seed.ts",
     "invoice:preview": "NODE_OPTIONS=--conditions=react-server tsx scripts/preview-invoice.ts",
     "mapper": "TEMPLATE_MAPPER=true next dev"
   },
