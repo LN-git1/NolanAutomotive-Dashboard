@@ -20,13 +20,18 @@
     "db:seed": "tsx --env-file-if-exists=.env.local drizzle/seed.ts",
     "db:migrate:prod": "tsx --env-file=.env.production.local scripts/migrate.ts",
     "db:seed:prod": "tsx --env-file=.env.production.local drizzle/seed.ts",
-    "invoice:preview": "NODE_OPTIONS=--conditions=react-server tsx scripts/preview-invoice.ts",
+    "invoice:preview": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.production.local scripts/preview-invoice.ts",
     "mapper": "TEMPLATE_MAPPER=true next dev",
-    "r2:check": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.production.local scripts/check-r2.ts"
+    "r2:check": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.production.local scripts/check-r2.ts",
+    "assets:upload": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.production.local scripts/upload-assets.ts",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1109.0",
     "@aws-sdk/s3-request-presigner": "^3.1109.0",
+    "@opennextjs/cloudflare": "^1.20.2",
     "@pdf-lib/fontkit": "^1.1.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -55,7 +60,8 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.12",
     "typescript": "^5",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "wrangler": "^4.123.0"
   },
   "packageManager": "pnpm@10.33.2"
 }

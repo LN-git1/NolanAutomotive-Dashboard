@@ -1,13 +1,11 @@
 import 'server-only';
 
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-
 import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 
 import { formatAmount, formatRate } from '@/lib/money';
 
+import { loadInvoiceAssets } from './assets';
 import rawCoords from './invoiceTemplateCoords.json';
 import {
   assertPageGeometry,
@@ -34,25 +32,6 @@ const COORDS = rawCoords as unknown as TemplateCoords;
 
 const BLACK = rgb(0, 0, 0);
 const WHITE = rgb(1, 1, 1);
-
-const TEMPLATE_PATH = path.join(process.cwd(), 'lib/pdf/template/invoice-template.pdf');
-const FONT_REGULAR_PATH = path.join(process.cwd(), 'lib/pdf/fonts/regular.ttf');
-const FONT_BOLD_PATH = path.join(process.cwd(), 'lib/pdf/fonts/bold.ttf');
-
-/** Assets are read once per server instance; they never change at runtime. */
-let assetCache: { template: Buffer; regular: Buffer; bold: Buffer } | null = null;
-
-async function loadAssets() {
-  if (!assetCache) {
-    const [template, regular, bold] = await Promise.all([
-      readFile(TEMPLATE_PATH),
-      readFile(FONT_REGULAR_PATH),
-      readFile(FONT_BOLD_PATH),
-    ]);
-    assetCache = { template, regular, bold };
-  }
-  return assetCache;
-}
 
 export interface StampPartLine {
   partName: string;
@@ -366,7 +345,7 @@ export async function stampInvoice(input: StampInvoiceInput): Promise<Uint8Array
     );
   }
 
-  const assets = await loadAssets();
+  const assets = await loadInvoiceAssets();
   const pdfDoc = await PDFDocument.load(assets.template);
 
   // Register fontkit and embed a real TrueType face. pdf-lib's built-in

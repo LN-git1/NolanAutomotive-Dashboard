@@ -1,3 +1,10 @@
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+
+# workerd is the Cloudflare Workers runtime; it needs its postinstall to fetch
+# the platform binary used by `opennextjs-cloudflare preview` and local dev.
+onlyBuiltDependencies:
+  - workerd
+  - '@cloudflare/workerd-darwin-arm64'
+  - esbuild
