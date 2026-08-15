@@ -85,22 +85,34 @@ disk.
 
 ### 6. Point the domain — the remaining step
 
-**a.** In Vercel → Project → **Settings → Domains**, add `dashboard.nolanautomotive.ie`. Vercel then
-shows the exact record to create.
+DNS for `nolanautomotive.ie` is hosted at **Cloudflare** (nameservers `jack`/`lara.ns.cloudflare.com`),
+delegated there from smarthost.ie. Records are added in Cloudflare, not at the registrar.
 
-**b.** At **smarthost.ie** (the registrar), open DNS management for `nolanautomotive.ie` and add:
+**Do these in order — Vercel first.**
+
+**a.** Vercel → **the project** → **Settings → Domains** → **Add Domain** →
+`dashboard.nolanautomotive.ie`. Direct path: `vercel.com/<team>/<project>/settings/domains`. Note it
+is *project* settings; team settings has no Domains entry.
+
+**b.** Vercel then displays the **CNAME target for this project**. Vercel now issues a
+project-specific target (e.g. `d1d4fc829fe7bc7c.vercel-dns-017.com`) rather than the old universal
+`cname.vercel-dns.com`, so copy the value it shows rather than assuming one.
+
+**c.** Cloudflare → `nolanautomotive.ie` → **DNS → Records → Add record**:
 
 | Field | Value |
 |---|---|
 | Type | `CNAME` |
-| Host / Name | `dashboard` |
-| Points to / Value | `cname.vercel-dns.com` |
-| TTL | default |
+| Name | `dashboard` |
+| Target | **the value Vercel displayed in step b** |
+| Proxy status | **DNS only** (grey cloud, not orange) |
+| TTL | Auto |
 
-Some panels require a trailing dot (`cname.vercel-dns.com.`); use whatever Vercel displays if it
-differs.
+The grey cloud matters. Proxied (orange) means Cloudflare terminates TLS itself, Vercel cannot
+validate the domain to issue its certificate, and the result is usually a redirect loop or a
+certificate error.
 
-**c.** Wait for Vercel to verify and issue the TLS certificate automatically. Confirm with:
+**d.** Wait for Vercel to verify and issue the TLS certificate automatically. Confirm with:
 
 ```bash
 dig dashboard.nolanautomotive.ie CNAME +short
@@ -152,7 +164,7 @@ Never run `pnpm build` locally — see the warning under [Quick start](#quick-st
 | Concern | Choice |
 |---|---|
 | Framework | Next.js 16 (App Router) + TypeScript |
-| Styling | Tailwind CSS v4, single light theme |
+| Styling | Tailwind CSS v4, light and dark themes |
 | UI | Hand-rolled primitives in `components/ui` — no component library |
 | Database | PostgreSQL via Supabase (EU region) — used as a managed Postgres host only |
 | ORM | Drizzle |
@@ -322,24 +334,11 @@ server-side (120s to view, 900s to download, 300s to upload).
 
 ## DNS: pointing dashboard.nolanautomotive.ie
 
-Only the apex domain `nolanautomotive.ie` has been purchased; the subdomain does not exist yet.
+See [step 6 of the hosting runbook](#6-point-the-domain--the-remaining-step).
 
-1. Sign in to the registrar that holds `nolanautomotive.ie` and open its **DNS management** panel.
-   (`.ie` domains are sold through IEDR-accredited registrars, so the exact screen varies.)
-2. Add a record:
-   - **Type:** `CNAME`
-   - **Host / Name:** `dashboard`
-   - **Value / Target:** `cname.vercel-dns.com`
-   - **TTL:** default (or 3600)
-3. In Vercel → Project → **Settings → Domains**, add `dashboard.nolanautomotive.ie`.
-4. Wait for Vercel to verify the domain and issue the TLS certificate automatically.
-5. Verify propagation:
-   ```bash
-   dig dashboard.nolanautomotive.ie CNAME +short
-   ```
-
-Propagation is usually minutes but can take up to 24–48 hours depending on the registrar's TTL.
-The apex `nolanautomotive.ie` is untouched by this and remains free for the main website.
+In short: the domain is registered at smarthost.ie but its DNS is delegated to **Cloudflare**, so
+records are added in Cloudflare. Add the domain in Vercel first to obtain the project-specific CNAME
+target, then create that record with the proxy set to **DNS only**.
 
 ---
 
