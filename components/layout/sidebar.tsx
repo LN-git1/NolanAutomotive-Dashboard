@@ -2,39 +2,100 @@
 
 import {
   BanknoteArrowDown,
+  CalendarDays,
   FileText,
   LayoutDashboard,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
   Truck,
-  CalendarDays,
   Wrench,
   X,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import { cn } from '@/lib/utils';
 
 interface NavItem {
   href: string;
   label: string;
+  /** Short form for the bottom bar, where five labels share the screen width. */
+  shortLabel: string;
   icon: LucideIcon;
   /** Match the path exactly rather than by prefix — only the root needs this. */
   exact?: boolean;
+  /** Also gets a permanent slot in the phone bottom bar. */
+  primary?: boolean;
 }
 
+/**
+ * Every page lives in the sidebar and the drawer. Only the five marked
+ * `primary` also get a slot in the phone bottom bar — the things touched
+ * between jobs. Awaiting payments and Owed to others are money reviews rather
+ * than day-to-day actions, so they stay one tap away in the menu.
+ */
 const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: 'Overview', icon: LayoutDashboard, exact: true },
-  { href: '/jobs', label: 'Jobs', icon: Wrench },
-  { href: '/schedule', label: 'Schedule', icon: CalendarDays },
-  { href: '/invoicer', label: 'Invoicer', icon: FileText },
-  { href: '/awaiting-payments', label: 'Awaiting payments', icon: BanknoteArrowDown },
-  { href: '/suppliers', label: 'Owed to others', icon: Truck },
-  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/', label: 'Overview', shortLabel: 'Overview', icon: LayoutDashboard, exact: true, primary: true },
+  { href: '/jobs', label: 'Jobs', shortLabel: 'Jobs', icon: Wrench, primary: true },
+  { href: '/schedule', label: 'Schedule', shortLabel: 'Schedule', icon: CalendarDays, primary: true },
+  { href: '/invoicer', label: 'Invoicer', shortLabel: 'Invoicer', icon: FileText, primary: true },
+  { href: '/awaiting-payments', label: 'Awaiting payments', shortLabel: 'Owed', icon: BanknoteArrowDown },
+  { href: '/suppliers', label: 'Owed to others', shortLabel: 'Suppliers', icon: Truck },
+  { href: '/settings', label: 'Settings', shortLabel: 'Settings', icon: Settings, primary: true },
 ];
+
+const PRIMARY_ITEMS = NAV_ITEMS.filter((item) => item.primary);
+
+const COLLAPSE_KEY = 'nolan-sidebar-collapsed';
+
+/* ------------------------------------------------ collapsed state (desktop) */
+
+let listeners: Array<() => void> = [];
+
+function subscribe(onChange: () => void) {
+  listeners.push(onChange);
+  return () => {
+    listeners = listeners.filter((l) => l !== onChange);
+  };
+}
+
+function getSnapshot(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** The server cannot know the stored preference; hydration corrects it. */
+function getServerSnapshot(): boolean {
+  return false;
+}
+
+/**
+ * Stored outside React so the rail and its toggle button — which live in
+ * different parts of the tree — stay in step without threading props or a
+ * context through a server-rendered layout.
+ */
+export function useSidebarCollapsed() {
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}
+
+export function toggleSidebarCollapsed() {
+  const next = !getSnapshot();
+  try {
+    localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
+  } catch {
+    // Private browsing can refuse storage; the toggle still works for this view.
+  }
+  for (const listener of listeners) listener();
+}
+
+/* ------------------------------------------------------------------ shared */
 
 function useIsActive() {
   const pathname = usePathname();
@@ -44,7 +105,13 @@ function useIsActive() {
       : pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
-function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+function NavLinks({
+  onNavigate,
+  iconsOnly = false,
+}: {
+  onNavigate?: () => void;
+  iconsOnly?: boolean;
+}) {
   const isActive = useIsActive();
 
   return (
@@ -59,15 +126,17 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
             href={item.href}
             onClick={onNavigate}
             aria-current={active ? 'page' : undefined}
+            title={iconsOnly ? item.label : undefined}
             className={cn(
-              'flex shrink-0 items-center gap-3 rounded-md px-3 py-2.5 text-sm whitespace-nowrap',
+              'flex shrink-0 items-center rounded-md text-sm whitespace-nowrap',
+              iconsOnly ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5',
               active
                 ? 'bg-info-soft font-medium text-brand-dark'
                 : 'text-muted hover:bg-canvas hover:text-ink',
             )}
           >
-            <Icon aria-hidden className="size-4" />
-            {item.label}
+            <Icon aria-hidden className="size-4 shrink-0" />
+            {iconsOnly ? <span className="sr-only">{item.label}</span> : item.label}
           </Link>
         );
       })}
@@ -75,39 +144,70 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-/** Persistent left rail. Only from `lg` up, where there is room to spare. */
+/* ------------------------------------------------------- desktop left rail */
+
+/** Persistent rail with every page. Collapses to icons via the header button. */
 export function Sidebar() {
+  const collapsed = useSidebarCollapsed();
+
   return (
     <nav
       aria-label="Main"
       className="hidden h-full flex-col gap-1 border-r border-line bg-surface p-3 lg:flex"
     >
-      <div className="px-2 pt-1 pb-4">
-        <p className="text-sm font-semibold text-ink">Nolan Automotive</p>
-        <p className="text-xs text-muted">Dashboard</p>
+      <div className={cn('pt-1 pb-4', collapsed ? 'px-0 text-center' : 'px-2')}>
+        {collapsed ? (
+          <p className="text-sm font-semibold text-ink">NA</p>
+        ) : (
+          <>
+            <p className="text-sm font-semibold text-ink">Nolan Automotive</p>
+            <p className="text-xs text-muted">Dashboard</p>
+          </>
+        )}
       </div>
-      <NavLinks />
+      <NavLinks iconsOnly={collapsed} />
     </nav>
   );
 }
 
+/** Collapse/expand control for the rail. Desktop only — phones use the drawer. */
+export function SidebarToggle() {
+  const collapsed = useSidebarCollapsed();
+
+  return (
+    <button
+      type="button"
+      onClick={toggleSidebarCollapsed}
+      aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      className="hidden rounded-md border border-line bg-surface p-2 text-muted hover:bg-canvas hover:text-ink lg:inline-flex"
+    >
+      {collapsed ? (
+        <PanelLeftOpen aria-hidden className="size-4" />
+      ) : (
+        <PanelLeftClose aria-hidden className="size-4" />
+      )}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------ mobile drawer */
+
 /**
- * Below `lg`, navigation is a drawer rather than anything permanently on
- * screen — a narrow window should give its whole width to the actual work, and
- * navigation is something you reach for occasionally, not something you stare
- * at. The button sits in the header; the drawer closes on selection, on the
- * backdrop, and on Escape.
+ * The full menu, opened from the header below `lg`. This is where every page is
+ * reachable, including the two the bottom bar has no room for. Closes on
+ * selection, on the backdrop, and on Escape.
  *
  * No slide animation: the brief asks for a plain, non-flashy tool, and an
- * instant open is faster to use than one that has to finish moving.
+ * instant open is quicker to use than one that has to finish moving.
  */
 export function NavDrawer() {
   const pathname = usePathname();
 
   /**
    * Open state is stored as "the path it was opened on", so a navigation closes
-   * it by derivation rather than by an effect syncing state after the fact.
-   * Covers back/forward too, not just clicking a link.
+   * it by derivation rather than an effect resetting state afterwards. That
+   * covers back/forward too, not just clicking a link.
    */
   const [openedOn, setOpenedOn] = useState<string | null>(null);
   const open = openedOn !== null && openedOn === pathname;
@@ -132,7 +232,10 @@ export function NavDrawer() {
         aria-label="Open navigation menu"
         aria-expanded={open}
         aria-controls="main-nav-drawer"
-        className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink hover:bg-canvas"
+        /* Deliberately no min-height here: it sits in a compact header beside
+           the theme and sign-out controls, and a 44px touch target made it
+           noticeably taller than both. Horizontal padding keeps it easy to hit. */
+        className="inline-flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-ink hover:bg-canvas"
       >
         <Menu aria-hidden className="size-4" />
         Menu
@@ -149,7 +252,7 @@ export function NavDrawer() {
 
           <nav
             id="main-nav-drawer"
-            aria-label="Main"
+            aria-label="All pages"
             className="pt-safe pb-safe fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col gap-1 overflow-y-auto border-r border-line bg-surface p-3"
           >
             <div className="flex items-start justify-between gap-2 px-2 pt-1 pb-4">
@@ -172,5 +275,46 @@ export function NavDrawer() {
         </>
       ) : null}
     </div>
+  );
+}
+
+/* --------------------------------------------------------- phone bottom bar */
+
+/**
+ * The five things reached between jobs, within thumb reach. Fixed rather than
+ * sticky so it survives the iOS URL bar collapsing, and padded for the home
+ * indicator when installed to the home screen. Everything else is in the menu.
+ */
+export function MobileTabBar() {
+  const isActive = useIsActive();
+
+  return (
+    <nav
+      aria-label="Primary"
+      className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface lg:hidden"
+    >
+      <ul className="flex">
+        {PRIMARY_ITEMS.map((item) => {
+          const active = isActive(item);
+          const Icon = item.icon;
+
+          return (
+            <li key={item.href} className="flex-1">
+              <Link
+                href={item.href}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'flex h-16 flex-col items-center justify-center gap-1 px-1 text-[10px] leading-none',
+                  active ? 'font-semibold text-brand-dark' : 'text-muted',
+                )}
+              >
+                <Icon aria-hidden className={cn('size-5', active && 'stroke-[2.5]')} />
+                <span className="w-full truncate text-center">{item.shortLabel}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }

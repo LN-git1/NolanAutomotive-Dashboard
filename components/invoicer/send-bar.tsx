@@ -6,9 +6,14 @@ import { useMemo, useState } from 'react';
 import { Alert, Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
 
-/** Sticks to the bottom of the preview, clearing the home indicator on iOS. */
+/**
+ * Sticks to the bottom of the preview, clearing the fixed phone bottom bar
+ * (4rem plus the home indicator). From `lg` up that bar is gone, so it sits
+ * flush at the bottom.
+ */
 const STICKY_BAR =
-  'sticky bottom-[env(safe-area-inset-bottom,0px)] z-10 border-t border-line bg-surface';
+  'sticky bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] z-10 border-t border-line ' +
+  'bg-surface lg:bottom-0';
 
 export type SendChannel = 'email' | 'whatsapp' | 'share';
 

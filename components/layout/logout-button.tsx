@@ -18,9 +18,20 @@ export function LogoutButton() {
   }
 
   return (
-    <Button variant="ghost" size="sm" onClick={handleLogout} disabled={pending}>
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={handleLogout}
+      disabled={pending}
+      aria-label="Sign out"
+      title="Sign out"
+    >
       <LogOut aria-hidden className="size-4" />
-      {pending ? 'Signing out…' : 'Sign out'}
+      {/* Label is dropped on the narrowest screens so the header stays one
+          line — the icon plus aria-label carries the meaning. */}
+      <span className="sr-only sm:not-sr-only">
+        {pending ? 'Signing out…' : 'Sign out'}
+      </span>
     </Button>
   );
 }
