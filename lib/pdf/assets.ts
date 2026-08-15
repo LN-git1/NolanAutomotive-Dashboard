@@ -11,13 +11,16 @@ import { INVOICES_BUCKET, getR2 } from '@/lib/storage/r2';
  * the repository as the source of truth — `pnpm assets:upload` publishes them —
  * but the running app never touches a filesystem.
  *
- * Why: Cloudflare Workers has no real filesystem, and whether Next's
- * `outputFileTracingIncludes` survives into a Worker bundle is undocumented. A
- * `readFile` against `process.cwd()` is the kind of thing that works perfectly
- * in dev and fails only in production, on the single most important code path
- * in the app. Fetching from object storage removes that class of failure and
- * happens to be portable — this runs the same on Workers, on a Node server, or
- * anywhere else.
+ * Why: a `readFile` against `process.cwd()` depends on build-time file tracing
+ * putting the right files in the right place, which is platform-specific and
+ * fails in exactly the worst way — perfectly in dev, only in production, on the
+ * single most important code path in the app.
+ *
+ * This originally changed while briefly targeting Cloudflare Workers, which has
+ * no filesystem at all. It is kept on Vercel because it earned its place: the
+ * hosting target moved twice inside two days, and an app that fetches its own
+ * assets from object storage moves with it for free. Runs identically on
+ * Vercel, on Workers, or on a plain Node server, with no build config.
  *
  * Cached for the lifetime of the isolate, so the ~1.2MB fetch happens once on a
  * cold start and never again.

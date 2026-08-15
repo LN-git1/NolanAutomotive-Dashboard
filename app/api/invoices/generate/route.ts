@@ -7,6 +7,14 @@ import { invoiceDraftSchema } from '@/lib/validation/invoice';
 
 export const runtime = 'nodejs';
 
+/**
+ * Hobby's ceiling is 300s (default and maximum, with Fluid Compute). Stamping
+ * takes about a second, so this is not raising a limit — it lowers one, so a
+ * hung database, R2 fetch or storage call is cut off after a minute instead of
+ * holding a function slot for five.
+ */
+export const maxDuration = 60;
+
 
 /**
  * PREVIEW ONLY. Writes nothing.
