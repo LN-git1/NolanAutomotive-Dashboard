@@ -137,11 +137,6 @@ body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Height of the mobile tab bar, plus whatever the home indicator needs. */
-.pb-navbar {
-  padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
-}
-
 /**
  * iOS Safari zooms the viewport when a focused input's font-size is under 16px,
  * and never zooms back out. Every control is therefore 16px on phones and drops

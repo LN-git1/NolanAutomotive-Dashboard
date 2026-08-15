@@ -436,7 +436,7 @@ export function Invoicer({
               an embed that silently fails, and the embed is used from md up.
             */}
             {/* pb-28 keeps this clear of the sticky send bar floating above it. */}
-            <div className="flex flex-col items-start gap-3 p-4 pb-28 md:hidden">
+            <div className="flex flex-col items-start gap-3 p-4 pb-24 md:hidden">
               <p className="text-sm text-ink">
                 Invoice ready to preview. It opens in your phone&apos;s PDF viewer.
               </p>

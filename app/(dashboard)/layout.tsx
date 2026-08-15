@@ -1,5 +1,5 @@
 import { LogoutButton } from '@/components/layout/logout-button';
-import { MobileNav, Sidebar } from '@/components/layout/sidebar';
+import { NavDrawer, Sidebar } from '@/components/layout/sidebar';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { requireSession } from '@/lib/auth/require-session';
 
@@ -10,33 +10,37 @@ import { requireSession } from '@/lib/auth/require-session';
  * these routes, but if its matcher is ever edited incorrectly this second check
  * keeps customer data from being served to an anonymous request.
  *
- * Layout shape: a left rail from `md` up, a fixed bottom tab bar below it. The
- * header carries `pt-safe` because the app runs standalone from the home screen
- * with a translucent status bar drawing over the page.
+ * Layout: a persistent left rail from `lg` up, and below that a drawer opened
+ * from the header — a narrow window gives its full width to the work rather
+ * than holding navigation on screen permanently.
+ *
+ * `pt-safe` on the header because the installed PWA runs standalone with a
+ * translucent status bar drawing over the page.
  */
 export default async function DashboardLayout({ children }: LayoutProps<'/'>) {
   await requireSession();
 
   return (
-    <div className="flex min-h-screen flex-col md:grid md:grid-cols-[15rem_1fr]">
-      <aside className="md:sticky md:top-0 md:h-screen">
+    <div className="flex min-h-screen flex-col lg:grid lg:grid-cols-[15rem_1fr]">
+      <aside className="lg:sticky lg:top-0 lg:h-screen">
         <Sidebar />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="pt-safe sticky top-0 z-30 flex items-center justify-between border-b border-line bg-surface px-4 py-2 md:static">
-          <span className="text-sm font-semibold text-ink md:hidden">Nolan Automotive</span>
+        <header className="pt-safe sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface px-4 py-2 lg:static">
+          <NavDrawer />
+          <span className="truncate text-sm font-semibold text-ink lg:hidden">
+            Nolan Automotive
+          </span>
+
           <div className="ml-auto flex items-center gap-1">
             <ThemeToggle />
             <LogoutButton />
           </div>
         </header>
 
-        {/* pb-navbar clears the fixed mobile tab bar; it is a no-op from md up. */}
-        <main className="pb-navbar min-w-0 flex-1 p-4 md:p-6 md:pb-6">{children}</main>
+        <main className="pb-safe min-w-0 flex-1 p-4 lg:p-6">{children}</main>
       </div>
-
-      <MobileNav />
     </div>
   );
 }

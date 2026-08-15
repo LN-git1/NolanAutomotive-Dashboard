@@ -6,14 +6,9 @@ import { useMemo, useState } from 'react';
 import { Alert, Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
 
-/**
- * Sticks to the bottom of the preview, but clears the fixed mobile tab bar
- * (4rem plus the home indicator). From `md` up the tab bar is gone, so it sits
- * flush at the bottom.
- */
+/** Sticks to the bottom of the preview, clearing the home indicator on iOS. */
 const STICKY_BAR =
-  'sticky bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] z-10 border-t border-line ' +
-  'bg-surface md:bottom-0';
+  'sticky bottom-[env(safe-area-inset-bottom,0px)] z-10 border-t border-line bg-surface';
 
 export type SendChannel = 'email' | 'whatsapp' | 'share';
 
