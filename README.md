@@ -4,7 +4,127 @@ Single-user back-office dashboard for a small Irish mechanics business: manage j
 invoices onto the business's existing PDF template, track money owed by customers and money owed
 to suppliers.
 
-Intended to run at **https://dashboard.nolanautomotive.ie**.
+Live at **https://nolan-automotive-dashboard.vercel.app** — moving to
+**https://dashboard.nolanautomotive.ie** once DNS is pointed (step 6 below).
+
+---
+
+## Hosting runbook
+
+The whole hosting setup, in order. Steps 1–5 are **done**; step 6 is what remains.
+
+| # | Step | Status |
+|---|---|---|
+| 1 | Supabase project (Postgres) | ✅ done |
+| 2 | Cloudflare R2 (file storage) | ✅ done |
+| 3 | GitHub repository | ✅ done |
+| 4 | Vercel project + environment variables | ✅ done |
+| 5 | Database migrate, seed, and publish PDF assets | ✅ done |
+| 6 | **Point the domain** | ⬜ **remaining** |
+
+### 1. Supabase — the database
+
+Create a project in an **EU region**. Then Project Settings → Database → Connection string, and take
+**both**:
+
+| Which | Port | Goes into |
+|---|---|---|
+| Transaction pooler | 6543 | `DATABASE_URL` — append `?pgbouncer=true` |
+| Session pooler | 5432 | `DIRECT_DATABASE_URL` |
+
+Skip the "Direct connection" option — it is IPv6-only without a paid add-on.
+
+> The database password is set at project creation and is **not recoverable**. If it is lost, reset it
+> under **Database → Settings → Reset database password** (not Project Settings — it moved).
+
+### 2. Cloudflare R2 — file storage
+
+R2 → enable (a card is required on file even on the free tier; nothing bills under 10GB). Create two
+**private** buckets: `nolan-attachments` and `nolan-invoices`.
+
+Then on the R2 overview page, **Account Details → API Tokens → Manage → Create Account API token**,
+with permission **Object Read & Write** scoped to those two buckets. Copy the Access Key ID and
+Secret Access Key immediately — the secret is shown once.
+
+**Set CORS on `nolan-attachments`**, or every upload fails with an opaque browser error:
+
+```json
+[{
+  "AllowedOrigins": ["https://dashboard.nolanautomotive.ie", "http://localhost:3000"],
+  "AllowedMethods": ["PUT", "GET"],
+  "AllowedHeaders": ["content-type"],
+  "MaxAgeSeconds": 3600
+}]
+```
+
+### 3. GitHub
+
+A **private** repository. Push `main`. Confirm no `.env*` file is present except `.env.example`.
+
+### 4. Vercel
+
+Import the repository. Framework preset Next.js; leave build and install commands at their defaults
+(pnpm is detected from the lockfile). Add every variable from
+[Environment variables](#environment-variables) for **Production, Preview and Development** — all
+three, because `DATABASE_URL` is read at build time and a Production-only scope breaks preview
+builds. Do **not** add `TEMPLATE_MAPPER`.
+
+### 5. Initialise the data
+
+Run these locally against production, reading `.env.production.local`:
+
+```bash
+pnpm db:migrate:prod    # creates the 7 tables
+pnpm db:seed:prod       # settings singleton + the two counters — REQUIRED
+pnpm assets:upload      # publishes the invoice template and fonts to R2 — REQUIRED
+```
+
+All three are mandatory. Without the seed, creating a job or invoice throws. Without the assets,
+invoice generation fails because the template is fetched from R2 at runtime rather than read from
+disk.
+
+### 6. Point the domain — the remaining step
+
+**a.** In Vercel → Project → **Settings → Domains**, add `dashboard.nolanautomotive.ie`. Vercel then
+shows the exact record to create.
+
+**b.** At **smarthost.ie** (the registrar), open DNS management for `nolanautomotive.ie` and add:
+
+| Field | Value |
+|---|---|
+| Type | `CNAME` |
+| Host / Name | `dashboard` |
+| Points to / Value | `cname.vercel-dns.com` |
+| TTL | default |
+
+Some panels require a trailing dot (`cname.vercel-dns.com.`); use whatever Vercel displays if it
+differs.
+
+**c.** Wait for Vercel to verify and issue the TLS certificate automatically. Confirm with:
+
+```bash
+dig dashboard.nolanautomotive.ie CNAME +short
+curl -I https://dashboard.nolanautomotive.ie/login
+```
+
+Propagation is usually minutes, but can take up to 24–48 hours depending on the registrar's TTL. The
+apex `nolanautomotive.ie` is untouched and stays free for the main website.
+
+### Deploying changes afterwards
+
+```bash
+pnpm typecheck && pnpm lint && pnpm test:run
+git push                      # Vercel builds and deploys automatically
+```
+
+Only if the database schema changed:
+
+```bash
+pnpm db:generate              # locally, commit the generated SQL
+pnpm db:migrate:prod          # AFTER the deploy succeeds
+```
+
+Never run `pnpm build` locally — see the warning under [Quick start](#quick-start).
 
 ---
 
