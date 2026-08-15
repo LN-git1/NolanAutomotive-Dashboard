@@ -1,5 +1,117 @@
 # Changelog
 
+## 15/08/2026 @ 20:06:59 IST — "claude-opus-5"
+
+**Project completion: 98.04%**
+
+Basis: 100 of 102 discrete build requirements. Five of the six previously-open deployment items are
+now closed — Supabase project, R2 buckets, GitHub repo, Vercel deployment, and live end-to-end
+verification. Scope grew by two (the schedule calendar and the navigation rework) and by one open
+item (the optional Zoho mailbox). The two still open are **DNS at smarthost.ie** and that optional
+mailbox, both of which need registrar/account access rather than code.
+
+### Goal
+
+Get the dashboard live, prove it works properly against real infrastructure, and hand it over blank
+so the owner starts at job one and invoice one.
+
+### Fixed — the bug that would have sunk it
+
+**Every multi-query page hung in production.** Overview, Invoicer, Settings and Awaiting Payments all
+timed out, while `/login`, the login API and `/api/health` returned 200 — which made it look like a
+routing or auth fault rather than a database one.
+
+The cause was mine. During the serverless hardening pass I set the connection pool to `max: 1`,
+reasoning that "the pooler is the pool, so one connection is enough". That is wrong against Supavisor
+in transaction mode: postgres.js pipelines concurrent queries down a single connection, and
+transaction-mode pooling wants one transaction per connection, so they never complete. It does not
+error, it **hangs** — which is exactly why single-query routes looked healthy while the Overview page
+and its six parallel queries never returned.
+
+Measured against the live database: `max: 1` exceeded 20s and never finished; `max: 5` did the same
+six queries in 0.28s; `max: 8` was fastest on the widest page. Set to 8, with the reasoning recorded
+in the file so it does not get "optimised" back by someone applying the same plausible instinct.
+Overview went from a 45s hang to 2.0s.
+
+### Added
+
+**Schedule calendar** (`/schedule`) — a month view keyed on each job's due date, showing what is
+booked, how loaded each day is, and which weekdays are still free to take work. Month grid from `md`
+up, agenda list on phones. It also surfaces live jobs with **no** date, which are the ones that would
+otherwise be invisible on a calendar and quietly forgotten.
+
+Dates are handled as `YYYY-MM-DD` strings end to end, never as `Date` objects — the column is a bare
+date, and converting through a `Date` applies a timezone offset that can move a booking to the day
+before or after. For a garage that means a customer arriving on the wrong day. Tested against the
+cases that break calendars: whole-week padding for all twelve months, leap and non-leap February,
+year rollover both directions, and junk query params falling back to the current month.
+
+**Navigation rebuilt into three surfaces.** A phone bottom bar with the five things touched between
+jobs (Overview, Jobs, Schedule, Invoicer, Settings); a Menu drawer holding every page including the
+two the bar has no room for; and a left rail from `lg` up that now collapses to icons, with the
+choice remembered. The header was also trimmed from 59px to 43px — the Menu button carried a 44px
+touch-target minimum that made it taller than everything beside it, and "Sign out" was wrapping to
+two lines on a narrow screen.
+
+### Changed
+
+**Storage moved to Cloudflare R2, and the PDF template with it.** `lib/pdf/stamp.ts` used to read the
+template and fonts from disk via `process.cwd()`. They now live in R2 and are fetched once per
+isolate. This began as a Cloudflare requirement during a brief detour to Workers, and was kept after
+returning to Vercel because it earned its place: the hosting target changed twice inside two days,
+and an app that fetches its own assets from object storage moves with it for nothing. No
+platform-specific build config, and ~1.2MB off the bundle.
+
+Also: dark/light theme with system default and no flash on load; vehicle year/make/model as
+dependent dropdowns with an "Other…" free-text escape hatch; and the guarded factory reset.
+
+### Verification — 63 checks against the live site
+
+All run in a real browser against `nolan-automotive-dashboard.vercel.app`, hitting the production
+database and real R2. Not a staging copy.
+
+- **Auth:** wrong password rejected, session cookie `Secure` + `httpOnly` + `SameSite=Strict`, logged
+  out pages redirect and APIs 401.
+- **Jobs:** created with full detail and every field read back from the database — apostrophe in
+  "Margaret O'Sullivan" intact, registration upper-cased, multi-line address, VIN, make and model
+  stored separately.
+- **Editing:** a job was created and then extended afterwards ("customer rang back: also wants the
+  timing belt and water pump done"), with mileage and status changed. All persisted.
+- **Deletion:** a job was deleted and confirmed gone — and the invoice counter was **not** burned by
+  it.
+- **Invoicing:** three previews created no invoice and consumed no number; one send allocated
+  `NA-2026-0001`, flipped the job to Invoiced and stored the PDF; the job then disappeared from the
+  picker so it cannot be double-invoiced.
+- **The PDF was downloaded from R2 and inspected**, not assumed: registration on the Model line,
+  mileage `187,502`, description wrapped across rows, 2 × €61.25 = €122.50, totals €487.50 + €507.35
+  + €0.00 = €994.85.
+- **Money:** supplier bill recorded and cleared; invoice marked paid and cleared from Awaiting
+  Payments; Overview totals tracked throughout; all three CSV exports download.
+- **Mobile at 393px:** no horizontal overflow anywhere, 16px inputs so iOS will not zoom, theme
+  persists, PWA assets publicly reachable.
+
+### Handover state
+
+The dashboard is **blank**. Every table is empty except the settings singleton; both counters are at
+1, so the first job is `J-0001` and the first invoice `NA-2026-0001`. Login and business details are
+preserved.
+
+The reset was verified not to break anything: the three template assets in R2 survive it (they sit
+under an `_assets/` prefix the reset never touches), and invoice generation was re-tested afterwards
+— HTTP 200, `application/pdf`, 60,547 bytes, rendering correctly. Had those assets been deleted,
+invoicing would have failed silently on the owner's first real use.
+
+### Open
+
+1. **DNS** — add a `dashboard` CNAME → `cname.vercel-dns.com` at smarthost.ie, and the domain in the
+   Vercel project. Needs registrar access.
+2. **Optional** — Zoho Mail free tier for `lee@nolanautomotive.ie`.
+3. **Worth confirming after the first week:** that the daily Vercel cron against `/api/health` has
+   actually run. It is what stops Supabase pausing the free project after ~7 idle days; if it
+   silently stops, the dashboard goes down until someone clicks restore.
+
+---
+
 ## 13/08/2026 @ 01:12:43 IST — "claude-opus-5"
 
 **Project completion: 93.94%**
