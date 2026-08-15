@@ -14,9 +14,22 @@ import * as schema from './schema';
  *  - `prepare: false` is mandatory. Transaction-mode pooling hands a different
  *    backend connection to each statement, so server-side prepared statements
  *    break with "prepared statement already exists".
- *  - `max: 1`. The pooler IS the pool. Each serverless instance opening ten
- *    connections would mean hundreds of pooler clients under concurrency, well
- *    past the free tier's limit.
+ *
+ *  - `max` MUST be greater than 1. This looks like the wrong instinct for
+ *    serverless — "the pooler is the pool, so one connection is enough" — and
+ *    that reasoning is what originally set it to 1. It deadlocks.
+ *
+ *    With a single connection, postgres.js pipelines concurrent queries down
+ *    it, and Supavisor's transaction mode cannot service pipelined queries
+ *    because it wants one transaction per connection. The result is not an
+ *    error but a HANG: a single query is fine, so `/api/health` and `/jobs`
+ *    look healthy while the Overview page (six queries via `Promise.all`)
+ *    never returns. Measured against this exact database: `max: 1` exceeded
+ *    20s and never completed; `max: 5` finished the same six queries in 0.28s.
+ *
+ *    Five is enough to serve the widest fan-out on any page while staying far
+ *    below the free tier's client limit. Do not lower it to 1.
+ *
  *  - Migrations must NOT use this client. They use DIRECT_DATABASE_URL
  *    (port 5432) via `scripts/migrate.ts`, for the same pooling reason.
  */
@@ -32,7 +45,8 @@ function createDb() {
 
   const sql = postgres(connectionString, {
     prepare: false,
-    max: 1,
+    // See the note above — must be > 1 or concurrent queries deadlock.
+    max: 8,
     idle_timeout: 20,
   });
 
