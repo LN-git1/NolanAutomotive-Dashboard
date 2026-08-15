@@ -232,10 +232,11 @@ export function NavDrawer() {
         aria-label="Open navigation menu"
         aria-expanded={open}
         aria-controls="main-nav-drawer"
-        /* Deliberately no min-height here: it sits in a compact header beside
-           the theme and sign-out controls, and a 44px touch target made it
-           noticeably taller than both. Horizontal padding keeps it easy to hit. */
-        className="inline-flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-ink hover:bg-canvas"
+        /* Size is pinned rather than left to padding. It sits in a compact
+           header beside the theme and sign-out controls, and the 44px touch
+           target it used to carry made it visibly taller than both. 34x86 keeps
+           it level with its neighbours while staying wide enough to hit easily. */
+        className="inline-flex h-[34px] w-[86px] items-center justify-center gap-2 rounded-md border border-line bg-surface text-sm text-ink hover:bg-canvas"
       >
         <Menu aria-hidden className="size-4" />
         Menu
