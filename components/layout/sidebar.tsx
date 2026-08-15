@@ -7,6 +7,7 @@ import {
   Menu,
   Settings,
   Truck,
+  CalendarDays,
   Wrench,
   X,
   type LucideIcon,
@@ -28,6 +29,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Overview', icon: LayoutDashboard, exact: true },
   { href: '/jobs', label: 'Jobs', icon: Wrench },
+  { href: '/schedule', label: 'Schedule', icon: CalendarDays },
   { href: '/invoicer', label: 'Invoicer', icon: FileText },
   { href: '/awaiting-payments', label: 'Awaiting payments', icon: BanknoteArrowDown },
   { href: '/suppliers', label: 'Owed to others', icon: Truck },
