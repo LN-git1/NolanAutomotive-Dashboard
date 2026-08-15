@@ -1,5 +1,71 @@
 # Changelog
 
+## 15/08/2026 @ 22:33:34 IST — "claude-opus-5"
+
+**Project completion: 99.02%**
+
+Basis: 101 of 102 discrete build requirements. The DNS item closed this session — the custom domain
+resolves, its certificate is issued, and the live site was re-verified end to end on it. The single
+remaining item is the **optional** Zoho mailbox for `lee@nolanautomotive.ie`, which needs account
+access rather than code. One thing sits outside that count and should not be read as closed: the
+**GitHub repository is still public** and should be switched to private in the client's account.
+
+### Goal
+
+Confirm step 6 of the hosting runbook actually completed — that `dashboard.nolanautomotive.ie` serves
+the real application, not just a DNS record — and prove the handover state is genuinely blank rather
+than assumed to be.
+
+### Verified — the domain is live
+
+`dashboard.nolanautomotive.ie` resolves via CNAME to `cname.vercel-dns.com`, Vercel issued a Let's
+Encrypt certificate (valid to 13/11/2026, renewed automatically), and the app serves over HTTPS.
+
+Re-ran the critical paths against the real hostname rather than trusting the `.vercel.app` results,
+because origin-sensitive things — cookies, CORS, certificates — are exactly what a domain change can
+break:
+
+- logged-out `/jobs` → 307 to `/login`; `POST /api/invoices/generate` → 401
+- login succeeds, and the `nolan_session` cookie is `Secure` + `HttpOnly` on the real origin
+- all seven pages load without error
+- an invoice PDF generates end to end through the new hostname
+- a photo uploads **straight from the browser to R2** and returns HTTP 200, which is the real proof
+  the R2 CORS rule covers this origin — the bucket token is scoped to object read/write, so it cannot
+  read the CORS config back, making an actual upload the only trustworthy check
+- the stored photo opens through a signed R2 URL
+
+### Fixed — a wrong instruction I had written into the README
+
+The runbook told the reader that Vercel "now issues a project-specific target rather than the old
+universal `cname.vercel-dns.com`". That was my own over-correction from an earlier session, and the
+live DNS disproves it: this deployment resolves through the universal target and works. Reworded to
+say either form is valid, copy whatever Vercel displays, and recorded which one is actually live —
+so the next person reading it is not sent chasing a value that was never wrong.
+
+### Confirmed — the handover state, proven rather than assumed
+
+A verification run created a job that came back **J-0002**, not `J-0001`. Rather than assume a stale
+starting state, the counters were read straight from the database: both were already at 1, so the
+number came from residue at the start of that run, not from a numbering bug.
+
+That is an inference, and "the owner's first job is number one" is too important to infer, so it was
+tested directly: from the blank database a job was created on the live domain and came back
+**J-0001**, then the factory reset was run and the database re-read.
+
+The reset also turned out to have a property worth recording: it deletes uploaded files from R2 but
+**leaves `_assets/` (the invoice template and the two fonts) untouched**. Had it wiped those, invoice
+generation would have broken permanently and silently on the first reset the owner ever ran.
+
+Final state, read from the database and R2 rather than from the UI: every table empty except the
+settings singleton, `counters` at `invoice=1` / `job=1`, the attachments bucket empty, and the
+invoices bucket holding only the three template assets.
+
+### Files Touched
+
+- `README.md` — step 6 marked done; corrected CNAME guidance; recorded what was verified live; fixed
+  the anchor link broken by the heading rename
+- `CHANGELOG.md` — this entry
+
 ## 15/08/2026 @ 20:06:59 IST — "claude-opus-5"
 
 **Project completion: 98.04%**

@@ -11,7 +11,8 @@ Live at **https://nolan-automotive-dashboard.vercel.app** — moving to
 
 ## Hosting runbook
 
-The whole hosting setup, in order. Steps 1–5 are **done**; step 6 is what remains.
+The whole hosting setup, in order. All six steps are **done** — the dashboard is live at
+<https://dashboard.nolanautomotive.ie>.
 
 | # | Step | Status |
 |---|---|---|
@@ -20,7 +21,7 @@ The whole hosting setup, in order. Steps 1–5 are **done**; step 6 is what rema
 | 3 | GitHub repository | ✅ done |
 | 4 | Vercel project + environment variables | ✅ done |
 | 5 | Database migrate, seed, and publish PDF assets | ✅ done |
-| 6 | **Point the domain** | ⬜ **remaining** |
+| 6 | Point the domain | ✅ done |
 
 ### 1. Supabase — the database
 
@@ -83,7 +84,7 @@ All three are mandatory. Without the seed, creating a job or invoice throws. Wit
 invoice generation fails because the template is fetched from R2 at runtime rather than read from
 disk.
 
-### 6. Point the domain — the remaining step
+### 6. Point the domain
 
 DNS for `nolanautomotive.ie` is hosted at **Cloudflare** (nameservers `jack`/`lara.ns.cloudflare.com`),
 delegated there from smarthost.ie. Records are added in Cloudflare, not at the registrar.
@@ -94,9 +95,11 @@ delegated there from smarthost.ie. Records are added in Cloudflare, not at the r
 `dashboard.nolanautomotive.ie`. Direct path: `vercel.com/<team>/<project>/settings/domains`. Note it
 is *project* settings; team settings has no Domains entry.
 
-**b.** Vercel then displays the **CNAME target for this project**. Vercel now issues a
-project-specific target (e.g. `d1d4fc829fe7bc7c.vercel-dns-017.com`) rather than the old universal
-`cname.vercel-dns.com`, so copy the value it shows rather than assuming one.
+**b.** Vercel then displays the CNAME target to use. Copy the value it shows rather than assuming
+one: newer projects are sometimes given a project-specific target (e.g.
+`d1d4fc829fe7bc7c.vercel-dns-017.com`) instead of the universal `cname.vercel-dns.com`. Either is
+valid — **this deployment resolves through the universal `cname.vercel-dns.com`**, which is what is
+live in Cloudflare today.
 
 **c.** Cloudflare → `nolanautomotive.ie` → **DNS → Records → Add record**:
 
@@ -121,6 +124,12 @@ curl -I https://dashboard.nolanautomotive.ie/login
 
 Propagation is usually minutes, but can take up to 24–48 hours depending on the registrar's TTL. The
 apex `nolanautomotive.ie` is untouched and stays free for the main website.
+
+**Verified live on 15/08/2026:** CNAME resolves to `cname.vercel-dns.com`, Let's Encrypt certificate
+issued (valid to 13/11/2026 and renewed automatically), `/login` returns 200, logged-out `/jobs`
+redirects to `/login`, `POST /api/invoices/generate` returns 401, the session cookie is `Secure` +
+`HttpOnly`, and a photo uploads straight from this origin to R2 (so the CORS rule in step 2 covers the
+live domain).
 
 ### Deploying changes afterwards
 
@@ -334,11 +343,11 @@ server-side (120s to view, 900s to download, 300s to upload).
 
 ## DNS: pointing dashboard.nolanautomotive.ie
 
-See [step 6 of the hosting runbook](#6-point-the-domain--the-remaining-step).
+See [step 6 of the hosting runbook](#6-point-the-domain).
 
 In short: the domain is registered at smarthost.ie but its DNS is delegated to **Cloudflare**, so
-records are added in Cloudflare. Add the domain in Vercel first to obtain the project-specific CNAME
-target, then create that record with the proxy set to **DNS only**.
+records are added in Cloudflare. Add the domain in Vercel first to obtain the CNAME target it wants,
+then create that record with the proxy set to **DNS only**.
 
 ---
 
