@@ -244,6 +244,28 @@ export const invoices = pgTable(
   ],
 );
 
+/**
+ * Money actually received against an invoice. Deliberately its own row per
+ * payment, not a running total on `invoices` or `jobs`: real billing here
+ * involves a deposit now and a balance later, and each of those needs its
+ * own record. "Owed" (`invoices.grandTotal` minus the sum of these) and
+ * "paid" (`jobs.status`) are both derived from this table, not stored
+ * redundantly — a job only ever flips to `paid` once the running total
+ * reaches `grandTotal`.
+ */
+export const payments = pgTable(
+  'payments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    invoiceId: uuid('invoice_id')
+      .notNull()
+      .references(() => invoices.id, { onDelete: 'cascade' }),
+    amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+    paidAt: timestamp('paid_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('payments_invoice_id_idx').on(table.invoiceId)],
+);
+
 export const suppliers = pgTable('suppliers', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
@@ -283,8 +305,13 @@ export const jobAttachmentsRelations = relations(jobAttachments, ({ one }) => ({
   job: one(jobs, { fields: [jobAttachments.jobId], references: [jobs.id] }),
 }));
 
-export const invoicesRelations = relations(invoices, ({ one }) => ({
+export const invoicesRelations = relations(invoices, ({ one, many }) => ({
   job: one(jobs, { fields: [invoices.jobId], references: [jobs.id] }),
+  payments: many(payments),
+}));
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  invoice: one(invoices, { fields: [payments.invoiceId], references: [invoices.id] }),
 }));
 
 export const suppliersRelations = relations(suppliers, ({ many }) => ({
@@ -305,4 +332,5 @@ export type NewInvoice = typeof invoices.$inferInsert;
 export type JobAttachment = typeof jobAttachments.$inferSelect;
 export type Supplier = typeof suppliers.$inferSelect;
 export type SupplierBill = typeof supplierBills.$inferSelect;
+export type Payment = typeof payments.$inferSelect;
 export type Settings = typeof settings.$inferSelect;

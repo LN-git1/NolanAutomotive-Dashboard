@@ -4,6 +4,7 @@ import { requireApiSession } from '@/lib/auth/require-session';
 import { allocateNumber, formatInvoiceNumber } from '@/lib/counters';
 import { db } from '@/lib/db';
 import { invoices, jobs } from '@/lib/db/schema';
+import { getPaidCentsForInvoice } from '@/lib/db/queries/payments';
 import {
   InvoiceBuildError,
   buildInvoice,
@@ -12,7 +13,7 @@ import {
   pdfResponse,
 } from '@/lib/invoices/build';
 import { numericToEur } from '@/lib/format';
-import { toCents } from '@/lib/money';
+import { formatEur, toCents } from '@/lib/money';
 import { stampInvoice } from '@/lib/pdf/stamp';
 import { buildInvoicePath, uploadBytes } from '@/lib/storage/signedUrl';
 import { INVOICES_BUCKET } from '@/lib/storage/r2';
@@ -75,6 +76,20 @@ export async function POST(request: Request) {
 
     /* ------------------------------------------------ regenerate an existing */
     if (existing) {
+      // Regenerating overwrites this invoice's grandTotal in place with no
+      // recomputation against what has actually been paid — a job fully paid
+      // at €500, re-sent after the owner adds a missed part, would silently
+      // become €650 owed on €500 collected, with the €150 shortfall invisible
+      // everywhere (the job would still read `paid`, excluding it from
+      // Awaiting Payments too). No reconciliation flow exists yet, so
+      // regenerating an invoice with any recorded payment is refused outright.
+      const paidCents = await getPaidCentsForInvoice(existing.id);
+      if (paidCents > 0) {
+        throw new InvoiceBuildError(
+          `${existing.invoiceNumber} has ${formatEur(paidCents)} recorded against it and can't be regenerated.`,
+        );
+      }
+
       const built = await buildInvoice(jobId, {
         invoiceNumber: existing.invoiceNumber,
         // The invoice was issued when it was issued; correcting it does not move

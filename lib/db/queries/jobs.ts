@@ -3,7 +3,15 @@ import 'server-only';
 import { and, desc, eq, ilike, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 
 import { db } from '../index';
-import { invoices, jobs, type JobStatus } from '../schema';
+import { invoices, jobs, payments, type JobStatus } from '../schema';
+
+/**
+ * `grandTotal` minus whatever has been paid so far against that invoice,
+ * clamped at zero. A correlated scalar subquery rather than a JOIN + GROUP BY:
+ * `job`/`invoice` below select the full row objects, and grouping by every
+ * column of both would be far messier than one aggregate per row.
+ */
+const REMAINING_CENTS = sql<string>`GREATEST(${invoices.grandTotal} * 100 - COALESCE((SELECT SUM(${payments.amount}) * 100 FROM ${payments} WHERE ${payments.invoiceId} = ${invoices.id}), 0), 0)::bigint`;
 
 /**
  * All job reads go through here so the soft-delete filter is applied in exactly
@@ -164,15 +172,22 @@ export async function findJobByRegistration(registration: string) {
  * 'invoiced'`: the owner can move a job's status to anything at any time (the
  * status dropdown allows it unconditionally), and doing so must not make a
  * real, live invoice disappear from what is owed. What actually removes a job
- * from this list is being marked paid or the invoice being voided — both
- * explicit actions — not an incidental status change made for an unrelated
- * reason. Matches the same logic in `getOutstandingInvoiceTotalCents`.
+ * from this list is being marked (fully) paid or the invoice being voided —
+ * both explicit actions — not an incidental status change made for an
+ * unrelated reason. Matches the same logic in `getOutstandingInvoiceTotalCents`.
+ *
+ * `remainingCents` is the invoice's `grandTotal` minus whatever has already
+ * been paid against it — a job stays in this list, at a shrinking amount,
+ * through any number of partial payments, and only drops out once the
+ * running total reaches the full amount (which is also what flips `status`
+ * to `paid` — see `recordPayment`).
  */
 export async function listAwaitingPayment() {
   return db
     .select({
       job: jobs,
       invoice: invoices,
+      remainingCents: REMAINING_CENTS,
     })
     .from(jobs)
     .innerJoin(invoices, and(eq(invoices.jobId, jobs.id), isNull(invoices.voidedAt)))

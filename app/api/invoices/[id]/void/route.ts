@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { requireApiSession } from '@/lib/auth/require-session';
 import { db } from '@/lib/db';
 import { invoices, jobs } from '@/lib/db/schema';
+import { getPaidCentsForInvoice } from '@/lib/db/queries/payments';
+import { formatEur } from '@/lib/money';
 import { invoiceVoidSchema } from '@/lib/validation/invoice';
 
 export const runtime = 'nodejs';
@@ -44,6 +46,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (invoice.voidedAt) {
     return Response.json(
       { error: `Invoice ${invoice.invoiceNumber} is already void.` },
+      { status: 400 },
+    );
+  }
+
+  // A voided invoice drops out of every money query (voidedAt IS NULL is
+  // required everywhere), which would take any real payment already recorded
+  // against it with it — cash the business actually collected would vanish
+  // from every report. No refund/credit-note flow exists yet, so voiding an
+  // invoice with payments is refused outright rather than silently losing
+  // that money.
+  const paidCents = await getPaidCentsForInvoice(id);
+  if (paidCents > 0) {
+    return Response.json(
+      {
+        error: `${invoice.invoiceNumber} has ${formatEur(paidCents)} recorded against it and can't be voided.`,
+      },
       { status: 400 },
     );
   }

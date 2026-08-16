@@ -14,6 +14,7 @@ export interface ResetCounts {
   attachments: number;
   suppliers: number;
   supplierBills: number;
+  payments: number;
 }
 
 /**
@@ -31,7 +32,12 @@ export function FactoryReset({ counts }: { counts: ResetCounts }) {
   const [pending, startTransition] = useTransition();
 
   const total =
-    counts.jobs + counts.invoices + counts.attachments + counts.suppliers + counts.supplierBills;
+    counts.jobs +
+    counts.invoices +
+    counts.attachments +
+    counts.suppliers +
+    counts.supplierBills +
+    counts.payments;
   const isEmpty = total === 0;
   const phraseMatches = phrase.trim() === RESET_CONFIRMATION_PHRASE;
 
@@ -64,7 +70,8 @@ export function FactoryReset({ counts }: { counts: ResetCounts }) {
         {done ? (
           <Alert tone="ok">
             Dashboard reset. Removed {done.jobs} {done.jobs === 1 ? 'job' : 'jobs'},{' '}
-            {done.invoices} {done.invoices === 1 ? 'invoice' : 'invoices'}, {done.suppliers}{' '}
+            {done.invoices} {done.invoices === 1 ? 'invoice' : 'invoices'}, {done.payments}{' '}
+            {done.payments === 1 ? 'payment' : 'payments'}, {done.suppliers}{' '}
             {done.suppliers === 1 ? 'supplier' : 'suppliers'}, {done.supplierBills}{' '}
             {done.supplierBills === 1 ? 'bill' : 'bills'} and {done.filesRemoved}{' '}
             {done.filesRemoved === 1 ? 'file' : 'files'}. Numbering restarts at J-0001 and
@@ -97,6 +104,10 @@ export function FactoryReset({ counts }: { counts: ResetCounts }) {
               <span className="text-muted">Supplier bills</span>
               <span className="font-medium tabular">{counts.supplierBills}</span>
             </li>
+            <li className="flex justify-between gap-2">
+              <span className="text-muted">Payments recorded</span>
+              <span className="font-medium tabular">{counts.payments}</span>
+            </li>
           </ul>
         </div>
 
@@ -128,6 +139,7 @@ export function FactoryReset({ counts }: { counts: ResetCounts }) {
                 <ul className="mt-2 flex list-disc flex-col gap-1 pl-4">
                   <li>Every job, including customer names, addresses and phone numbers.</li>
                   <li>Every invoice and its stored PDF.</li>
+                  <li>Every payment recorded against an invoice.</li>
                   <li>Every supplier and every bill.</li>
                   <li>All uploaded photos and receipts.</li>
                   <li>

@@ -102,11 +102,6 @@ export async function changeJobStatus(jobId: string, status: string): Promise<Ac
   return { ok: true, jobId };
 }
 
-/** Marks a job paid. Used by Awaiting Payments. */
-export async function markJobPaid(jobId: string): Promise<ActionResult> {
-  return changeJobStatus(jobId, 'paid');
-}
-
 /**
  * Soft delete. The row is retained because it may be referenced by an issued
  * invoice, which must remain reconstructable for tax purposes.

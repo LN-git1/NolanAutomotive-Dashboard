@@ -4,8 +4,7 @@ import Link from 'next/link';
 import { MarkPaidButton } from '@/components/payments/mark-paid-button';
 import { Card, CardBody, Empty, Table, Td, Th } from '@/components/ui';
 import { listAwaitingPayment } from '@/lib/db/queries/jobs';
-import { formatDate, numericToEur } from '@/lib/format';
-import { toCents } from '@/lib/money';
+import { formatDate } from '@/lib/format';
 import { formatEur } from '@/lib/money';
 
 export const metadata: Metadata = { title: 'Awaiting payments' };
@@ -14,10 +13,11 @@ export const dynamic = 'force-dynamic';
 export default async function AwaitingPaymentsPage() {
   const rows = await listAwaitingPayment();
 
-  const totalCents = rows.reduce(
-    (sum, row) => sum + (row.invoice ? toCents(row.invoice.grandTotal) : 0),
-    0,
-  );
+  // Same field the row-level Total column renders — the header and the rows
+  // must never disagree about what "owed" means (they used to: the header
+  // summed grandTotal directly while a partial payment would only ever show
+  // in the row, silently diverging).
+  const totalCents = rows.reduce((sum, row) => sum + Number(row.remainingCents), 0);
 
   return (
     <div className="flex flex-col gap-4">
@@ -49,7 +49,7 @@ export default async function AwaitingPaymentsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ job, invoice }) => (
+              {rows.map(({ job, invoice, remainingCents }) => (
                 <tr key={job.id}>
                   <Td label="Job">
                     <Link
@@ -79,10 +79,14 @@ export default async function AwaitingPaymentsPage() {
                     {formatDate(invoice?.issueDate)}
                   </Td>
                   <Td label="Total" className="text-right tabular">
-                    {invoice ? numericToEur(invoice.grandTotal) : '—'}
+                    {formatEur(Number(remainingCents))}
                   </Td>
                   <Td label="Action" className="text-right">
-                    <MarkPaidButton jobId={job.id} jobNumber={job.jobNumber} />
+                    <MarkPaidButton
+                      invoiceId={invoice.id}
+                      jobNumber={job.jobNumber}
+                      remainingCents={Number(remainingCents)}
+                    />
                   </Td>
                 </tr>
               ))}

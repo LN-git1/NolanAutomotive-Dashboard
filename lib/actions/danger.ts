@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/lib/auth/require-session';
 import { db } from '@/lib/db';
-import { invoices, jobAttachments, jobs, supplierBills, suppliers } from '@/lib/db/schema';
+import { invoices, jobAttachments, jobs, payments, supplierBills, suppliers } from '@/lib/db/schema';
 import { removeObjects } from '@/lib/storage/signedUrl';
 import { ATTACHMENTS_BUCKET, INVOICES_BUCKET } from '@/lib/storage/r2';
 import { RESET_CONFIRMATION_PHRASE } from '@/lib/validation/danger';
@@ -38,6 +38,7 @@ export interface ResetResult {
     attachments: number;
     suppliers: number;
     supplierBills: number;
+    payments: number;
     filesRemoved: number;
   };
 }
@@ -66,9 +67,12 @@ export async function factoryReset(confirmation: string): Promise<ResetResult> {
        * Order matters. `invoices` references `jobs` without ON DELETE CASCADE
        * — that is deliberate, so an issued invoice can never be silently
        * orphaned by deleting its job — which means invoices must go first.
-       * Attachments and bills would cascade, but they are deleted explicitly
-       * so the reported counts are accurate.
+       * Attachments, bills, and payments would all cascade, but they are
+       * deleted explicitly so the reported counts are accurate — payments in
+       * particular MUST go before invoices, since it cascades FROM invoices
+       * and a plain cascade delete gives no row count to report.
        */
+      const deletedPayments = await tx.delete(payments).returning({ id: payments.id });
       const deletedInvoices = await tx.delete(invoices).returning({ id: invoices.id });
       const deletedAttachments = await tx.delete(jobAttachments).returning({ id: jobAttachments.id });
       const deletedJobs = await tx.delete(jobs).returning({ id: jobs.id });
@@ -87,6 +91,7 @@ export async function factoryReset(confirmation: string): Promise<ResetResult> {
         attachments: deletedAttachments.length,
         suppliers: deletedSuppliers.length,
         supplierBills: deletedBills.length,
+        payments: deletedPayments.length,
       };
     });
 
