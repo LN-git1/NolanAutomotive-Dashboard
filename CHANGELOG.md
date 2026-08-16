@@ -1,5 +1,81 @@
 # Changelog
 
+## 16/08/2026 @ 15:28:38 IST — "claude-opus-5"
+
+**Project completion: 99.28%**
+
+Basis: 138 of 139 discrete build requirements. Three were added and closed here — issuing on generate,
+a working mailto, and a working WhatsApp link. The open item remains the keep-alive cron check, due on
+or after 22/08/2026.
+
+### Goal
+
+Make sending an invoice fast and actually reach the customer. Three faults, one of them structural.
+
+### Fixed — mailto: had no recipient
+
+The link was `mailto:?subject=…&body=…`. **No `to` address at all**, so it opened a blank compose and
+the owner retyped the customer's email every time — even though the job already holds it. It now
+addresses `customerEmail`, with the subject and message pre-filled.
+
+### Fixed — the WhatsApp link had no number
+
+`https://wa.me/?text=…` with no number opens a contact picker rather than the customer's chat. The job
+holds `customerPhone`, and it was never used.
+
+Passing it straight through would not have worked either: `wa.me` needs a full international number with
+no `+`, no spaces and no leading zero, so the `087 430 3785` an Irish number is written as has to become
+`353874303785`. `lib/phone.ts` does that conversion, covering national, `+353`, `00353`, punctuated and
+already-international forms, and returning null for anything unusable so the link falls back to the
+picker rather than opening the wrong chat. Eight unit tests.
+
+### Fixed — on a phone, neither button did what it said
+
+The channel was only honoured in the *fallback* branch, reached when the browser could not share files.
+On a phone `canShareFiles` is true, so tapping **Email** or **WhatsApp** opened the generic share sheet
+and the choice was discarded. Both now always open their own platform.
+
+### Changed — the invoice is created when it is generated
+
+Previously: generate stamped a preview (~10s), then picking a channel allocated the number, **re-stamped
+the whole PDF**, uploaded it, and only then offered a second tap to actually send. Two long waits and
+two taps to send one invoice, which is what made the app feel slow.
+
+Now generating *is* creating. One stamp, one upload, one wait — and Email, WhatsApp and Share act
+instantly afterwards because there is nothing left to commit.
+
+The old split existed to keep the number sequence gap-free by not burning a number on an abandoned
+preview. **That property survives, and more simply:** every number now has a real invoice row behind it,
+so there are no gaps by construction. An invoice generated and then thought better of is voided — the
+mechanism that already existed for exactly that case.
+
+Issuing and sending are now separate events in the data too: `sent_via` and `sent_at` became nullable,
+because an invoice can legitimately exist before it has been sent, or never be sent at all. Delivery is
+recorded by `/api/invoices/[id]/sent`, fired without blocking so a slow network delays the *record*
+rather than the send. `createdAt` is when it was issued; `sentAt` is when the customer got it.
+
+Two consequences handled: the "recently invoiced" list and the CSV export now order by `createdAt`,
+since Postgres sorts NULLS FIRST on a DESC and unsent invoices would otherwise float to the top; and
+`/api/invoices/finalize` and `/api/invoices/[id]/regenerate` are deleted, their work folded into
+`generate`, which now issues or regenerates as appropriate. One route issues invoices.
+
+### Fixed — a dead control found while wiring it up
+
+After issuing, the primary button read **Update invoice** but was disabled by the same `locked` flag
+that disables the job picker. It is exactly when that button is useful — edit the job, come back,
+restamp under the same number — so it now stays enabled, blocked only mid-stamp or when regenerating
+would replace a real invoice with a blank one.
+
+### Files Touched
+
+- `lib/phone.ts`, `tests/phone.test.ts` (new) — `wa.me` number normalisation
+- `components/invoicer/send-bar.tsx` — one-tap send, real recipients, PDF downloaded alongside
+- `components/invoicer/invoicer.tsx` — issue-on-generate, delivery recording, copy corrected
+- `app/api/invoices/generate/route.ts` — issues or regenerates
+- `app/api/invoices/[id]/sent/route.ts` (new); `finalize` and `[id]/regenerate` deleted
+- `lib/db/schema.ts`, `drizzle/migrations/0004_tiny_sentinel.sql` — nullable send fields
+- `lib/db/queries/{jobs,overview}.ts`, `app/api/export/invoices/route.ts` — recipients, ordering
+
 ## 16/08/2026 @ 13:23:19 IST — "claude-opus-5"
 
 **Project completion: 99.26%**

@@ -1,6 +1,6 @@
 {
-  "id": "59169637-0948-49cf-a919-b1f167653a4d",
-  "prevId": "b5d0f6f9-1712-4763-ace3-0dbb26b3fb41",
+  "id": "36468103-4817-423a-9864-6f75e9e6d813",
+  "prevId": "59169637-0948-49cf-a919-b1f167653a4d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -163,14 +163,13 @@
           "type": "sent_via",
           "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "sent_at": {
           "name": "sent_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

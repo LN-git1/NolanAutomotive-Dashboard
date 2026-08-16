@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, buttonClass, Card, CardBody, CardHeader } from '@/components/ui';
 import { Skeleton } from '@/components/ui/skeleton';
 import { JobPicker, type InvoiceableJob } from '@/components/invoicer/job-picker';
-import { SendBar, type FinalizedInvoice, type SendChannel } from '@/components/invoicer/send-bar';
+import { SendBar, type IssuedInvoice, type SendChannel } from '@/components/invoicer/send-bar';
 import { calcInvoiceTotals, formatEur, formatHours } from '@/lib/money';
 
 /**
@@ -32,10 +32,8 @@ export function Invoicer({
 
   const [job, setJob] = useState<InvoiceableJob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [pendingChannel, setPendingChannel] = useState<SendChannel | null>(null);
-  const [finalized, setFinalized] = useState<FinalizedInvoice | null>(null);
+  const [issued, setIssued] = useState<IssuedInvoice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -75,9 +73,8 @@ export function Invoicer({
   function selectJob(next: InvoiceableJob | null) {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setJob(next);
-    setPreviewBlob(null);
     setPreviewUrl(null);
-    setFinalized(null);
+    setIssued(null);
     setError(null);
     setNotice(null);
   }
@@ -102,16 +99,31 @@ export function Invoicer({
       }
 
       const blob = await response.blob();
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      const invoiceNumber = response.headers.get('X-Invoice-Number') ?? '';
+      const invoiceId = response.headers.get('X-Invoice-Id') ?? '';
+      const reissued = response.headers.get('X-Invoice-Reissued') === '1';
 
-      setPreviewBlob(blob);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(URL.createObjectURL(blob));
+      setIssued({ blob, invoiceNumber, invoiceId });
+
       setNotice(
-        response.headers.get('X-Job-Already-Paid') === '1'
-          ? 'This job is already marked paid, and the customer has the original invoice. ' +
-              'Re-sending replaces their copy.'
+        reissued
+          ? `Invoice ${invoiceNumber} was updated in place — same number, and the stored copy has been replaced.`
           : null,
       );
+
+      // Committed even if the upload failed. Say so plainly rather than letting
+      // the owner find a broken link on the job later.
+      if (response.headers.get('X-Storage-Failed') === '1') {
+        setError(
+          `Invoice ${invoiceNumber} was created, but the PDF could not be saved to storage. ` +
+            `Send it now with the buttons below — the copy on the job page will be missing.`,
+        );
+      }
+
+      // The job is now Invoiced; refresh so the picker and lists agree.
+      router.refresh();
     } catch {
       setError('Could not reach the server. Check your connection and try again.');
     } finally {
@@ -120,70 +132,27 @@ export function Invoicer({
   }
 
   /**
-   * First tap of the two-step send. Commits the invoice (or re-stamps an
-   * existing one) and returns the authoritative PDF; the actual share happens on
-   * the next tap inside SendBar, which is a fresh user gesture — required by
-   * navigator.share.
+   * Record delivery. Deliberately fire-and-forget: the platform has already been
+   * opened by the time this resolves, and a slow network must never sit between
+   * the owner's tap and WhatsApp appearing.
    */
-  async function handleFinalize(channel: SendChannel) {
-    if (!job || !previewBlob) return;
+  function handleSent(channel: SendChannel) {
+    if (!issued) return;
 
-    if (isResend) {
-      const confirmed = window.confirm(
-        `Re-send invoice ${job.liveInvoiceNumber}?\n\n` +
-          `It keeps the same number and the stored copy is replaced with this version.`,
-      );
-      if (!confirmed) return;
-    }
-
-    setError(null);
-    setPendingChannel(channel);
-
-    const endpoint = isResend
-      ? `/api/invoices/${job.liveInvoiceId}/regenerate`
-      : '/api/invoices/finalize';
-
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(isResend ? { sentVia: channel } : { jobId: job.id, sentVia: channel }),
+    void fetch(`/api/invoices/${issued.invoiceId}/sent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sentVia: channel }),
+      keepalive: true,
+    })
+      .then(() => router.refresh())
+      .catch(() => {
+        // The invoice exists and the customer has it; failing to record HOW it
+        // was sent is not worth interrupting the owner over.
       });
-
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error ?? 'Could not create the invoice.');
-        return;
-      }
-
-      const blob = await response.blob();
-      const invoiceNumber = response.headers.get('X-Invoice-Number') ?? '';
-      const invoiceId = response.headers.get('X-Invoice-Id') ?? '';
-
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewBlob(blob);
-      setPreviewUrl(URL.createObjectURL(blob));
-      setFinalized({ blob, invoiceNumber, invoiceId, channel });
-
-      // The invoice is committed even if storing the PDF failed. Say so plainly
-      // rather than letting the owner discover a broken link on the job later.
-      if (response.headers.get('X-Storage-Failed') === '1') {
-        setError(
-          `Invoice ${invoiceNumber} was ${isResend ? 're-sent' : 'created'}, but the PDF could ` +
-            `not be saved to storage. Download it now with the button below — the copy on the ` +
-            `job page will be out of date.`,
-        );
-      }
-
-      router.refresh();
-    } catch {
-      setError('Could not reach the server. The invoice was not created.');
-    } finally {
-      setPendingChannel(null);
-    }
   }
 
-  const locked = finalized !== null;
+  const locked = issued !== null;
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[26rem_1fr]">
@@ -303,8 +272,14 @@ export function Invoicer({
         ) : null}
 
         <div className="flex flex-wrap gap-2">
-          <Button onClick={handleGenerate} disabled={!job || generating || locked}>
-            {generating ? 'Generating…' : previewBlob ? 'Regenerate invoice' : 'Generate invoice'}
+          {/*
+            Stays enabled after the invoice exists: that is exactly when "Update
+            invoice" is useful — edit the job, come back, restamp under the same
+            number. It is only blocked while a stamp is in flight, or when
+            regenerating would replace a real invoice with a blank one.
+          */}
+          <Button onClick={handleGenerate} disabled={!job || generating || wouldBlankInvoice}>
+            {generating ? 'Creating…' : issued ? 'Update invoice' : 'Create invoice'}
           </Button>
 
           {locked ? (
@@ -361,9 +336,9 @@ export function Invoicer({
         ) : !previewUrl ? (
           <Card>
             <div className="px-4 py-16 text-center text-sm text-muted">
-              Choose a job and select <strong>Generate invoice</strong> to preview the PDF here.
+              Choose a job and select <strong>Create invoice</strong>.
               <br />
-              Generating a preview does not create an invoice or use an invoice number.
+              The invoice is created straight away, so sending it afterwards is instant.
             </div>
           </Card>
         ) : (
@@ -389,7 +364,7 @@ export function Invoicer({
                 Open invoice preview
               </a>
               <p className="text-xs text-muted">
-                Check it before sending — sending creates the invoice and uses an invoice number.
+                Check it, then send it below. Creating it again after editing the job keeps the same number.
               </p>
             </div>
 
@@ -413,12 +388,20 @@ export function Invoicer({
               </div>
             </object>
 
-            <SendBar
-              disabled={!previewBlob || wouldBlankInvoice}
-              finalized={finalized}
-              onFinalize={handleFinalize}
-              pendingChannel={pendingChannel}
-            />
+            {/* Only once the invoice exists — which, now, is as soon as it is
+                generated. There is nothing left to commit. */}
+            {issued && job ? (
+              <SendBar
+                invoice={issued}
+                recipient={{
+                  customerName: job.customerName,
+                  customerEmail: job.customerEmail,
+                  customerPhone: job.customerPhone,
+                  vehicleRegistration: job.vehicleRegistration,
+                }}
+                onSent={handleSent}
+              />
+            ) : null}
           </Card>
         )}
       </div>

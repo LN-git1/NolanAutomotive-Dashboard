@@ -10,6 +10,8 @@ export interface InvoiceableJob {
   id: string;
   jobNumber: string;
   customerName: string;
+  customerEmail: string | null;
+  customerPhone: string | null;
   vehicleRegistration: string;
   status: string;
   labourLines: { description: string; hours: string }[];

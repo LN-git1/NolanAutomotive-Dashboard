@@ -100,6 +100,10 @@ export async function listInvoiceableJobs() {
       id: jobs.id,
       jobNumber: jobs.jobNumber,
       customerName: jobs.customerName,
+      // Carried so the send bar can address the email and the WhatsApp chat
+      // without a second round trip once the invoice is issued.
+      customerEmail: jobs.customerEmail,
+      customerPhone: jobs.customerPhone,
       vehicleRegistration: jobs.vehicleRegistration,
       status: jobs.status,
       labourLines: jobs.labourLines,

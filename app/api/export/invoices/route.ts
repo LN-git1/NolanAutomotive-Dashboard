@@ -32,7 +32,8 @@ export async function GET() {
     })
     .from(invoices)
     .innerJoin(jobs, eq(invoices.jobId, jobs.id))
-    .orderBy(desc(invoices.sentAt));
+    // Issued order. sentAt is nullable and would sort NULLS FIRST on DESC.
+    .orderBy(desc(invoices.createdAt));
 
   const csv = toCsv(rows, [
     { key: 'invoiceNumber', header: 'Invoice number' },

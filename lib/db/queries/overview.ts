@@ -63,7 +63,10 @@ export async function listRecentInvoices(limit = 10) {
     // A voided invoice is not a recent piece of business — showing it here would
     // read as money taken. It stays visible on its own job, marked VOID.
     .where(and(isNull(jobs.deletedAt), isNull(invoices.voidedAt)))
-    .orderBy(desc(invoices.sentAt))
+    // createdAt, not sentAt: sentAt is null until the invoice is actually
+    // sent, and Postgres sorts NULLS FIRST on DESC, which would float
+    // unsent invoices to the top of a list meaning "most recently issued".
+    .orderBy(desc(invoices.createdAt))
     .limit(limit);
 }
 

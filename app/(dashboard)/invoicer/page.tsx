@@ -15,8 +15,8 @@ export default async function InvoicerPage() {
       <div>
         <h1 className="text-lg font-semibold text-ink">Invoicer</h1>
         <p className="text-sm text-muted">
-          Generates the invoice onto the Nolan Automotive template. The details come from the job —
-          previewing is free, and an invoice number is only used when you send it.
+          Creates the invoice onto the Nolan Automotive template. The details come from the job, and
+          the invoice is created as soon as you make it — so emailing or WhatsApping it is instant.
         </p>
       </div>
 

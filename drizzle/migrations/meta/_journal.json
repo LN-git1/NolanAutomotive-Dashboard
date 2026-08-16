@@ -29,6 +29,13 @@
       "when": 1786875361880,
       "tag": "0003_backfill_job_invoice_content",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786890165025,
+      "tag": "0004_tiny_sentinel",
+      "breakpoints": true
     }
   ]
 }

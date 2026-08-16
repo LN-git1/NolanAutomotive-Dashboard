@@ -215,8 +215,18 @@ export const invoices = pgTable(
     otherComments: text('other_comments'),
 
     pdfStoragePath: text('pdf_storage_path').notNull(),
-    sentVia: sentViaEnum('sent_via').notNull(),
-    sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
+
+    /**
+     * Issued and sent are different events, so these are nullable.
+     *
+     * The invoice is created the moment it is generated — that is what makes
+     * sending instant instead of a second ten-second wait. Delivery happens
+     * afterwards, or not at all, so an invoice can legitimately exist with no
+     * channel recorded yet. `createdAt` is when it was issued; `sentAt` is when
+     * it actually went to the customer.
+     */
+    sentVia: sentViaEnum('sent_via'),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 
     /**
