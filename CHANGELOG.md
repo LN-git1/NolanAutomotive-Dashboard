@@ -1,5 +1,73 @@
 # Changelog
 
+## 16/08/2026 @ 13:23:19 IST — "claude-opus-5"
+
+**Project completion: 99.26%**
+
+Basis: 137 of 138 discrete build requirements. Three were added and closed by this entry — the
+attachment-opening fix, the invoice-link prefetch fix, and removing the Invoicer shortcut from the job
+screen. The one open item is still the keep-alive cron check, due on or after 22/08/2026.
+
+### Goal
+
+Fix attachments that could not be viewed, and confirm downloading works for every kind of file.
+
+### Fixed — View opened a popup the phone silently blocked
+
+**Root cause.** View and Download fetched a signed URL and *then* called `window.open()`. Because that
+runs after an `await`, it is no longer inside the click's own call stack, so browsers classify it as a
+programmatic popup. Desktop Chrome permits it — which is exactly why it passed every test I had — but
+iOS Safari does not, and inside the installed standalone PWA, which is how the owner actually uses this,
+View did nothing at all.
+
+**How it was found.** Both engines available here opened the file happily: Chrome rendered the image,
+and WebKit did too. Neither could reproduce it, because Playwright disables popup blocking in
+automation. Measuring `navigator.userActivation.isActive` at the moment of the call showed it `true`
+with a 344ms fetch — Chrome's activation window is five seconds, so it survives on a laptop and expires
+on the stricter rules the phone applies.
+
+What settled it was not the environment but the codebase: `/api/invoices/[id]/pdf` is a plain `<a href>`
+to a route that 307s to a signed URL, and **those links have always opened for the owner.** Same
+storage, same signing, same private bucket — the only difference was the mechanism.
+
+**The fix** is to stop opening files programmatically. `?redirect=1` makes the attachment route 307 like
+the invoice route already did, and View/Download are now ordinary links. No JavaScript runs, so there is
+no popup to block, on any browser or in standalone mode.
+
+### Fixed — the invoice number was firing a cross-origin prefetch
+
+Found while reproducing. The invoice number used `next/link`, which prefetches its target; that target
+307s to a signed R2 URL, so merely hovering a row fired a cross-origin prefetch that failed CORS and
+filled the console with errors. It is a file download, not a route — plain `<a>`.
+
+### Removed — the Invoicer shortcut on the job screen
+
+Invoicing starts from the Invoicer, reached from the sidebar or the phone's bottom bar, where a job is
+chosen and the invoice generated. One route in rather than two.
+
+### Verified live, across every file type
+
+Uploaded one of each and followed both links end to end, then removed the test files so the job was left
+as found.
+
+| File | View | Download |
+|---|---|---|
+| `image.jpg` (4MB) | 200, `image/jpeg`, inline | 200, `attachment; filename="image.jpg"` |
+| `photo.png` | 200, `image/png`, inline | 200, correct filename |
+| `receipt.pdf` | 200, `application/pdf`, inline | 200, correct filename |
+| `notes.txt` | 200, `text/plain`, inline | 200, correct filename |
+| `scan.dat` (unknown type) | 200, `application/octet-stream`, inline | 200, correct filename |
+
+Also confirmed: every View and Download is a real `<a href>` rather than a scripted button, no "Open
+Invoicer" remains on the job page, and hovering the invoice link no longer fires a prefetch.
+
+### Files Touched
+
+- `app/api/attachments/[id]/signed-url/route.ts` — `?redirect=1` returns a 307
+- `components/jobs/attachment-manager.tsx` — View/Download become plain links
+- `components/jobs/invoice-card.tsx` — `next/link` → `<a>` for the PDF
+- `app/(dashboard)/jobs/[jobId]/page.tsx` — Invoicer shortcut removed
+
 ## 16/08/2026 @ 13:10:10 IST — "claude-opus-5"
 
 **Project completion: 99.26%**
