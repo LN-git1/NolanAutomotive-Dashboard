@@ -1,5 +1,66 @@
 # Changelog
 
+## 16/08/2026 @ 16:46:11 IST — "claude-opus-5"
+
+**Project completion: 99.29%**
+
+Basis: 140 of 141 discrete build requirements. One was added and closed — analytics instrumented and
+verified reporting. The open item remains the keep-alive cron check, due on or after 22/08/2026.
+
+### Goal
+
+Confirm Vercel Web Analytics and Speed Insights are active and working, on desktop and mobile.
+
+### Found — enabled in Vercel, but the app never loaded them
+
+Both products were already switched on for the project: `/_vercel/insights/script.js` and
+`/_vercel/speed-insights/script.js` both served real JavaScript with the correct content type. But
+neither package was installed and neither component was mounted, so **both dashboards were collecting
+nothing.** Enabling a product in Vercel is only half of it; the app has to load it.
+
+### Fixed — and the first fix did not work
+
+Installing `@vercel/analytics` and `@vercel/speed-insights` and mounting the components was not enough.
+On the live site the symptoms were precise and contradictory: `window.va` existed with a pageview
+**sitting in the queue**, no script tag in the DOM, and no network request — while injecting the exact
+same URL by hand returned 200. So the page could load it and the component simply never tried.
+
+The cause is the **`/next` entry points**. They wrap the component in `<Suspense>` around a
+`useSearchParams` hook, and on this app's statically prerendered pages that boundary does not resolve on
+the client, so the component never mounts and `inject()` never runs. The generic **`/react`** entries
+inject directly and have no such wrapper. After the switch, `window.vaq` is drained rather than stuck —
+the signature of the real script taking over.
+
+### The trap that nearly produced a false negative
+
+Even with the scripts loading, no events were reported — and that looked like a second bug. It was not:
+**Vercel suppresses bot traffic, and Playwright's default user agent says `HeadlessChrome`.** Under a
+real Chrome UA the `POST /_vercel/insights/view` fires immediately; under the headless one it never does.
+
+Worth recording, because the naive conclusion from an automated check is "analytics is broken" when the
+product is in fact working exactly as designed.
+
+### Verified live, both viewports
+
+| | Desktop | Mobile (iPhone) |
+|---|---|---|
+| Web Analytics script | loaded | loaded |
+| `POST /_vercel/insights/view` | **reporting** | **reporting** |
+| Speed Insights script | loaded | loaded |
+| `POST /_vercel/speed-insights/vitals` | **reporting** | **reporting** |
+| Analytics cookies set | none | none |
+
+On `main`, deployed to **Production**, nothing unpushed.
+
+Cookieless matters here specifically: this dashboard holds customer names, addresses and phone numbers.
+Web Analytics records paths and referrers, not people, and sets no cookies — confirmed above rather than
+assumed. Speed Insights sends Core Web Vitals only.
+
+### Files Touched
+
+- `app/layout.tsx` — `<Analytics />` and `<SpeedInsights />` from the `/react` entries
+- `package.json` — `@vercel/analytics`, `@vercel/speed-insights`
+
 ## 16/08/2026 @ 16:23:39 IST — "claude-opus-5"
 
 **Project completion: 99.29%**
