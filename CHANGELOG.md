@@ -2,28 +2,34 @@
 
 ## 16/08/2026 @ 11:34:50 IST — "claude-opus-5"
 
-**Project completion: 98.31%**
+**Project completion: 99.15%**
 
-Basis: 116 of 118 discrete build requirements. Three new requirements were added by this entry (the
-regenerate safety guard, the legacy backfill, and void-aware Overview figures); two of them are done and
-verified, the third — re-verifying the backfilled invoice end to end — is counted open until the deploy
-that carries it is tested. Also still open: making the GitHub repository private, deferred by the user.
+Basis: 117 of 118 discrete build requirements. Three were added by this entry — the regenerate safety
+guard, the legacy backfill, and void-aware Overview figures — and all three are now verified on the live
+site (13 further checks, all passing). The single remaining item is making the GitHub repository private,
+deferred by the user.
 
 ### Goal
 
 Fix two defects the previous session's 68 checks structurally could not catch, because every one of them
 ran against a job created in the **new** shape. Nothing had touched the pre-existing data.
 
-### Fixed — a real invoice was one tap from being destroyed
+### Fixed — a pre-rework invoice could be silently blanked
 
-`NA-2026-0001` on J-0001 is a genuine **€2,136.99** invoice (four tyres, clutch, flywheel, full service).
-It was issued before the invoice content moved onto the job, so its content lived only in the invoice's
-own snapshot — and migration 0001 defaulted `jobs.labour_lines` and `jobs.parts` to empty.
+`NA-2026-0001` is a genuine **€2,136.99** invoice (four tyres, clutch, flywheel, full service). It was
+issued before the invoice content moved onto the job, so its content lived only in the invoice's own
+snapshot — and migration 0001 defaulted `jobs.labour_lines` and `jobs.parts` to empty.
 
-`listInvoiceableJobs` offers every non-deleted job, so J-0001 appeared in the Invoicer in **re-send
-mode**. Regenerating reads the *job*, would have found nothing, and would have overwritten the stored PDF
-at the same storage path with a blank €0.00 document — replacing the customer's only copy. The UI showed
-an alert but did not disable the send buttons, so nothing actually prevented it.
+Regenerating reads the *job*. For any such invoice it would find nothing and overwrite the stored PDF at
+the same storage path with a blank €0.00 document, replacing the customer's only copy. The UI showed an
+alert but did not disable the send buttons, so nothing actually prevented it.
+
+**Scope, stated accurately:** this specific invoice's job, J-0001, turned out to have been soft-deleted
+on 15/08, and `listInvoiceableJobs` filters deleted jobs — so NA-2026-0001 was not in fact reachable
+from the Invoicer. The exposure was to any pre-rework invoice on a *live* job, and to J-0001 itself the
+moment anyone restored it. The first draft of this entry claimed it was "one tap from destruction"; that
+overstated it, and the check that established the truth was reading `deleted_at`, not re-reading the
+code.
 
 Two fixes, because one is a floor and the other is the repair:
 
@@ -50,6 +56,16 @@ written from intent rather than from the code.
 
 Fixed in both places it mattered: the outstanding total, and `listRecentInvoices`, where a voided invoice
 would have read as recent business taken. It remains visible on its own job, marked VOID.
+
+### Verified on the live site
+
+- **Overview** reports €836.50 — the one live invoice. Not €1,673.00 (the void leaking back in) and not
+  €0.00 (the filter overreaching).
+- **The guard holds.** Emptying J-0003's work lines and parts and calling `/regenerate` directly returned
+  **400**, named the job and the €836.50 at risk, and left the stored invoice untouched. J-0003 was then
+  restored to its three work lines.
+- **The backfill is exact.** J-0001 carries four work lines and four parts, and €600 labour + €1,536.99
+  parts reconstructs €2,136.99 — the original grand total, to the cent.
 
 ### Files Touched
 
