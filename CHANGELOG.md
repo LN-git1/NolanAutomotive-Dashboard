@@ -1,5 +1,63 @@
 # Changelog
 
+## 16/08/2026 @ 11:29:01 IST — "claude-opus-5"
+
+**Project completion: 99.13%**
+
+Basis: 114 of 115 discrete build requirements. The twelve requirements added in the previous entry are
+now **verified end-to-end on the live site** — 68 checks across four passes, all passing — so they move
+from open to done. The single remaining item is making the GitHub repository private, which the user
+deferred deliberately and which needs an account action, not code.
+
+### Goal
+
+Prove the job-centred rework actually works against the live database and the real template, rather than
+against a local approximation of them.
+
+### Verified on https://dashboard.nolanautomotive.ie
+
+**No database reset at any point.** Test jobs and invoices accumulated instead, per the standing
+instruction — assertions are on *deltas* (counter before vs after) rather than on absolute emptiness,
+which is what makes testing on live data honest rather than destructive.
+
+- **Status** — the dropdown offers exactly active/completed/invoiced/paid; the two pre-existing jobs
+  survived the enum swap untouched.
+- **Registration prefill** — entering a known registration offered the previous customer and vehicle and
+  filled name, phone and colour correctly.
+- **The job owns the content** — a job created with three work lines, a rate, two parts, comments and
+  private notes reopened with every value intact and editable.
+- **Hours maths** — 5 + 2 + 3 auto-summed to 10, and at €60 gave a labour total of exactly €600.00.
+- **Custom total** — €450 overrode hours × rate, greyed out the rate box, and clearing it returned to
+  €600.00.
+- **Preview is free** — three previews left the invoice counter unmoved and created no row.
+- **Send** — exactly one number consumed, grand total €776.50 stored, labour lines snapshotted, job
+  flipped to Invoiced.
+- **Edit and re-send** — changing one line's hours from 5 to 6 and re-sending kept the **same invoice
+  number** and **same storage path**, updated the stored total to €836.50, moved `sent_at` forward, and
+  consumed **no** new number. The stored PDF was then downloaded and read back: it shows 836.50, the
+  original 776.50 is gone, and the hours column reads 6, 2, 3 — proof the file was genuinely replaced
+  rather than a stale copy left behind.
+- **Void** — marked void rather than deleted, dropped out of Awaiting payments, returned the job to
+  Completed, and consumed no number. Reissuing then produced **NA-2026-0003** while the voided
+  **NA-2026-0002** stayed on record, never reused.
+- **Paid-job edit** — warns before replacing a copy the customer already holds.
+- **Wording** — no "Services" anywhere in the UI, in the stored PDF, or in the CSV export, which now
+  reads "Total labour" and carries a "Voided at" column.
+- **Phone** — 390×844: collapsed form 1721px with no horizontal overflow, sections open on tap, work
+  lines add cleanly, and the hours box requests the numeric keypad.
+- **Regression** — all seven pages load and all three CSV exports download.
+
+### Fixed during the pass
+
+**A verification probe that proved nothing.** Checking whether the deploy had landed by asking whether
+`/api/invoices/<id>/void` existed returned 401 — but so did `/api/definitely-not-a-route`, because the
+auth gate answers 401 for every `/api/*` path, real or not. The probe would have reported success against
+the *old* deployment. Replaced with a check that logs in and reads the actual form.
+
+### Files Touched
+
+- `CHANGELOG.md` — this entry
+
 ## 16/08/2026 @ 11:17:19 IST — "claude-opus-5"
 
 **Project completion: 89.47%**
