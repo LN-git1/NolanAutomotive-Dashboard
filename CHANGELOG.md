@@ -1,5 +1,128 @@
 # Changelog
 
+## 17/08/2026 @ 00:39:20 IST — "claude-sonnet-5"
+
+**Project completion: 100.00%**
+
+Basis: 8 of 8 parts of the approved plan complete — schema + migration, the shared paid-amount
+helper, the void and regenerate guards, the remaining-balance queries, the `applyPayment`/
+`recordPayment` action, the UI, factory-reset accounting, and the new test suite — each verified
+against both local and live production data, including the two correctness gaps found during
+design review (not in the original request) that are now required, not optional, scope.
+
+### Goal
+
+"Mark as paid" on Awaiting Payments only supported settling a job in one click. Real billing here
+often involves a deposit now and the balance later — the user's own example: a client pays part
+upfront and the rest after 30 days. There was no way to record that, and no partial-amount concept
+anywhere in the schema.
+
+### Added — a `payments` table, and a derived "remaining balance" everywhere "owed" is computed
+
+New `payments` table (`drizzle/migrations/0005_damp_peter_quill.sql`): money against a specific
+invoice, not a running total on `jobs`/`invoices` — real billing here needs a history of separate
+payments (a deposit, then a balance), not just one figure. Linked to `invoices`, not `jobs`, since
+a payment is money against that invoice's `grandTotal` specifically.
+
+**Deliberately no `jobStatusEnum` change.** "Partially paid" isn't a new status value — it's
+derived, `SUM(payments.amount)` for an invoice vs. its `grandTotal`. A job flips to `status =
+'paid'` only once the running total reaches the full amount, in the same transaction as the
+payment that crosses that line. Every existing status-based query (Earnings, Overview's job-count
+tiles, the job status dropdown) needed zero changes, and this avoided the costly cast-to-text →
+remap → drop/recreate-type migration a real enum change would have required.
+
+`getOutstandingInvoiceTotalCents` and `listAwaitingPayment` now sum/report `grandTotal` minus
+whatever has already been paid, not the full invoice amount — a partial payment shrinks what both
+the Awaiting Payments header tile and its row-level Total column show, and (a real bug found while
+wiring this up, not present before) those two now read from the exact same field instead of being
+two independent computations that could silently disagree with each other.
+
+`recordPayment(invoiceId, { payInFull: true } | { amount })` is one action, two ways of arriving
+at an amount, not two code paths — critically, `payInFull` resolves the amount **on the server,
+inside the transaction, after locking**, never from a client-supplied figure (a second tab, or an
+invoice edited moments earlier, could otherwise send a stale "remaining balance"). Verified live:
+a job partially paid €30 of €120, then completed via "Paid in full," was charged exactly the
+remaining €90 — not the original €120 — confirmed directly in the database, not just the UI.
+Concurrent payments against the same invoice are serialised by locking the job row first
+(`SELECT ... FOR UPDATE`), matching the exact lock target `/api/invoices/generate` already uses
+for the adjacent "issue a new invoice" race — a real double-spend risk under Postgres's default
+READ COMMITTED, not a hypothetical one, confirmed during design review before writing the code.
+
+### Fixed — two correctness gaps a second review found, neither in the original request
+
+Regenerating an invoice (editing a job and re-sending) overwrote its `grandTotal` in place with no
+check against what had actually been paid — a fully-paid €500 invoice, re-sent after a missed part
+is added, would have silently become €650 owed on €500 collected, with the €150 shortfall invisible
+everywhere: not in Awaiting Payments (a `paid` job is excluded from that list by design), not
+anywhere else. Voiding an invoice removed it from every money query, so a voided invoice's
+payments — real cash already collected — would have vanished from every report too, while the job
+was freed to be re-invoiced at full price with no record a deposit existed. Both routes now refuse
+the mutation when the invoice has any payment recorded, naming the amount — verified live on both
+local and production, exact wording confirmed (e.g. "NA-2026-0013 has €60.00 recorded against it
+and can't be voided"). No refund/credit-note flow exists yet, so this is a stated MVP boundary, not
+a silent gap to be discovered later.
+
+### Changed — Mark as paid, no modal
+
+Clicking "Mark as paid" now reveals, inline, "Paid in full — €X.XX" and "Partial payment" (which
+reveals an amount field matching this app's existing money-input convention, plus a Save button) —
+an armed reveal matching Settings' factory-reset pattern exactly, not a dialog/modal.
+`components/ui/index.tsx` has no `'use client'` directive by design (it keeps the whole dashboard
+renderable as Server Components); a `<dialog>`-based Modal added there would have forced every
+component in that shared barrel — `Card`, `Table`, `Badge`, all of them — to become client-side at
+every import site app-wide. There is also zero precedent anywhere in this app for an overlay modal.
+
+### Also fixed — a real test-suite bug found while verifying this
+
+Adding `tests/payments.test.ts` made an *existing*, unrelated test (`awaiting-payment.test.ts`'s
+"still counts the job after its status moves away from invoiced") start failing consistently — not
+flakiness, reproduced 4/4 times. Root cause: several `TEST_DATABASE_URL`-gated tests share one real
+Postgres database and compare a global aggregate before and after a mutation; under Vitest's
+default cross-file parallelism, one file's insert/delete can land inside another file's snapshot
+window. Fixed at the root (`vitest.config.mts`: `fileParallelism: false`) rather than patching each
+individual assertion — a suite this size costs a fraction of a second more to run serially, and it
+removes the entire class of race for every current and future test rather than requiring every
+future DB-test author to remember to avoid a "before vs after" pattern.
+
+### Files Touched
+
+`lib/db/schema.ts` + `drizzle/migrations/0005_damp_peter_quill.sql`, `lib/db/queries/payments.ts`
+(new — `getPaidCentsForInvoice`, `applyPayment`), `lib/actions/payments.ts` (new — thin
+session+validation wrapper), `lib/validation/payments.ts` (new), `app/api/invoices/[id]/void/route.ts`
++ `app/api/invoices/generate/route.ts` (guards), `lib/db/queries/{jobs,overview}.ts`,
+`app/(dashboard)/awaiting-payments/page.tsx`, `components/payments/mark-paid-button.tsx`,
+`lib/actions/{jobs,danger}.ts` + `components/settings/factory-reset.tsx` (payments count in
+factory reset), `tests/payments.test.ts` (new), `vitest.config.mts`
+
+## 17/08/2026 @ 00:12:00 IST — "claude-sonnet-5"
+
+**Project completion: 100.00%**
+
+Basis: 3 of 3 date-basis SQL locations in `lib/db/queries/earnings.ts` switched from
+`invoices.issueDate` to `COALESCE(jobs.dueDate, invoices.issueDate)`, verified by 7 of 7 passing
+tests in `tests/earnings.test.ts` (5 existing + 2 new covering the switch and its fallback).
+Scoped to this specific fix, reported directly by the user against yesterday's Earnings feature.
+
+### Goal
+
+Two real test jobs due in June and July, invoiced together today, both showed up entirely in
+August's earnings — the month the paperwork happened to be generated, not the month the work was
+actually due.
+
+### Fixed
+
+Earnings grouped and filtered by `invoices.issueDate` everywhere a date basis was used (the
+monthly rollup, the 30-day trailing window, and the per-month invoice detail). Switched all three
+to `COALESCE(jobs.dueDate, invoices.issueDate)` — due date first, since that's when the work
+itself happened; falling back to issue date only for a job that never had a due date set, so
+nothing is silently dropped from the breakdown. New test confirms a job due in one month but
+issued in another lands in the due month; a second confirms the fallback still works when
+`dueDate` is null.
+
+### Files Touched
+
+`lib/db/queries/earnings.ts`, `tests/earnings.test.ts`
+
 ## 16/08/2026 @ 23:20:57 IST — "claude-sonnet-5"
 
 **Project completion: 100.00%**
