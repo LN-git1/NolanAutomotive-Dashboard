@@ -1,5 +1,48 @@
 # Changelog
 
+## 16/08/2026 @ 11:59:37 IST — "claude-opus-5"
+
+**Project completion: 99.15%**
+
+Basis: 117 of 118 discrete build requirements — unchanged, because this closes the last open one
+(repository visibility) while adding one new requirement (the UI mirroring the regenerate guard). The
+remaining item is confirming the daily keep-alive cron has run, due on or after 22/08/2026.
+
+### Goal
+
+Make the repository private without breaking deployment, and prove that rather than assume it.
+
+### Changed — the repository is private
+
+Now private under the client's `LN-git1` account. Checked before recommending it, because a wrong answer
+here takes the site's deploy pipeline down:
+
+- The repo is **user-owned, not an organisation**, so Vercel's Hobby plan still deploys from it.
+- Vercel's GitHub App holds per-repository access, which a visibility change does not revoke.
+- There is no `.github/workflows` directory, so no Actions minutes start being billed.
+- Nothing in the codebase depends on public raw GitHub URLs.
+
+Worth recording for the next person: **a collaborator cannot do this.** On a user-owned repository
+GitHub grants collaborators write access only — the granular read/triage/write/maintain/admin roles exist
+solely on organisation repositories — and visibility changes are restricted to the owner. The developer's
+personal account is a collaborator with `push: true, admin: false`, and the API answers a visibility
+PATCH with 404 rather than 403, which reads like a missing repository rather than a permissions wall.
+
+### Added — the Invoicer now mirrors the regenerate guard
+
+The server refuses to re-send an invoice from a job with no work lines or parts, because doing so would
+overwrite the customer's copy with a blank. The Invoicer still offered the send buttons in that state, so
+the only way to discover the rule was to tap send and get a 400 back.
+
+The send bar is now disabled in exactly that case, with an alert naming the invoice and offering the two
+real options: put the work back on the job, or void the invoice if it was issued in error. The server
+check stays — it is the actual boundary; this is just the UI telling the truth about it.
+
+### Files Touched
+
+- `components/invoicer/invoicer.tsx` — `wouldBlankInvoice` guard on the send bar and its alert
+- `CHANGELOG.md`
+
 ## 16/08/2026 @ 11:34:50 IST — "claude-opus-5"
 
 **Project completion: 99.15%**

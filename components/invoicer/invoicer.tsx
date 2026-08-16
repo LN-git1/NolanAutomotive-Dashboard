@@ -63,6 +63,14 @@ export function Invoicer({
   const hasContent =
     (job?.labourLines.length ?? 0) > 0 || (job?.parts.length ?? 0) > 0;
 
+  /**
+   * Re-sending overwrites the stored PDF in place, so an empty job would replace
+   * a real invoice with a blank one. The server refuses this outright; blocking
+   * it here too means the owner sees a disabled button and a reason rather than
+   * discovering the rule by way of an error after tapping send.
+   */
+  const wouldBlankInvoice = isResend && !hasContent;
+
   function selectJob(next: InvoiceableJob | null) {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setJob(next);
@@ -280,7 +288,13 @@ export function Invoicer({
         {error ? <Alert>{error}</Alert> : null}
         {notice && !error ? <Alert>{notice}</Alert> : null}
 
-        {isResend && !locked ? (
+        {wouldBlankInvoice && !locked ? (
+          <Alert>
+            {job?.liveInvoiceNumber} cannot be re-sent while this job has no work lines or parts —
+            doing so would replace the customer&apos;s copy with a blank invoice. Add the work back
+            on the job, or void {job?.liveInvoiceNumber} if it was issued in error.
+          </Alert>
+        ) : isResend && !locked ? (
           <Alert>
             This job already has invoice {job?.liveInvoiceNumber}. Sending again keeps that number
             and replaces the stored PDF.
@@ -355,7 +369,7 @@ export function Invoicer({
             </object>
 
             <SendBar
-              disabled={!previewBlob}
+              disabled={!previewBlob || wouldBlankInvoice}
               finalized={finalized}
               onFinalize={handleFinalize}
               pendingChannel={pendingChannel}
