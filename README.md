@@ -166,6 +166,9 @@ Never run `pnpm build` locally — see the warning under [Quick start](#quick-st
 - [Testing](#testing)
 - [Project structure](#project-structure)
 
+Work considered and deliberately deferred lives in **[ROADMAP.md](ROADMAP.md)** — including the
+arrival-date / due-back-to-customer change, which is fully designed but not built.
+
 ---
 
 ## Stack

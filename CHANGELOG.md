@@ -1,5 +1,50 @@
 # Changelog
 
+## 16/08/2026 @ 13:10:10 IST — "claude-opus-5"
+
+**Project completion: 99.26%**
+
+Basis: 134 of 135 discrete build requirements. One was added and closed by this entry — a written home
+for deferred work. Nothing was implemented: the arrival/due-back change was designed, then parked at the
+user's direction because the garage does not need it to run today. Deferred work is not counted as
+outstanding build requirements; it is recorded in `ROADMAP.md`. The one genuinely open item remains the
+keep-alive cron check, due on or after 22/08/2026.
+
+### Goal
+
+Stop losing decisions. Give considered-but-deferred work a home in the repository rather than in a
+planning file on one machine.
+
+### Added — `ROADMAP.md`
+
+Four items, each raised, thought through, and deliberately not built:
+
+1. **Arrival date and due-back-to-customer date** — designed in full, including the four decisions that
+   fix the arithmetic (8-hour days hard-coded, weekends skipped, first day counts, Schedule spans every
+   working day), the worked examples, and the suggested shape. Anyone picking it up starts from a
+   settled design rather than the same four questions.
+2. Job value on the jobs list.
+3. A "Ready to invoice" tile on the Overview.
+4. Private repository, with the two routes to it and why neither is urgent.
+
+Plus the recurring cron check, which is a calendar item rather than a feature.
+
+### Noted — the label is wrong, the code is not
+
+The job form asks for a **"Due date"**, but that date is the day the car **arrives**. The code has always
+known this: `lib/db/queries/schedule.ts` opens with *"A job's `dueDate` is the day it is booked in for"*.
+So the eventual fix is a relabel plus a derived date — not a data migration.
+
+Recorded now because it is the kind of thing that reads as a bug six months from now, and because the
+Schedule's "free weekdays" figure is quietly optimistic until the spanning change lands: it marks only
+arrival days, so a week holding one long job currently looks empty.
+
+### Files Touched
+
+- `ROADMAP.md` (new)
+- `README.md` — links to it from Contents
+- `CHANGELOG.md`
+
 ## 16/08/2026 @ 12:51:48 IST — "claude-opus-5"
 
 **Project completion: 99.25%**
