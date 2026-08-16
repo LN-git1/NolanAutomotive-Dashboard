@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Alert, Button, buttonClass, Card, CardBody, CardHeader } from '@/components/ui';
+import { Skeleton } from '@/components/ui/skeleton';
 import { JobPicker, type InvoiceableJob } from '@/components/invoicer/job-picker';
 import { SendBar, type FinalizedInvoice, type SendChannel } from '@/components/invoicer/send-bar';
 import { calcInvoiceTotals, formatEur, formatHours } from '@/lib/money';
@@ -313,7 +314,51 @@ export function Invoicer({
           ) : null}
         </div>
 
-        {!previewUrl ? (
+        {generating && !previewUrl ? (
+          /*
+           * Stamping takes ten seconds or more on a cold function — long enough
+           * that a dimmed button alone reads as nothing happening. This shows
+           * the shape of the document being built, at the same height as the
+           * real preview, so the pane does not jump when it arrives.
+           */
+          <Card className="overflow-hidden">
+            <div className="flex flex-col gap-3 p-4" aria-hidden>
+              <Skeleton className="h-4 w-48" />
+              <div className="flex flex-col gap-2 rounded-md border border-line p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <Skeleton className="h-6 w-40" />
+                  <Skeleton className="h-6 w-24" />
+                </div>
+                <Skeleton className="h-3 w-56 max-w-full" />
+                <div className="mt-4 grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-2">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-3.5 w-full" />
+                    ))}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-3.5 w-full" />
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-6 flex flex-col gap-2">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Skeleton key={i} className="h-4 w-full" />
+                  ))}
+                </div>
+                <div className="mt-4 flex flex-col items-end gap-2">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-5 w-48" />
+                </div>
+              </div>
+            </div>
+            <p role="status" aria-live="polite" className="px-4 pb-4 text-center text-sm text-muted">
+              Building the invoice PDF…
+            </p>
+          </Card>
+        ) : !previewUrl ? (
           <Card>
             <div className="px-4 py-16 text-center text-sm text-muted">
               Choose a job and select <strong>Generate invoice</strong> to preview the PDF here.

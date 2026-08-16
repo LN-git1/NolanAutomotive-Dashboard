@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { Alert, Button, Empty } from '@/components/ui';
+import { Skeleton } from '@/components/ui/skeleton';
 import { deleteAttachment, recordAttachment } from '@/lib/actions/jobs';
 import type { JobAttachment } from '@/lib/db/schema';
 
@@ -35,6 +36,13 @@ export function AttachmentManager({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  /**
+   * Files still in flight, newest first. Held by name so each one can be shown
+   * as its own placeholder row — a photo taken on a phone can take a while over
+   * a workshop connection, and "Uploading…" on a button gives no sense of how
+   * many are left or that anything is actually happening.
+   */
+  const [inFlight, setInFlight] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
 
   async function handleFiles(files: FileList | null) {
@@ -42,6 +50,7 @@ export function AttachmentManager({
 
     setError(null);
     setUploading(true);
+    setInFlight(Array.from(files).map((file) => file.name));
 
     try {
       for (const file of Array.from(files)) {
@@ -84,6 +93,10 @@ export function AttachmentManager({
         });
 
         if (!recorded.ok) throw new Error(recorded.error ?? 'Could not save the attachment.');
+
+        // Drop this file's placeholder as soon as it lands, so uploading five
+        // photos visibly counts down rather than clearing all at once.
+        setInFlight((names) => names.filter((name) => name !== file.name));
       }
 
       router.refresh();
@@ -91,6 +104,7 @@ export function AttachmentManager({
       setError(uploadError instanceof Error ? uploadError.message : 'Upload failed.');
     } finally {
       setUploading(false);
+      setInFlight([]);
     }
   }
 
@@ -141,7 +155,26 @@ export function AttachmentManager({
         </label>
       </div>
 
-      {attachments.length === 0 ? (
+      {/*
+        In-flight uploads sit above the saved list as real rows carrying the
+        file's own name, so the owner can see exactly which photo is still
+        going up rather than a generic spinner.
+      */}
+      {inFlight.length > 0 ? (
+        <ul className="flex flex-col divide-y divide-line border-b border-line">
+          {inFlight.map((name) => (
+            <li key={name} className="flex items-center justify-between gap-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-muted">{name}</p>
+                <p className="text-xs text-muted">Uploading…</p>
+              </div>
+              <Skeleton className="h-8 w-24 shrink-0 rounded-md" />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {attachments.length === 0 && inFlight.length === 0 ? (
         <Empty>No attachments yet.</Empty>
       ) : (
         <ul className="flex flex-col divide-y divide-line">

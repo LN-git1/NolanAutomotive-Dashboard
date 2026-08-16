@@ -1,5 +1,82 @@
 # Changelog
 
+## 16/08/2026 @ 12:35:36 IST — "claude-opus-5"
+
+**Project completion: 89.39%**
+
+Basis: 118 of 132 discrete build requirements. Fourteen were added by this entry — the skeleton
+primitive, the shared blocks, ten route-level loading states, the invoice-generation placeholder and the
+upload placeholders. All are written, typechecked and linting clean, but **none is counted done until it
+has been looked at on a real screen**: a loading placeholder that does not match its content causes the
+exact layout shift it exists to prevent, and that is a visual defect no test catches.
+
+### Goal
+
+Give every screen a loading state, so the app stops showing blank space while it waits on the database.
+
+### Added — skeleton loaders across all ten routes
+
+Every data-backed route gets a `loading.tsx`: Overview, Jobs, a job, a new job, Schedule, Invoicer,
+Awaiting payments, Suppliers, a supplier, and Settings. In the App Router these stream instantly while
+the page's own data is still being fetched, so the placeholder is in the first byte of HTML — no hook,
+no effect, no hydration.
+
+**The governing rule is that a skeleton must occupy the same space as the content it replaces.** A
+placeholder of the wrong height causes the shift it was meant to prevent: the page settles, and the
+owner's thumb — already moving — lands on the wrong row. So the blocks are built from the same markup as
+their real counterparts. `SkeletonTable` carries the same `min-w-[36rem]`, the same `px-3 py-2` and the
+same bottom borders as `Table`/`Th`/`Td`; `SkeletonCardHeader` matches `CardHeader`'s border and
+padding exactly; the grid classes in each `loading.tsx` are copied verbatim from its `page.tsx`.
+
+Two places where matching the *state* mattered as much as the size:
+
+- **The job forms** render their sections collapsed or expanded exactly as the real form does — only
+  Registration, Customer and Vehicle are open on a new job. Showing every section expanded would make
+  the page jump several hundred pixels upward on arrival.
+- **The Schedule** renders a 7×6 month grid from `md` up and an agenda list below it, mirroring the
+  page's own breakpoint, so a phone never draws a calendar skeleton for a calendar it is not about to
+  show.
+
+### Added — placeholders for the two real client-side waits
+
+- **Generating an invoice** takes ten seconds or more on a cold function. A dimmed button reads as
+  nothing happening, so the preview pane now shows the shape of the document being assembled, at the
+  height of the real preview.
+- **Uploading photos** shows one row per file, carrying that file's own name, and each row disappears as
+  its upload lands — so sending five photos visibly counts down instead of sitting behind a generic
+  "Uploading…".
+
+### Design notes
+
+A **travelling sheen**, not `animate-pulse`. A pulse fades whole blocks in and out; twenty of them on one
+page reads as flicker. A sheen moving one way reads as "loading, left to right" and stays calm. It
+animates `transform` only — a `background-position` animation repaints every frame, and there can be
+dozens of these at once on a mid-range Android.
+
+`prefers-reduced-motion: reduce` stops the movement while keeping the placeholder, because travelling
+motion is genuinely unpleasant with a vestibular disorder and a loading state is not worth that.
+
+Skeletons get their **own colour token** rather than reusing `--line`: a placeholder needs to read as
+"content pending" rather than as a border, and the two need different contrast in dark mode. Defined for
+light, for `prefers-color-scheme: dark`, **and** for the explicit `[data-theme="dark"]` override — miss
+the third and skeletons glow white for anyone who picked dark manually.
+
+The shapes are `aria-hidden`, with one polite live region per screen, so a screen reader hears
+"Loading jobs" once instead of forty empty boxes.
+
+**Deliberately not applied:** the `high-end-visual-design` skill's luxury motion — cinematic reveals,
+`py-40` rhythm, glass and blur. Its own guidance excludes constrained dashboards, and it is right: this
+is a tool a mechanic uses on a phone with oily hands. Its performance and CLS rules were applied in
+full; its aesthetics were not.
+
+### Files Touched
+
+- `components/ui/skeleton.tsx` (new) — the primitive and every shared block
+- `app/globals.css` — skeleton tokens for all three theme paths, the sheen keyframes, reduced-motion
+- `app/(dashboard)/**/loading.tsx` (10 new files)
+- `components/invoicer/invoicer.tsx` — the PDF-generation placeholder
+- `components/jobs/attachment-manager.tsx` — per-file upload rows
+
 ## 16/08/2026 @ 12:22:05 IST — "claude-opus-5"
 
 **Project completion: 100.00%**

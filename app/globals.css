@@ -31,6 +31,8 @@
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-info-soft: var(--info-soft);
+  --color-skeleton: var(--skeleton);
+  --color-skeleton-sheen: var(--skeleton-sheen);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -43,6 +45,11 @@
   --ink: #14181f;
   --muted: #5b6472;
   --line: #dfe3e9;
+  /* Skeleton fill. Its own token rather than reusing --line, because a
+     placeholder needs to read as "content pending" rather than as a border,
+     and the two need different contrast in dark mode. */
+  --skeleton: #e6e9ee;
+  --skeleton-sheen: #f2f4f7;
 
   --brand: #3f7fb3;
   --brand-hover: #33668f;
@@ -72,6 +79,8 @@
     --ink: #e8ecf1;
     --muted: #98a2b3;
     --line: #2a3039;
+    --skeleton: #232932;
+    --skeleton-sheen: #2d343f;
 
     --brand: #3d7fb5;
     --brand-hover: #4b91cb;
@@ -96,6 +105,8 @@
   --ink: #e8ecf1;
   --muted: #98a2b3;
   --line: #2a3039;
+  --skeleton: #232932;
+  --skeleton-sheen: #2d343f;
 
   --brand: #3d7fb5;
   --brand-hover: #4b91cb;
@@ -158,6 +169,59 @@ body {
 /* Momentum scrolling for the horizontally scrollable tables. */
 .overflow-x-auto {
   -webkit-overflow-scrolling: touch;
+}
+
+/**
+ * Skeleton shimmer.
+ *
+ * A travelling sheen rather than `animate-pulse`: a pulse fades the whole block
+ * in and out, which on a page of twenty placeholders reads as flicker. A sheen
+ * moving in one direction reads as "loading, left to right" and stays calm.
+ *
+ * Animates `transform` only — a `background-position` animation repaints the
+ * element every frame, and there can be dozens of these on screen at once on a
+ * mid-range Android.
+ */
+@keyframes skeleton-sheen {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--skeleton);
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--skeleton-sheen) 50%,
+    transparent 100%
+  );
+  animation: skeleton-sheen 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/**
+ * Vestibular disorders make travelling motion genuinely unpleasant, and a
+ * loading state is not worth that. The placeholder still shows — only the
+ * movement stops, so the "content pending" meaning survives.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+    opacity: 0.4;
+    transform: none;
+  }
 }
 
 /* Only ever used to hide the native file input behind a styled label. */
