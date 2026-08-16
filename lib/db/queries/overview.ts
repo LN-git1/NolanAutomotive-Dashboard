@@ -12,7 +12,13 @@ import { invoices, jobAttachments, jobs, supplierBills, suppliers } from '../sch
  * JavaScript float arithmetic on the way to the screen.
  */
 
-/** Sum of grand totals for invoices whose job is still awaiting payment. */
+/**
+ * Sum of grand totals for invoices whose job is still awaiting payment.
+ *
+ * Voided invoices are excluded: a voided invoice is not money anyone owes. The
+ * row is kept so the number stays consumed and the sequence has no gaps, which
+ * is exactly why it has to be filtered out here rather than deleted.
+ */
 export async function getOutstandingInvoiceTotalCents(): Promise<number> {
   const rows = await db
     .select({
@@ -20,7 +26,9 @@ export async function getOutstandingInvoiceTotalCents(): Promise<number> {
     })
     .from(invoices)
     .innerJoin(jobs, eq(invoices.jobId, jobs.id))
-    .where(and(eq(jobs.status, 'invoiced'), isNull(jobs.deletedAt)));
+    .where(
+      and(eq(jobs.status, 'invoiced'), isNull(jobs.deletedAt), isNull(invoices.voidedAt)),
+    );
 
   return Number(rows[0]?.total ?? 0);
 }
@@ -52,7 +60,9 @@ export async function listRecentInvoices(limit = 10) {
     })
     .from(invoices)
     .innerJoin(jobs, eq(invoices.jobId, jobs.id))
-    .where(isNull(jobs.deletedAt))
+    // A voided invoice is not a recent piece of business — showing it here would
+    // read as money taken. It stays visible on its own job, marked VOID.
+    .where(and(isNull(jobs.deletedAt), isNull(invoices.voidedAt)))
     .orderBy(desc(invoices.sentAt))
     .limit(limit);
 }

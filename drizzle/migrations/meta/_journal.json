@@ -22,6 +22,13 @@
       "when": 1786875360880,
       "tag": "0002_flowery_ser_duncan",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786875361880,
+      "tag": "0003_backfill_job_invoice_content",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,8 @@ import {
   invoiceSnapshot,
   pdfResponse,
 } from '@/lib/invoices/build';
+import { numericToEur } from '@/lib/format';
+import { toCents } from '@/lib/money';
 import { stampInvoice } from '@/lib/pdf/stamp';
 import { uploadBytes } from '@/lib/storage/signedUrl';
 import { INVOICES_BUCKET } from '@/lib/storage/r2';
@@ -66,6 +68,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       // Keep the original issue date rather than stamping today's.
       issueDate: new Date(`${invoice.issueDate}T00:00:00`),
     });
+
+    /**
+     * Never replace a real invoice with an empty one.
+     *
+     * Regenerating overwrites the stored PDF in place, so if the job has been
+     * emptied — or was created before the content moved onto the job and has
+     * never been filled in — this would silently destroy the only copy of a
+     * document the customer already holds, and rewrite its total to zero.
+     *
+     * A genuinely zero invoice regenerated from a zero invoice is still allowed;
+     * it is the transition from "has value" to "has none" that is refused.
+     */
+    if (built.totals.grandTotalCents === 0 && toCents(invoice.grandTotal) !== 0) {
+      throw new InvoiceBuildError(
+        `Job ${built.job.jobNumber} has no work lines or parts on it, so re-sending would replace ` +
+          `invoice ${invoice.invoiceNumber} (${numericToEur(invoice.grandTotal)}) with a blank one. ` +
+          `Add the work to the job first, or void this invoice if it was issued in error.`,
+      );
+    }
 
     const bytes = await stampInvoice(built.stampInput);
 

@@ -1,5 +1,63 @@
 # Changelog
 
+## 16/08/2026 @ 11:34:50 IST — "claude-opus-5"
+
+**Project completion: 98.31%**
+
+Basis: 116 of 118 discrete build requirements. Three new requirements were added by this entry (the
+regenerate safety guard, the legacy backfill, and void-aware Overview figures); two of them are done and
+verified, the third — re-verifying the backfilled invoice end to end — is counted open until the deploy
+that carries it is tested. Also still open: making the GitHub repository private, deferred by the user.
+
+### Goal
+
+Fix two defects the previous session's 68 checks structurally could not catch, because every one of them
+ran against a job created in the **new** shape. Nothing had touched the pre-existing data.
+
+### Fixed — a real invoice was one tap from being destroyed
+
+`NA-2026-0001` on J-0001 is a genuine **€2,136.99** invoice (four tyres, clutch, flywheel, full service).
+It was issued before the invoice content moved onto the job, so its content lived only in the invoice's
+own snapshot — and migration 0001 defaulted `jobs.labour_lines` and `jobs.parts` to empty.
+
+`listInvoiceableJobs` offers every non-deleted job, so J-0001 appeared in the Invoicer in **re-send
+mode**. Regenerating reads the *job*, would have found nothing, and would have overwritten the stored PDF
+at the same storage path with a blank €0.00 document — replacing the customer's only copy. The UI showed
+an alert but did not disable the send buttons, so nothing actually prevented it.
+
+Two fixes, because one is a floor and the other is the repair:
+
+- **`/api/invoices/[id]/regenerate` now refuses** to replace a non-zero invoice with a zero one, naming
+  the job and the amount at risk. A genuinely zero invoice regenerated from a zero invoice is still
+  allowed — it is the transition from *has value* to *has none* that is blocked.
+- **Migration 0003 backfills** job content from any pre-rework invoice's snapshot, so an old invoice can
+  be corrected and re-sent like any other rather than merely being blocked. Verified on the live data:
+  J-0001's four work lines and four parts are restored, and €600 labour + €1,536.99 parts reconstructs
+  the original €2,136.99 exactly.
+
+  Per-line hours are deliberately **not** invented — the old template printed a single AMOUNT, so how
+  `labour_hours` split across four description lines is genuinely unknown. Each line gets a blank HOUR(S)
+  cell and the money is preserved exactly via `labour_total_override`, rather than re-derived from
+  hours × rate and drifting by a cent.
+
+### Fixed — the Overview was counting a voided invoice as money
+
+The previous entry claimed "the finalize duplicate check, the Invoicer picker, Awaiting payments and the
+Overview totals all ignore voided rows." The first three were true. `lib/db/queries/overview.ts` was
+never opened, and `getOutstandingInvoiceTotalCents` summed `grandTotal` with no void filter — so the
+voided **NA-2026-0002 (€836.50)** was being reported as outstanding on the live dashboard. The claim was
+written from intent rather than from the code.
+
+Fixed in both places it mattered: the outstanding total, and `listRecentInvoices`, where a voided invoice
+would have read as recent business taken. It remains visible on its own job, marked VOID.
+
+### Files Touched
+
+- `lib/db/queries/overview.ts` — exclude voided invoices from the outstanding total and recent list
+- `app/api/invoices/[id]/regenerate/route.ts` — refuse to blank a non-zero invoice
+- `drizzle/migrations/0003_backfill_job_invoice_content.sql` (+ journal, snapshot) — backfill
+- `CHANGELOG.md`
+
 ## 16/08/2026 @ 11:29:01 IST — "claude-opus-5"
 
 **Project completion: 99.13%**
