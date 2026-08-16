@@ -5,6 +5,12 @@ import { useMemo, useState } from 'react';
 
 import { Alert, Button } from '@/components/ui';
 import { toWhatsAppNumber } from '@/lib/phone';
+import {
+  buildInvoiceMessage,
+  buildMailtoHref,
+  buildWhatsAppHref,
+  type InvoiceRecipient,
+} from '@/lib/send-links';
 import { cn } from '@/lib/utils';
 
 /**
@@ -24,20 +30,7 @@ export interface IssuedInvoice {
   invoiceId: string;
 }
 
-export interface SendRecipient {
-  customerName: string;
-  customerEmail: string | null;
-  customerPhone: string | null;
-  vehicleRegistration: string;
-}
-
-function messageFor(invoiceNumber: string, recipient: SendRecipient) {
-  const name = recipient.customerName.split(' ')[0] || 'there';
-  return (
-    `Hi ${name}, please find invoice ${invoiceNumber} attached for ` +
-    `${recipient.vehicleRegistration}.\n\nThanks,\nNolan Automotive`
-  );
-}
+export type SendRecipient = InvoiceRecipient;
 
 /**
  * Send controls for an invoice that ALREADY EXISTS.
@@ -86,7 +79,7 @@ export function SendBar({
   }, [file]);
 
   const waNumber = toWhatsAppNumber(recipient.customerPhone);
-  const message = messageFor(invoice.invoiceNumber, recipient);
+  const message = buildInvoiceMessage(invoice.invoiceNumber, recipient);
 
   function downloadPdf() {
     const url = URL.createObjectURL(invoice.blob);
@@ -105,11 +98,8 @@ export function SendBar({
     // The PDF cannot ride along in a mailto:, so put it on the device first.
     downloadPdf();
 
-    const to = recipient.customerEmail ?? '';
-    const subject = `Invoice ${invoice.invoiceNumber} — Nolan Automotive`;
-    const href =
-      `mailto:${encodeURIComponent(to)}` +
-      `?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
+    const to = recipient.customerEmail?.trim() ?? '';
+    const href = buildMailtoHref(invoice.invoiceNumber, recipient);
 
     setNote(
       to
@@ -127,9 +117,7 @@ export function SendBar({
 
     // wa.me needs a full international number with no + or leading zero. Without
     // one it opens a contact picker instead of the customer's chat.
-    const href = waNumber
-      ? `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`
-      : `https://wa.me/?text=${encodeURIComponent(message)}`;
+    const href = buildWhatsAppHref(invoice.invoiceNumber, recipient);
 
     setNote(
       waNumber
