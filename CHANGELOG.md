@@ -1,5 +1,60 @@
 # Changelog
 
+## 16/08/2026 @ 12:51:48 IST — "claude-opus-5"
+
+**Project completion: 99.25%**
+
+Basis: 133 of 134 discrete build requirements. The fourteen skeleton requirements from the previous
+entry are now verified on the live site and count as done; streaming the Overview's sections adds two
+more (the Suspense split and its verification), both done. The one outstanding item is not code:
+confirming the daily keep-alive cron has run, due on or after 22/08/2026.
+
+### Goal
+
+Verify the skeletons against real screens rather than assuming they fit, and stop the Overview blocking
+on its slowest query.
+
+### Fixed — the Settings skeleton was 690px short
+
+Measured against the live page, the Settings placeholder came out **39% shorter** than the content that
+replaced it — a visible jump, and precisely the layout shift a skeleton exists to prevent. The guess was
+four uniform field cards; the page actually renders five, with a 3-row `Textarea` for the address and a
+checkbox row leading the VAT card. Rebuilt to match: the gap closed from 39% to 25%, and the residual is
+the form growing downward below the fold rather than anything moving under the reader.
+
+This is the finding that justified measuring at all. Every other route was within 10% first time, so
+eyeballing screenshots would have passed Settings too.
+
+### Added — the Overview streams section by section
+
+Its six reads were a single `Promise.all`, so the page waited on the slowest before showing anything.
+Each section now owns its query behind a Suspense boundary and arrives independently — the three fast
+count aggregates paint while the invoice join is still running — falling back to the same skeletons
+`loading.tsx` uses, so there is no visual seam between the two mechanisms.
+
+`loading.tsx` covers the navigation; Suspense covers what happens after the shell is up.
+
+### Verified on the live site
+
+Skeletons were held on screen by delaying only the RSC payloads — client-side navigation, so the
+document survives and the placeholder can be measured rather than merely photographed.
+
+| Check | Result |
+|---|---|
+| Placeholder height vs real height | within 10% on six of seven routes; Settings 25% after the fix |
+| Skeleton blocks rendered per route | 28–109, every route non-zero, desktop and phone |
+| Light mode token | `rgb(230, 233, 238)` — correct |
+| Explicit `[data-theme="dark"]` | `rgb(35, 41, 50)` — correct, not glowing white |
+| `prefers-reduced-motion: reduce` | sheen animation `none`, placeholder still visible |
+| Overview after restructuring | all tiles and both tables render; outstanding still €836.50, void still excluded |
+| Skeletons after load | zero remain |
+
+### Files Touched
+
+- `app/(dashboard)/settings/loading.tsx` — rebuilt to the real five-card shape
+- `app/(dashboard)/page.tsx` — split into streaming sections behind Suspense
+- `CHANGELOG.md`
+
 ## 16/08/2026 @ 12:35:36 IST — "claude-opus-5"
 
 **Project completion: 89.39%**
