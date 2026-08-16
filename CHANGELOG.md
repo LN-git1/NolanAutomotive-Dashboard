@@ -1,5 +1,62 @@
 # Changelog
 
+## 16/08/2026 @ 12:22:05 IST — "claude-opus-5"
+
+**Project completion: 100.00%**
+
+Basis: 118 of 118 discrete build requirements. The last open item — repository visibility — is now
+**closed as "must remain public"**, which is a resolved decision rather than an outstanding task: Vercel's
+Hobby plan cannot deploy a private repository whose commits are authored by a collaborator. One
+non-build item remains on the calendar rather than the checklist: confirming the daily keep-alive cron
+has run, due on or after 22/08/2026.
+
+### Goal
+
+Establish why making the repository private broke deployment, restore the pipeline, and write the
+constraint down so it cannot be rediscovered the expensive way.
+
+### Fixed — deployments were silently blocked, not failing
+
+Making the repo private stopped every deploy. Vercel's reason, once read:
+
+> "The deployment was blocked because the commit author did not have contributing access to the project
+> on Vercel. The Hobby Plan does not support collaboration for private repositories."
+
+The commits here are authored by the developer's personal GitHub account, a **collaborator** — not by
+`lnautomotive2025-8997`, which owns the Vercel project. Public repositories permit collaborators;
+private ones do not, on Hobby. Repository ownership type, which is what I had checked, is not the
+relevant axis at all: **commit authorship versus the Vercel account owner** is.
+
+**This misdiagnoses easily.** GitHub reports the commit status as `failure`, which reads as a broken
+build — but nothing was ever built. The deployment description is `Deployment was blocked`, the site
+carries on serving the previous build, and the only real symptom is that changes quietly stop shipping.
+The README now documents the two `gh api` calls that distinguish the two cases without needing Vercel
+credentials.
+
+Repository restored to public; the blocked commit was republished and verified live.
+
+### Fixed — I gave bad advice, and it cost a broken pipeline
+
+I told the user making the repository private "won't break anything", having checked repo ownership
+type, Actions minutes, the GitHub App's access and public-raw-URL dependencies — but not Vercel's
+collaboration rules. That the site never went down was luck of the design (the previous build keeps
+serving), not foresight.
+
+Recorded because the useful lesson is not "private repos are bad" but that a deployment pipeline has
+constraints on **who commits**, not only on what the repository is.
+
+### Verified live
+
+- The previously blocked commit now deploys and serves: selecting a job with no work lines or parts
+  shows the new alert and the send bar is **disabled**, instead of letting the owner tap send and
+  receive a 400 from the server guard.
+- J-0003 was emptied to force that state and restored afterwards to its three work lines and two parts.
+
+### Files Touched
+
+- `README.md` — the public-repo requirement, why it misreads as a build failure, and how to check it
+- `CHANGELOG.md`
+
 ## 16/08/2026 @ 11:59:37 IST — "claude-opus-5"
 
 **Project completion: 99.15%**

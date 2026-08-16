@@ -333,6 +333,28 @@ server-side (120s to view, 900s to download, 300s to upload).
   settings singleton and the two counter rows, creating a job or an invoice throws.
 - In the build log's route summary, confirm `/jobs/new` shows `ƒ` (Dynamic), not `○` (Static).
 
+> **⚠️ The repository must stay PUBLIC while the project is on Vercel Hobby.**
+>
+> Hobby does not support collaboration on **private** repositories. If the repo is made private,
+> Vercel blocks any deployment whose **commit author** is not the Vercel account owner
+> (`lnautomotive2025-8997`) — commits authored by the developer's own GitHub account are refused with
+> *"the commit author did not have contributing access"*.
+>
+> This is easy to misread: GitHub reports it as a **failed** build, but nothing was ever built. The
+> deployment status description is `Deployment was blocked`, and the site keeps serving the previous
+> build, so the only symptom is that changes silently stop shipping. Check with:
+>
+> ```bash
+> gh api repos/LN-git1/NolanAutomotive-Dashboard/commits/$(git rev-parse HEAD)/status --jq '.state'
+> gh api "repos/LN-git1/NolanAutomotive-Dashboard/deployments?sha=$(git rev-parse HEAD)" --jq '.[0].id' \
+>   | xargs -I{} gh api repos/LN-git1/NolanAutomotive-Dashboard/deployments/{}/statuses --jq '.[0].description'
+> ```
+>
+> To make the repo private and keep automatic deploys, one of these has to be true:
+> commits are authored by the client's own GitHub identity (the Vercel account owner), or the Vercel
+> project moves to **Pro**. Verified the hard way on 16/08/2026. No secrets are in the repository —
+> every `.env*` is gitignored — so public costs nothing but visibility.
+
 > **Licensing caveat, accepted knowingly.** Vercel's free **Hobby** tier is licensed for
 > non-commercial use, and a dashboard running a business's day-to-day operations is commercial use.
 > This deployment uses Hobby anyway: a single-user internal tool is the least likely thing to be
