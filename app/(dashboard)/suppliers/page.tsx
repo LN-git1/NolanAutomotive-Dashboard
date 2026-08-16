@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { SupplierActions } from '@/components/suppliers/supplier-actions';
 import { SupplierForm } from '@/components/suppliers/supplier-form';
 import { Card, CardBody, CardHeader, Empty, Table, Td, Th } from '@/components/ui';
 import { listSuppliersWithTotals } from '@/lib/db/queries/overview';
@@ -39,6 +40,7 @@ export default async function SuppliersPage() {
                   <Th>Supplier</Th>
                   <Th>Bills</Th>
                   <Th className="text-right">Outstanding</Th>
+                  <Th className="text-right">Actions</Th>
                 </tr>
               </thead>
               <tbody>
@@ -60,6 +62,11 @@ export default async function SuppliersPage() {
                     </Td>
                     <Td label="Outstanding" className="text-right tabular">
                       {formatEur(Number(supplier.outstandingCents))}
+                    </Td>
+                    <Td label="Actions" className="text-right">
+                      <div className="flex justify-end">
+                        <SupplierActions supplierId={supplier.id} name={supplier.name} />
+                      </div>
                     </Td>
                   </tr>
                 ))}

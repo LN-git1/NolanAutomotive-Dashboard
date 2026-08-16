@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { BillActions } from '@/components/suppliers/bill-actions';
 import { BillForm } from '@/components/suppliers/bill-form';
+import { SupplierActions } from '@/components/suppliers/supplier-actions';
 import { Badge, Card, CardBody, CardHeader, Empty, Table, Td, Th } from '@/components/ui';
 import { getSupplierWithBills } from '@/lib/db/queries/overview';
 import { formatDate, numericToEur } from '@/lib/format';
@@ -27,9 +28,12 @@ export default async function SupplierDetailPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold text-ink">{supplier.name}</h1>
-        {supplier.notes ? <p className="text-sm text-muted">{supplier.notes}</p> : null}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-ink">{supplier.name}</h1>
+          {supplier.notes ? <p className="text-sm text-muted">{supplier.notes}</p> : null}
+        </div>
+        <SupplierActions supplierId={supplier.id} name={supplier.name} redirectOnDelete />
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -68,6 +68,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   revalidatePath(`/jobs/${invoice.jobId}`);
   revalidatePath('/awaiting-payments');
   revalidatePath('/invoicer');
+  revalidatePath('/earnings');
 
   return Response.json({ ok: true, invoiceNumber: invoice.invoiceNumber });
 }

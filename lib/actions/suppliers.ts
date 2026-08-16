@@ -7,8 +7,13 @@ import { requireSession } from '@/lib/auth/require-session';
 import { db } from '@/lib/db';
 import { supplierBills, suppliers } from '@/lib/db/schema';
 import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
-import { removeObject } from '@/lib/storage/signedUrl';
-import { billIdSchema, supplierBillInputSchema, supplierInputSchema } from '@/lib/validation/supplier';
+import { removeObject, removeObjects } from '@/lib/storage/signedUrl';
+import {
+  billIdSchema,
+  supplierBillInputSchema,
+  supplierIdSchema,
+  supplierInputSchema,
+} from '@/lib/validation/supplier';
 
 import type { ActionResult } from './jobs';
 
@@ -123,6 +128,49 @@ export async function deleteSupplierBill(billId: string): Promise<ActionResult> 
     return {
       ok: false,
       error: error instanceof Error ? error.message : 'Could not delete the bill',
+    };
+  }
+
+  revalidatePath('/suppliers');
+  revalidatePath('/');
+  return { ok: true };
+}
+
+/**
+ * Delete a supplier, and every bill's receipt with it.
+ *
+ * `supplierBills.supplierId` is `ON DELETE CASCADE`, so the bill rows vanish
+ * on their own — but the cascade only touches the database. It never removes
+ * the R2 objects those rows referenced, so every receipt path has to be read
+ * out and cleaned up here, before the cascade takes the rows (and the paths)
+ * with it. Bulk `removeObjects`, not a loop of `removeObject`: same best-effort
+ * reasoning as `deleteSupplierBill` above, just for N receipts instead of one.
+ */
+export async function deleteSupplier(supplierId: string): Promise<ActionResult> {
+  await requireSession();
+
+  const parsedId = supplierIdSchema.safeParse({ supplierId });
+  if (!parsedId.success) return { ok: false, error: 'Invalid supplier' };
+
+  const bills = await db
+    .select({ attachmentStoragePath: supplierBills.attachmentStoragePath })
+    .from(supplierBills)
+    .where(eq(supplierBills.supplierId, supplierId));
+
+  const receiptPaths = bills
+    .map((bill) => bill.attachmentStoragePath)
+    .filter((path): path is string => path !== null);
+
+  if (receiptPaths.length > 0) {
+    await removeObjects(ATTACHMENTS_BUCKET, receiptPaths);
+  }
+
+  try {
+    await db.delete(suppliers).where(eq(suppliers.id, supplierId));
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Could not delete the supplier',
     };
   }
 

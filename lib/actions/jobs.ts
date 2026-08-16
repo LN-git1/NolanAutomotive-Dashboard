@@ -97,6 +97,7 @@ export async function changeJobStatus(jobId: string, status: string): Promise<Ac
   revalidatePath('/jobs');
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath('/awaiting-payments');
+  revalidatePath('/earnings');
   revalidatePath('/');
   return { ok: true, jobId };
 }
