@@ -1,5 +1,5 @@
-import { Analytics } from '@vercel/analytics/next';
-import { SpeedInsights } from '@vercel/speed-insights/next';
+import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import type { Metadata, Viewport } from 'next';
 
 import './globals.css';
@@ -96,6 +96,14 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
 
           Both no-op in development and outside Vercel, so neither affects local
           work or the test suite.
+
+          The `/react` entry points, NOT `/next`. The Next-specific wrappers put
+          the component inside a <Suspense> around a useSearchParams hook, and on
+          this app's statically prerendered pages that boundary never resolved on
+          the client — the component never mounted, so the script was never
+          injected. Verified on the live site: window.va existed with a pageview
+          queued, no script tag, and no network request, while injecting the very
+          same URL by hand returned 200. The generic components inject directly.
         */}
         <Analytics />
         <SpeedInsights />
