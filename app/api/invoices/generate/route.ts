@@ -44,11 +44,13 @@ export async function POST(request: Request) {
     const provisional = await peekNextNumber(db, 'invoice');
     const invoiceNumber = formatInvoiceNumber(provisional, issueDate.getFullYear());
 
-    const built = await buildInvoice(parsed.data, { invoiceNumber, issueDate });
+    const built = await buildInvoice(parsed.data.jobId, { invoiceNumber, issueDate });
     const bytes = await stampInvoice(built.stampInput);
 
     return pdfResponse(bytes, `${invoiceNumber}-preview.pdf`, {
       'X-Provisional-Invoice-Number': invoiceNumber,
+      // Lets the Invoicer warn before an already-paid job's invoice is replaced.
+      ...(built.alreadyPaid ? { 'X-Job-Already-Paid': '1' } : {}),
     });
   } catch (error) {
     const message =

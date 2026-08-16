@@ -58,9 +58,42 @@ async function fetchObject(key: string): Promise<Uint8Array> {
   return bytes;
 }
 
+/**
+ * Read the assets straight off disk instead of R2, for `INVOICE_ASSETS_LOCAL=1`.
+ *
+ * This exists for one job: checking a REVISED TEMPLATE before publishing it.
+ * Without it the only way to see a new template rendered is to upload it to R2
+ * first — which is production, and which means the live site starts using an
+ * unverified template. That is backwards, and it bit exactly once before this
+ * was added.
+ *
+ * Never set in production: `scripts/upload-assets.ts` is still what publishes,
+ * and the running app still fetches from R2.
+ */
+async function loadFromDisk(): Promise<InvoiceAssets> {
+  const { readFile } = await import('node:fs/promises');
+  const path = await import('node:path');
+
+  const read = async (relative: string) =>
+    new Uint8Array(await readFile(path.join(process.cwd(), relative)));
+
+  const [template, regular, bold] = await Promise.all([
+    read('lib/pdf/template/invoice-template.pdf'),
+    read('lib/pdf/fonts/regular.ttf'),
+    read('lib/pdf/fonts/bold.ttf'),
+  ]);
+
+  return { template, regular, bold };
+}
+
 export async function loadInvoiceAssets(): Promise<InvoiceAssets> {
   if (cached) return cached;
   if (inFlight) return inFlight;
+
+  if (process.env.INVOICE_ASSETS_LOCAL === '1') {
+    cached = await loadFromDisk();
+    return cached;
+  }
 
   inFlight = (async () => {
     try {

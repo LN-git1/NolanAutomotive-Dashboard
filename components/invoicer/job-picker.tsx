@@ -12,6 +12,14 @@ export interface InvoiceableJob {
   customerName: string;
   vehicleRegistration: string;
   status: string;
+  labourLines: { description: string; hours: string }[];
+  hourlyRate: string | null;
+  labourTotalOverride: string | null;
+  parts: { partName: string; partNumber: string; qty: string; unitPrice: string }[];
+  otherComments: string | null;
+  /** Set when the job already has a NON-voided invoice — the re-send path. */
+  liveInvoiceId: string | null;
+  liveInvoiceNumber: string | null;
 }
 
 /**
@@ -116,7 +124,10 @@ export function JobPicker({
                     <span className="block text-sm font-medium text-ink">
                       {job.jobNumber} — {job.customerName}
                     </span>
-                    <span className="block text-xs text-muted">{job.vehicleRegistration}</span>
+                    <span className="block text-xs text-muted">
+                      {job.vehicleRegistration}
+                      {job.liveInvoiceNumber ? ` · ${job.liveInvoiceNumber}` : ''}
+                    </span>
                   </span>
                   <Badge value={job.status} />
                 </button>

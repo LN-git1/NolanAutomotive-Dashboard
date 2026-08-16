@@ -44,7 +44,6 @@ export async function GET() {
       vehicleMileage: job.vehicleMileage,
       vehicleVin: job.vehicleVin,
       notes: job.notes,
-      internalNotes: job.internalNotes,
       createdAt: job.createdAt,
     })),
     [
@@ -64,7 +63,6 @@ export async function GET() {
       { key: 'vehicleMileage', header: 'Mileage' },
       { key: 'vehicleVin', header: 'VIN' },
       { key: 'notes', header: 'Notes' },
-      { key: 'internalNotes', header: 'Internal notes' },
       { key: 'createdAt', header: 'Created' },
     ],
   );

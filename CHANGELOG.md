@@ -1,5 +1,135 @@
 # Changelog
 
+## 16/08/2026 @ 11:17:19 IST — "claude-opus-5"
+
+**Project completion: 89.47%**
+
+Basis: 102 of 114 discrete build requirements. The previous count of 102 is now fully closed — the
+Zoho mailbox, the last open item, was set up and its DNS verified. Scope then grew by **twelve** new
+requirements from this session's rework, of which the code for all twelve is written, typechecked and
+unit-tested but **not yet verified end-to-end on the live site** — so they are counted as open, not
+done. The figure will move once that pass runs. Also outstanding and deliberately deferred by the
+user: making the GitHub repository private.
+
+### Goal
+
+Make the **job** the single record of the work. Everything that ends up on an invoice is entered once,
+on the job, and stays editable forever — which is what finally makes a sent invoice correctable.
+
+Five changes drove it, all from the owner actually using the thing:
+
+1. Job status `new` was dead weight.
+2. The Invoicer was the wrong home for job details.
+3. "Services" is not the word a mechanic uses.
+4. Labour is not always hours × rate.
+5. The reworked template prints **hours** per line, not money.
+
+### Changed — the job now owns the invoice
+
+Work, labour, parts and comments moved off the invoice payload and onto the job (`labour_lines`,
+`hourly_rate`, `labour_total_override`, `parts`, `other_comments`). The invoice request is now
+literally `{ jobId }`.
+
+This is what makes the rest fall out for free: **"editing an invoice" is just editing the job and
+regenerating.** There is no separate invoice editor to build, no second copy of the fields, and no way
+for a job and its invoice to disagree. `/api/invoices/[id]/regenerate` re-stamps from the job's current
+content while keeping the invoice number, the original issue date and the storage path — so the
+customer keeps one reference for one repair, the sequence grows no gaps, and the stored PDF is replaced
+rather than accumulating orphans. No counter is touched, so it is safe to run repeatedly.
+
+The invoice row still snapshots its own totals, rewritten on every regeneration, because money owed and
+the CSV exports must keep reporting what was actually sent even as the job is edited.
+
+### Added — voiding, because deleting was never an option
+
+`/api/invoices/[id]/void` marks an invoice void and returns its job to Completed so it can be reissued
+under a fresh number. The row and its number are kept: deleting would put a permanent gap in the invoice
+sequence, which is precisely what the counter design exists to prevent. "One invoice per job" therefore
+now means one *live* invoice — the finalize duplicate check, the Invoicer picker, Awaiting payments and
+the Overview totals all ignore voided rows.
+
+### Added — labour lines with per-line hours
+
+The reworked template's second column is `HOUR(S)`, not `AMOUNT`. Labour is now a repeating two-column
+table (description + hours); total hours are summed from the lines and multiplied by the rate, and the
+euro figure appears only in the SUBTOTAL and TOTAL LABOUR boxes. A **Custom total** box overrides
+hours × rate outright — and the hours still print, so the customer always sees the time spent
+regardless of how the price was arrived at.
+
+Hours are summed in hundredths via the existing money parser, so 0.1 + 0.2 is exactly 0.3.
+
+### Fixed — two defects caught before they shipped
+
+**The hours × rate divisor was wrong.** 3.5 h at €65 produced €2.28 instead of €227.50: hundredth-hours
+times cents needs dividing by 100, not 10,000. Caught by an existing test that had been rewritten for the
+new shape — the test suite earning its keep.
+
+**Migration B would have failed halfway.** drizzle-kit generated the enum swap with a cast back to the
+new type but no remap, so any row still holding `status = 'new'` would abort the migration *after* the
+old type had already been dropped. Added an explicit `UPDATE ... SET status = 'active' WHERE status =
+'new'` while the column is plain text.
+
+### Fixed — the template could not be checked before publishing
+
+The stamper loads the template from R2, not from disk, so the only way to see a revised template rendered
+was to upload it to production first and look at the result there. That is backwards, and it showed
+immediately: the first visual check rendered the *old* artwork and would have been passed as correct if
+the header wording hadn't given it away. `INVOICE_ASSETS_LOCAL=1` now reads the assets straight off disk
+for exactly this check. Production still fetches from R2.
+
+### Verified — the new template needs no coordinate re-map
+
+Both PDFs were text-extracted and compared field by field: every coordinate is identical, same 612×792
+page. Only three labels changed (`SERVICES PERFORMED` → `WORK CARRIED OUT`, `AMOUNT` → `HOUR(S)`,
+`TOTAL SERVICES` → `TOTAL LABOUR`), all at the same x/y. So `invoiceTemplateCoords.json` needed key
+renames only, and the existing labour column lands exactly under the new header — what changed is its
+meaning, not its position.
+
+Row capacity was raised 5 → **6** for both tables and confirmed by rendering a full invoice to PNG and
+looking at it: six rows sit clear of both subtotal bands, and a seventh would collide. Six is the honest
+maximum, not an estimate.
+
+### Changed — the rest
+
+- **Registration leads the create form.** Entering a registration seen before offers the previous
+  customer and vehicle for one-tap prefill, read from past jobs — no customer table, nothing to keep in
+  sync.
+- **Collapsible sections.** The form roughly doubled in length and ~90% of use is on a phone. Native
+  `<details>`, so it works before hydration and gets keyboard and screen-reader behaviour free.
+- **Two text fields, not three.** `internal_notes` is retired; **Work lines** print, **Notes** never do.
+  Its contents are moved into `notes` in migration A, before the column is dropped in B.
+- **Invoice filenames** now carry the customer and registration — the number alone means nothing in a
+  WhatsApp thread. Non-ASCII is stripped because the value goes in a `Content-Disposition` header.
+- **Row limits come from the template coordinates**, never hard-coded, so re-working the artwork changes
+  them on its own.
+- Physical column names still say `services_subtotal`/`total_services` while the code says labour: Drizzle
+  maps the name, which gets coherent code with **zero migration risk on a live table** carrying issued
+  invoices.
+
+### Migration order (this mattered)
+
+Additive columns had to exist before the new code ran, and the enum swap had to come after it, because
+the old code still wrote `'new'`. Applied as two migrations either side of the deploy rather than one —
+the single-migration version breaks job creation on a live site for the length of a deploy.
+
+### Files Touched
+
+- `lib/db/schema.ts` — job content columns, invoice snapshot/void columns, enum without `new`,
+  `LabourLine`/`JobPartLine` types, Drizzle property renames
+- `lib/money.ts` — labour lines, `sumLabourHours`, `formatHours`, the override, Labour renames
+- `lib/pdf/{stamp,fieldKeys,invoiceTemplateCoords.json,assets}.ts` — `labourTable` with an `hours`
+  column, totals renames, capacity 6, local-asset mode
+- `lib/pdf/template/invoice-template.pdf` — the reworked template
+- `lib/invoices/{build,fileName}.ts` — build from the job, snapshot helper, filename builder
+- `app/api/invoices/{generate,finalize}/route.ts`, `app/api/invoices/[id]/{regenerate,void}/route.ts`
+- `lib/db/queries/jobs.ts`, `lib/actions/jobs.ts` — void-aware queries, registration lookup
+- `lib/validation/{common,job,invoice}.ts` — `jsonArray`, `optionalDecimal(String)`, job owns content
+- `components/jobs/{job-form,line-editor,invoice-card}.tsx`, `components/invoicer/{invoicer,job-picker}.tsx`
+- `app/(dashboard)/jobs/{new,[jobId]}/page.tsx`, `app/(dashboard)/invoicer/page.tsx`
+- `app/api/export/{invoices,jobs}/route.ts` — Total labour, Voided at, no internal notes
+- `drizzle/migrations/0001_grey_forgotten_one.sql`, `0002_flowery_ser_duncan.sql`
+- `tests/labour.test.ts` (new), `tests/{money,validation}.test.ts`, `scripts/preview-invoice.ts`
+
 ## 15/08/2026 @ 22:33:34 IST — "claude-opus-5"
 
 **Project completion: 99.02%**

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { toCsv } from '@/lib/csv';
 import { invoiceDraftSchema, invoiceFinalizeSchema } from '@/lib/validation/invoice';
-import { jobInputSchema } from '@/lib/validation/job';
+import { jobInputSchema, partLineSchema } from '@/lib/validation/job';
 import { settingsInputSchema } from '@/lib/validation/settings';
 
 const VALID_JOB = {
@@ -49,7 +49,7 @@ describe('jobInputSchema', () => {
 
   it('defaults status and priority', () => {
     const result = jobInputSchema.parse(VALID_JOB);
-    expect(result.status).toBe('new');
+    expect(result.status).toBe('active');
     expect(result.priority).toBe('medium');
   });
 
@@ -59,14 +59,9 @@ describe('jobInputSchema', () => {
 });
 
 describe('invoice schemas', () => {
-  const base = {
-    jobId: '3f2504e0-4f89-11d3-9a0c-0305e82c3301',
-    labourHours: '2',
-    hourlyRate: '65.00',
-    parts: [],
-  };
+  const base = { jobId: '3f2504e0-4f89-11d3-9a0c-0305e82c3301' };
 
-  it('accepts a draft with no parts', () => {
+  it('accepts a draft that is just a job reference', () => {
     expect(invoiceDraftSchema.safeParse(base).success).toBe(true);
   });
 
@@ -75,21 +70,22 @@ describe('invoice schemas', () => {
   });
 
   it('rejects a negative or malformed price', () => {
-    const withBadPart = {
-      ...base,
-      parts: [{ partName: 'Pads', partNumber: 'X', qty: '1', unitPrice: '-5' }],
-    };
-
-    expect(invoiceDraftSchema.safeParse(withBadPart).success).toBe(false);
+    expect(
+      partLineSchema.safeParse({ partName: 'Pads', partNumber: 'X', qty: '1', unitPrice: '-5' })
+        .success,
+    ).toBe(false);
   });
 
   it('requires a part name on every line', () => {
-    const withUnnamedPart = {
-      ...base,
-      parts: [{ partName: '', partNumber: 'X', qty: '1', unitPrice: '5' }],
-    };
+    expect(
+      partLineSchema.safeParse({ partName: '', partNumber: 'X', qty: '1', unitPrice: '5' }).success,
+    ).toBe(false);
+  });
 
-    expect(invoiceDraftSchema.safeParse(withUnnamedPart).success).toBe(false);
+  it('reads a blank quantity or price as zero rather than rejecting it', () => {
+    const parsed = partLineSchema.parse({ partName: 'Pads', partNumber: '', qty: '', unitPrice: '' });
+    expect(parsed.qty).toBe('0');
+    expect(parsed.unitPrice).toBe('0');
   });
 
   it('requires a send channel only when finalising', () => {

@@ -1,11 +1,16 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { requireApiSession } from '@/lib/auth/require-session';
 import { allocateNumber, formatInvoiceNumber } from '@/lib/counters';
 import { db } from '@/lib/db';
 import { invoices, jobs } from '@/lib/db/schema';
-import { InvoiceBuildError, buildInvoice, pdfResponse } from '@/lib/invoices/build';
-import { fromCents } from '@/lib/money';
+import {
+  InvoiceBuildError,
+  buildInvoice,
+  buildInvoiceFileName,
+  invoiceSnapshot,
+  pdfResponse,
+} from '@/lib/invoices/build';
 import { stampInvoice } from '@/lib/pdf/stamp';
 import { buildInvoicePath, uploadBytes } from '@/lib/storage/signedUrl';
 import { INVOICES_BUCKET } from '@/lib/storage/r2';
@@ -61,8 +66,8 @@ export async function POST(request: Request) {
 
   try {
     // Validate and price the invoice BEFORE opening the transaction, so a bad
-    // draft never takes a lock on the counter row.
-    const preflight = await buildInvoice(draft, {
+    // job never takes a lock on the counter row.
+    const preflight = await buildInvoice(draft.jobId, {
       invoiceNumber: 'PENDING',
       issueDate,
     });
@@ -74,23 +79,24 @@ export async function POST(request: Request) {
       // two live invoices. Locking serialises them so the second sees the first.
       await tx.execute(sql`SELECT id FROM jobs WHERE id = ${draft.jobId} FOR UPDATE`);
 
+      // Voided invoices do not block a reissue — that is the entire point of
+      // voiding. Only a live invoice counts as "already invoiced".
       const [existing] = await tx
         .select({ invoiceNumber: invoices.invoiceNumber })
         .from(invoices)
-        .where(eq(invoices.jobId, draft.jobId))
+        .where(and(eq(invoices.jobId, draft.jobId), isNull(invoices.voidedAt)))
         .limit(1);
 
       if (existing) {
         throw new InvoiceBuildError(
           `This job has already been invoiced as ${existing.invoiceNumber}. ` +
-            `Open the job to download or re-share that invoice.`,
+            `Open the job to edit and re-send that invoice, or void it to issue a new one.`,
         );
       }
 
       const allocated = await allocateNumber(tx, 'invoice');
       const invoiceNumber = formatInvoiceNumber(allocated, issueDate.getFullYear());
       const storagePath = buildInvoicePath(invoiceNumber);
-      const totals = preflight.totals;
 
       const [created] = await tx
         .insert(invoices)
@@ -98,20 +104,9 @@ export async function POST(request: Request) {
           invoiceNumber,
           jobId: draft.jobId,
           issueDate: todayIsoDate(),
-          workCarriedOut: draft.workCarriedOut,
-          labourHours: draft.labourHours === '' ? null : draft.labourHours,
-          hourlyRate: draft.hourlyRate === '' ? null : draft.hourlyRate,
-          servicesSubtotal: fromCents(totals.servicesSubtotalCents),
-          partsSubtotal: fromCents(totals.partsSubtotalCents),
-          vatRate: preflight.settings.vatRegistered ? preflight.settings.defaultVatRate : '0.00',
-          vatAmount: fromCents(totals.totalTaxCents),
-          totalServices: fromCents(totals.servicesSubtotalCents),
-          totalParts: fromCents(totals.partsSubtotalCents),
-          grandTotal: fromCents(totals.grandTotalCents),
-          parts: preflight.parts,
-          otherComments: draft.otherComments,
           pdfStoragePath: storagePath,
           sentVia: draft.sentVia,
+          ...invoiceSnapshot(preflight),
         })
         .returning({ id: invoices.id });
 
@@ -126,7 +121,7 @@ export async function POST(request: Request) {
     });
 
     // Re-stamp with the number that was actually allocated.
-    const finalBuild = await buildInvoice(draft, {
+    const finalBuild = await buildInvoice(draft.jobId, {
       invoiceNumber: result.invoiceNumber,
       issueDate,
     });
@@ -146,7 +141,13 @@ export async function POST(request: Request) {
       storageFailed = true;
     }
 
-    return pdfResponse(bytes, `${result.invoiceNumber}.pdf`, {
+    const fileName = buildInvoiceFileName(
+      result.invoiceNumber,
+      finalBuild.job.customerName,
+      finalBuild.job.vehicleRegistration,
+    );
+
+    return pdfResponse(bytes, fileName, {
       'X-Invoice-Number': result.invoiceNumber,
       'X-Invoice-Id': result.id,
       ...(storageFailed ? { 'X-Storage-Failed': '1' } : {}),

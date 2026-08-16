@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 
 import { JobForm } from '@/components/jobs/job-form';
+import { getSettings } from '@/lib/db/queries/settings';
+import { labourRowCapacity, partsRowCapacity } from '@/lib/pdf/stamp';
 
 export const metadata: Metadata = { title: 'New job' };
 
@@ -11,7 +13,11 @@ export const metadata: Metadata = { title: 'New job' };
  */
 export const dynamic = 'force-dynamic';
 
-export default function NewJobPage() {
+export default async function NewJobPage() {
+  // The owner's usual rate prefills the labour box, so a straightforward job
+  // needs only the hours typing in.
+  const settings = await getSettings();
+
   return (
     <div className="flex max-w-4xl flex-col gap-4">
       <div>
@@ -21,7 +27,11 @@ export default function NewJobPage() {
         </p>
       </div>
 
-      <JobForm />
+      <JobForm
+        defaultHourlyRate={settings.defaultHourlyRate ?? ''}
+        labourCapacity={labourRowCapacity()}
+        partsCapacity={partsRowCapacity()}
+      />
     </div>
   );
 }

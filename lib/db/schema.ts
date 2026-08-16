@@ -14,8 +14,12 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
+/**
+ * `new` was removed: a job that exists is a job that is active, so the extra
+ * state earned nothing and only added a tap. Postgres cannot drop a value from
+ * an enum, so the migration swaps the type and remaps any `new` row to `active`.
+ */
 export const jobStatusEnum = pgEnum('job_status', [
-  'new',
   'active',
   'completed',
   'invoiced',
@@ -60,12 +64,40 @@ export const settings = pgTable('settings', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * One labour line as printed in the template's WORK CARRIED OUT table: a
+ * description and the hours spent on it. The template's second column is
+ * HOUR(S), not money — the euro figure appears only in the SUBTOTAL box.
+ */
+export interface LabourLine {
+  description: string;
+  /** Decimal string, e.g. "2.5". Empty means "no billable time", and prints blank. */
+  hours: string;
+}
+
+/**
+ * A part as the owner entered it on the job. There is deliberately no `amount`:
+ * the line total is derived (qty x unitPrice) at invoice time, so a stored copy
+ * could only ever go stale or disagree with the arithmetic.
+ */
+export interface JobPartLine {
+  partName: string;
+  partNumber: string;
+  qty: string;
+  unitPrice: string;
+}
+
+/** The same line once priced, as snapshotted onto an issued invoice. */
+export interface InvoicePartLine extends JobPartLine {
+  amount: string;
+}
+
 export const jobs = pgTable(
   'jobs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     jobNumber: text('job_number').notNull(),
-    status: jobStatusEnum('status').notNull().default('new'),
+    status: jobStatusEnum('status').notNull().default('active'),
     priority: priorityEnum('priority').notNull().default('medium'),
     dueDate: date('due_date'),
 
@@ -84,8 +116,23 @@ export const jobs = pgTable(
     vehicleYear: integer('vehicle_year'),
     vehicleColor: text('vehicle_color'),
 
+    /**
+     * The invoice content lives on the job, not on the invoice.
+     *
+     * This is the whole point of the job-centred rework: the owner enters the
+     * work once, on the job, and it stays editable forever. Regenerating an
+     * invoice re-reads these, which is why a sent invoice can be corrected
+     * without the job and the document ever disagreeing.
+     */
+    labourLines: jsonb('labour_lines').notNull().default([]).$type<LabourLine[]>(),
+    hourlyRate: numeric('hourly_rate', { precision: 10, scale: 2 }),
+    /** A flat labour figure. When set it wins over hours x rate entirely. */
+    labourTotalOverride: numeric('labour_total_override', { precision: 12, scale: 2 }),
+    parts: jsonb('parts').notNull().default([]).$type<JobPartLine[]>(),
+    otherComments: text('other_comments'),
+
+    /** Private. Never printed on an invoice. */
     notes: text('notes'),
-    internalNotes: text('internal_notes'),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -118,18 +165,14 @@ export const jobAttachments = pgTable(
   (table) => [index('job_attachments_job_id_idx').on(table.jobId)],
 );
 
-export interface InvoicePartLine {
-  partName: string;
-  partNumber: string;
-  qty: string;
-  unitPrice: string;
-  amount: string;
-}
-
 /**
  * An invoice row exists only once the owner has actually sent/shared it — there
  * is no draft state. Previewing in the Invoicer writes nothing, which is what
  * keeps the invoice number sequence gap-free.
+ *
+ * The row still snapshots its own totals rather than deriving them from the job,
+ * so exports and the money-owed figures stay correct even as the job is edited.
+ * Regenerating rewrites the snapshot from the job.
  */
 export const invoices = pgTable(
   'invoices',
@@ -141,15 +184,30 @@ export const invoices = pgTable(
       .references(() => jobs.id),
     issueDate: date('issue_date').notNull(),
 
-    workCarriedOut: text('work_carried_out'),
-    labourHours: numeric('labour_hours', { precision: 8, scale: 2 }),
+    /** Snapshot of the job's labour lines at the moment this was last sent. */
+    labourLines: jsonb('labour_lines').notNull().default([]).$type<LabourLine[]>(),
+    labourTotalOverride: numeric('labour_total_override', { precision: 12, scale: 2 }),
     hourlyRate: numeric('hourly_rate', { precision: 10, scale: 2 }),
 
-    servicesSubtotal: numeric('services_subtotal', { precision: 12, scale: 2 }).notNull(),
+    /**
+     * Retained for invoices issued before labour lines existed, so an old
+     * document still reproduces exactly as it was sent. New invoices leave
+     * these null and use `labourLines` instead.
+     */
+    workCarriedOut: text('work_carried_out'),
+    labourHours: numeric('labour_hours', { precision: 8, scale: 2 }),
+
+    /**
+     * The physical column names still say "services" while the code says
+     * "labour". Renaming them would mean an ALTER on a live table carrying
+     * issued invoices, for zero functional gain — Drizzle maps the name here
+     * instead, so the code reads correctly and the data is never at risk.
+     */
+    labourSubtotal: numeric('services_subtotal', { precision: 12, scale: 2 }).notNull(),
     partsSubtotal: numeric('parts_subtotal', { precision: 12, scale: 2 }).notNull(),
     vatRate: numeric('vat_rate', { precision: 5, scale: 2 }).notNull(),
     vatAmount: numeric('vat_amount', { precision: 12, scale: 2 }).notNull(),
-    totalServices: numeric('total_services', { precision: 12, scale: 2 }).notNull(),
+    totalLabour: numeric('total_services', { precision: 12, scale: 2 }).notNull(),
     totalParts: numeric('total_parts', { precision: 12, scale: 2 }).notNull(),
     grandTotal: numeric('grand_total', { precision: 12, scale: 2 }).notNull(),
 
@@ -160,10 +218,19 @@ export const invoices = pgTable(
     sentVia: sentViaEnum('sent_via').notNull(),
     sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+
+    /**
+     * Voiding never deletes: the number stays consumed so the sequence keeps no
+     * gaps, the document remains reconstructable for tax purposes, and the job
+     * is freed to be invoiced again under a fresh number.
+     */
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidReason: text('void_reason'),
   },
   (table) => [
     uniqueIndex('invoices_invoice_number_key').on(table.invoiceNumber),
     index('invoices_job_id_idx').on(table.jobId),
+    index('invoices_voided_at_idx').on(table.voidedAt),
   ],
 );
 

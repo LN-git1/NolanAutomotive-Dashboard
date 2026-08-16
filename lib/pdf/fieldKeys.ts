@@ -35,18 +35,20 @@ export const SIMPLE_FIELD_KEYS = [
   'vehicleMileage',
   'vehicleVin',
 
-  // Free-text blocks
-  'workCarriedOut',
+  // Free-text blocks. The work carried out is no longer a single free-text box —
+  // it is the labourTable below, one row per line with its own hours.
   'otherComments',
   'vatNumber',
 
-  // Totals. The template has a SUBTOTAL + TAX RATE pair under BOTH the services
+  // Totals. The template has a SUBTOTAL + TAX RATE pair under BOTH the labour
   // table and the parts table, then a four-line summary block at the bottom.
-  'totals.servicesSubtotal',
-  'totals.servicesTaxRate',
+  // These are the only places the labour figure appears in euro — the labour
+  // table itself prints hours.
+  'totals.labourSubtotal',
+  'totals.labourTaxRate',
   'totals.partsSubtotal',
   'totals.partsTaxRate',
-  'totals.totalServices',
+  'totals.totalLabour',
   'totals.totalParts',
   'totals.totalTax',
   'totals.grandTotal',
@@ -55,18 +57,23 @@ export const SIMPLE_FIELD_KEYS = [
 export type SimpleFieldKey = (typeof SIMPLE_FIELD_KEYS)[number];
 
 /** Repeating-row tables. Geometry is defined once as a row template, not per row. */
-export const ROW_TEMPLATE_KEYS = ['servicesTable', 'partsTable'] as const;
+export const ROW_TEMPLATE_KEYS = ['labourTable', 'partsTable'] as const;
 export type RowTemplateKey = (typeof ROW_TEMPLATE_KEYS)[number];
 
-/** Column keys per row template, in left-to-right template order. */
+/**
+ * Column keys per row template, in left-to-right template order.
+ *
+ * The labour table's second column is HOUR(S), not money. It was `amount` until
+ * the template was reworked; the geometry is unchanged, only the meaning.
+ */
 export const ROW_TEMPLATE_COLUMNS = {
-  servicesTable: ['description', 'amount'],
+  labourTable: ['description', 'hours'],
   partsTable: ['partName', 'partNumber', 'qty', 'unitPrice', 'amount'],
 } as const;
 
-export type ServicesRowColumn = (typeof ROW_TEMPLATE_COLUMNS)['servicesTable'][number];
+export type LabourRowColumn = (typeof ROW_TEMPLATE_COLUMNS)['labourTable'][number];
 export type PartsRowColumn = (typeof ROW_TEMPLATE_COLUMNS)['partsTable'][number];
-export type RowTemplateColumn = ServicesRowColumn | PartsRowColumn;
+export type RowTemplateColumn = LabourRowColumn | PartsRowColumn;
 
 /** Human-readable labels for the Template Mapper picklist. */
 export const FIELD_KEY_LABELS: Record<SimpleFieldKey, string> = {
@@ -83,21 +90,20 @@ export const FIELD_KEY_LABELS: Record<SimpleFieldKey, string> = {
   vehicleColor: 'Vehicle — colour',
   vehicleMileage: 'Vehicle — mileage',
   vehicleVin: 'Vehicle — VIN',
-  workCarriedOut: 'Work carried out (free text)',
   otherComments: 'Other comments',
   vatNumber: 'VAT number',
-  'totals.servicesSubtotal': 'Services — subtotal (€)',
-  'totals.servicesTaxRate': 'Services — tax rate (%)',
+  'totals.labourSubtotal': 'Labour — subtotal (€)',
+  'totals.labourTaxRate': 'Labour — tax rate (%)',
   'totals.partsSubtotal': 'Parts — subtotal (€)',
   'totals.partsTaxRate': 'Parts — tax rate (%)',
-  'totals.totalServices': 'Total services (€)',
+  'totals.totalLabour': 'Total labour (€)',
   'totals.totalParts': 'Total parts (€)',
   'totals.totalTax': 'Total tax (€)',
   'totals.grandTotal': 'Grand total (€)',
 };
 
 export const ROW_TEMPLATE_LABELS: Record<RowTemplateKey, string> = {
-  servicesTable: 'Services performed (repeating rows)',
+  labourTable: 'Work carried out — description + hours (repeating rows)',
   partsTable: 'Parts table (repeating rows)',
 };
 

@@ -84,18 +84,18 @@ describe('calcInvoiceTotals', () => {
 
   it('adds labour, parts and VAT the way the template presents them', () => {
     const totals = calcInvoiceTotals({
-      labourHours: '3.5',
+      labourLines: [{ description: 'Brakes', hours: '3.5' }],
       hourlyRate: '65.00',
       parts,
       vatRate: '23',
       vatEnabled: true,
     });
 
-    expect(totals.servicesSubtotalCents).toBe(22_750); // 3.5 x 65.00
+    expect(totals.labourSubtotalCents).toBe(22_750); // 3.5 x 65.00
     expect(totals.partsSubtotalCents).toBe(17_650); // 68.50 + 108.00
 
     // VAT is computed per component, then summed.
-    expect(totals.servicesTaxCents).toBe(5_233);
+    expect(totals.labourTaxCents).toBe(5_233);
     expect(totals.partsTaxCents).toBe(4_060);
     expect(totals.totalTaxCents).toBe(9_293);
 
@@ -105,7 +105,7 @@ describe('calcInvoiceTotals', () => {
 
   it('computes each part line amount as qty x unit price', () => {
     const totals = calcInvoiceTotals({
-      labourHours: '0',
+      labourLines: [],
       hourlyRate: '0',
       parts,
       vatRate: '23',
@@ -118,7 +118,7 @@ describe('calcInvoiceTotals', () => {
 
   it('supports fractional quantities without float drift', () => {
     const totals = calcInvoiceTotals({
-      labourHours: '0',
+      labourLines: [],
       hourlyRate: '0',
       parts: [{ partName: 'Oil', partNumber: 'O-1', qty: '4.5', unitPrice: '9.20' }],
       vatRate: '0',
@@ -131,7 +131,7 @@ describe('calcInvoiceTotals', () => {
 
   it('forces the rate and every tax amount to zero when VAT is disabled', () => {
     const totals = calcInvoiceTotals({
-      labourHours: '10',
+      labourLines: [{ description: 'Service', hours: '10' }],
       hourlyRate: '50',
       parts,
       // A rate is still configured; being unregistered must override it.
@@ -140,15 +140,15 @@ describe('calcInvoiceTotals', () => {
     });
 
     expect(totals.vatBasisPoints).toBe(0);
-    expect(totals.servicesTaxCents).toBe(0);
+    expect(totals.labourTaxCents).toBe(0);
     expect(totals.partsTaxCents).toBe(0);
     expect(totals.totalTaxCents).toBe(0);
-    expect(totals.grandTotalCents).toBe(totals.servicesSubtotalCents + totals.partsSubtotalCents);
+    expect(totals.grandTotalCents).toBe(totals.labourSubtotalCents + totals.partsSubtotalCents);
   });
 
   it('handles an invoice with no parts and no labour', () => {
     const totals = calcInvoiceTotals({
-      labourHours: '',
+      labourLines: [],
       hourlyRate: '',
       parts: [],
       vatRate: '23',

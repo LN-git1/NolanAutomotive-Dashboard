@@ -20,15 +20,15 @@ export async function GET() {
       customerName: jobs.customerName,
       vehicleRegistration: jobs.vehicleRegistration,
       jobStatus: jobs.status,
-      labourHours: invoices.labourHours,
       hourlyRate: invoices.hourlyRate,
-      totalServices: invoices.totalServices,
+      totalLabour: invoices.totalLabour,
       totalParts: invoices.totalParts,
       vatRate: invoices.vatRate,
       vatAmount: invoices.vatAmount,
       grandTotal: invoices.grandTotal,
       sentVia: invoices.sentVia,
       sentAt: invoices.sentAt,
+      voidedAt: invoices.voidedAt,
     })
     .from(invoices)
     .innerJoin(jobs, eq(invoices.jobId, jobs.id))
@@ -41,15 +41,17 @@ export async function GET() {
     { key: 'customerName', header: 'Customer' },
     { key: 'vehicleRegistration', header: 'Registration' },
     { key: 'jobStatus', header: 'Job status' },
-    { key: 'labourHours', header: 'Labour hours' },
     { key: 'hourlyRate', header: 'Hourly rate' },
-    { key: 'totalServices', header: 'Total services' },
+    { key: 'totalLabour', header: 'Total labour' },
     { key: 'totalParts', header: 'Total parts' },
     { key: 'vatRate', header: 'VAT rate %' },
     { key: 'vatAmount', header: 'VAT amount' },
     { key: 'grandTotal', header: 'Grand total' },
     { key: 'sentVia', header: 'Sent via' },
     { key: 'sentAt', header: 'Sent at' },
+    // Blank for a live invoice. A voided one keeps its row and its number so the
+    // sequence stays continuous — the accountant needs to see it, marked.
+    { key: 'voidedAt', header: 'Voided at' },
   ]);
 
   return csvResponse(csv, `nolan-invoices-${todayIsoDate()}.csv`);

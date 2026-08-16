@@ -95,9 +95,18 @@ export interface PartLineComputed extends PartLineInput {
   amount: string;
 }
 
+export interface LabourLineInput {
+  description: string;
+  /** Hours may be fractional ("2.5") or empty for a line with no billable time. */
+  hours: string | number | null | undefined;
+}
+
 export interface InvoiceTotalsInput {
-  labourHours: string | number | null | undefined;
+  /** One entry per printed WORK CARRIED OUT row. Hours are summed for the total. */
+  labourLines: LabourLineInput[];
   hourlyRate: string | number | null | undefined;
+  /** A flat labour figure. When set it replaces hours x rate entirely. */
+  labourTotalOverride?: string | number | null;
   parts: PartLineInput[];
   /** Percentage, e.g. "23". Ignored entirely when vatEnabled is false. */
   vatRate: string | number | null | undefined;
@@ -107,27 +116,62 @@ export interface InvoiceTotalsInput {
 export interface InvoiceTotals {
   /** Line amounts computed per part row. */
   parts: PartLineComputed[];
-  servicesSubtotalCents: number;
+  /** Sum of the labour lines' hours, in hundredths of an hour. */
+  totalHoursCentis: number;
+  /** True when the flat override supplied the labour figure. */
+  labourIsOverridden: boolean;
+  labourSubtotalCents: number;
   partsSubtotalCents: number;
   vatBasisPoints: number;
-  servicesTaxCents: number;
+  labourTaxCents: number;
   partsTaxCents: number;
   totalTaxCents: number;
   grandTotalCents: number;
 }
 
 /**
+ * Sum labour hours in hundredths, so 2.5 + 0.25 is exact rather than 2.75 by way
+ * of IEEE-754. `toCents` is the same decimal-string parse used for money, which
+ * is why it is reused rather than reimplemented for hours.
+ */
+export function sumLabourHours(lines: LabourLineInput[]): number {
+  return lines.reduce((sum, line) => sum + toCents(line.hours), 0);
+}
+
+/** Render summed hundredth-hours for display: 250 -> "2.5", 1000 -> "10". */
+export function formatHours(centis: number): string {
+  return fromCents(centis)
+    .replace(/\.00$/, '')
+    .replace(/(\.\d)0$/, '$1');
+}
+
+/**
  * The single definition of how an invoice adds up.
  *
- * Reading of the template's totals block: TOTAL SERVICES and TOTAL PARTS are the
+ * Reading of the template's totals block: TOTAL LABOUR and TOTAL PARTS are the
  * ex-VAT subtotals, TOTAL TAX is the combined VAT on both, and TOTAL is the sum
  * of all three. VAT is computed per component and then summed (rather than on
  * the combined subtotal) so each component's tax line is individually correct.
  *
+ * Labour is the sum of the lines' hours multiplied by the rate — UNLESS a flat
+ * override is set, in which case that figure is the labour total outright. The
+ * hours are still carried through either way, because the template prints them
+ * per line regardless of how the money was arrived at.
+ *
  * When VAT is not enabled the rate and every tax amount are forced to zero.
  */
 export function calcInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotals {
-  const labourCents = applyQuantity(input.labourHours, input.hourlyRate);
+  const totalHoursCentis = sumLabourHours(input.labourLines);
+
+  const override = input.labourTotalOverride;
+  const labourIsOverridden =
+    override !== null && override !== undefined && String(override).trim() !== '';
+
+  const labourCents = labourIsOverridden
+    ? toCents(override)
+    : // hundredth-hours x cents-per-hour / 100 = cents.
+      // e.g. 3.5h at EUR 65 -> 350 * 6500 / 100 = 22_750 cents.
+      Math.round((totalHoursCentis * toCents(input.hourlyRate)) / 100);
 
   const parts: PartLineComputed[] = input.parts.map((part) => ({
     ...part,
@@ -137,16 +181,18 @@ export function calcInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotals {
   const partsSubtotalCents = parts.reduce((sum, part) => sum + toCents(part.amount), 0);
   const vatBasisPoints = input.vatEnabled ? rateToBasisPoints(input.vatRate) : 0;
 
-  const servicesTaxCents = applyRate(labourCents, vatBasisPoints);
+  const labourTaxCents = applyRate(labourCents, vatBasisPoints);
   const partsTaxCents = applyRate(partsSubtotalCents, vatBasisPoints);
-  const totalTaxCents = servicesTaxCents + partsTaxCents;
+  const totalTaxCents = labourTaxCents + partsTaxCents;
 
   return {
     parts,
-    servicesSubtotalCents: labourCents,
+    totalHoursCentis,
+    labourIsOverridden,
+    labourSubtotalCents: labourCents,
     partsSubtotalCents,
     vatBasisPoints,
-    servicesTaxCents,
+    labourTaxCents,
     partsTaxCents,
     totalTaxCents,
     grandTotalCents: labourCents + partsSubtotalCents + totalTaxCents,

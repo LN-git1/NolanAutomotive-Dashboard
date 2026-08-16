@@ -3,7 +3,7 @@ import 'server-only';
 import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 
-import { formatAmount, formatRate } from '@/lib/money';
+import { formatAmount, formatHours, formatRate, toCents } from '@/lib/money';
 
 import { loadInvoiceAssets } from './assets';
 import rawCoords from './invoiceTemplateCoords.json';
@@ -41,6 +41,17 @@ export interface StampPartLine {
   amount: string;
 }
 
+/**
+ * One row of the template's WORK CARRIED OUT table. The second column is
+ * HOUR(S): the hours spent on this line, not its cost. The euro figure for
+ * labour appears only in the SUBTOTAL and TOTAL LABOUR boxes.
+ */
+export interface StampLabourLine {
+  description: string;
+  /** Decimal string. Empty prints nothing in the HOUR(S) column. */
+  hours: string;
+}
+
 export interface StampInvoiceInput {
   invoiceNumber: string;
   issueDate: Date;
@@ -58,14 +69,14 @@ export interface StampInvoiceInput {
   vehicleMileage?: number | null;
   vehicleVin?: string | null;
 
-  workCarriedOut?: string | null;
+  labourLines: StampLabourLine[];
   otherComments?: string | null;
   /** Rendered into the comments block when the template has no VAT-number blank. */
   vatNumber?: string | null;
 
   parts: StampPartLine[];
 
-  servicesSubtotalCents: number;
+  labourSubtotalCents: number;
   partsSubtotalCents: number;
   totalTaxCents: number;
   grandTotalCents: number;
@@ -89,8 +100,9 @@ export function partsRowCapacity(): number {
   return COORDS.rowTemplates.partsTable?.maxRows ?? 0;
 }
 
-export function serviceRowCapacity(): number {
-  return COORDS.rowTemplates.servicesTable?.maxRows ?? 0;
+/** Same contract for the WORK CARRIED OUT table. */
+export function labourRowCapacity(): number {
+  return COORDS.rowTemplates.labourTable?.maxRows ?? 0;
 }
 
 /**
@@ -151,15 +163,14 @@ function buildFieldValues(input: StampInvoiceInput): Partial<Record<SimpleFieldK
       input.vehicleMileage != null ? input.vehicleMileage.toLocaleString('en-IE') : '',
     vehicleVin: input.vehicleVin ?? '',
 
-    workCarriedOut: input.workCarriedOut ?? '',
     otherComments: buildCommentsBlock(input.otherComments, input.vatNumber),
     vatNumber: input.vatNumber ?? '',
 
-    'totals.servicesSubtotal': formatAmount(input.servicesSubtotalCents),
-    'totals.servicesTaxRate': vatRateDisplay,
+    'totals.labourSubtotal': formatAmount(input.labourSubtotalCents),
+    'totals.labourTaxRate': vatRateDisplay,
     'totals.partsSubtotal': formatAmount(input.partsSubtotalCents),
     'totals.partsTaxRate': vatRateDisplay,
-    'totals.totalServices': formatAmount(input.servicesSubtotalCents),
+    'totals.totalLabour': formatAmount(input.labourSubtotalCents),
     'totals.totalParts': formatAmount(input.partsSubtotalCents),
     'totals.totalTax': formatAmount(input.totalTaxCents),
     'totals.grandTotal': formatAmount(input.grandTotalCents),
@@ -288,34 +299,27 @@ function drawTable(
 }
 
 /**
- * The services area of the template is a multi-row table with a description
- * column and an amount column. The free-text "work carried out" is wrapped
- * across those rows, with the labour total placed on the first row.
+ * The WORK CARRIED OUT table: one row per labour line, with the hours spent on
+ * that line in the HOUR(S) column.
+ *
+ * Note what is deliberately NOT here — the euro figure. The template prints
+ * hours against each line and shows money only in the SUBTOTAL and TOTAL LABOUR
+ * boxes, so a flat-rate override changes the totals without ever contradicting
+ * the hours the customer can see.
+ *
+ * Hours are normalised through the money parser so "2.50" and "2.5" both print
+ * as "2.5", and a line with no hours prints an empty cell rather than "0".
  */
-function buildServiceRows(
-  input: StampInvoiceInput,
-  template: RowTemplate,
-  font: PDFFont,
-): TableRow[] {
-  const description = (input.workCarriedOut ?? '').trim();
-  const amount = formatAmount(input.servicesSubtotalCents);
-  const descriptionWidth = template.columns.description?.width ?? 0;
-
-  if (description === '' && input.servicesSubtotalCents === 0) return [];
-
-  const fitted = fitTextInBox(description, font, {
-    fontSize: template.fontSize,
-    minFontSize: template.minFontSize,
-    maxWidth: descriptionWidth,
-    maxHeight: template.maxRows * template.rowHeight,
-  });
-
-  const lines = fitted.lines.length > 0 ? fitted.lines : [''];
-
-  return lines.slice(0, template.maxRows).map((line, index) => ({
-    description: line,
-    amount: index === 0 ? amount : '',
-  }));
+function buildLabourRows(input: StampInvoiceInput): TableRow[] {
+  return input.labourLines
+    .filter((line) => line.description.trim() !== '' || line.hours.trim() !== '')
+    .map((line) => {
+      const hours = line.hours.trim();
+      return {
+        description: line.description.trim(),
+        hours: hours === '' ? '' : formatHours(toCents(hours)),
+      };
+    });
 }
 
 function buildPartRows(input: StampInvoiceInput): TableRow[] {
@@ -345,6 +349,13 @@ export async function stampInvoice(input: StampInvoiceInput): Promise<Uint8Array
     );
   }
 
+  if (input.labourLines.length > labourRowCapacity()) {
+    throw new Error(
+      `This invoice has ${input.labourLines.length} work lines but the template only has room ` +
+        `for ${labourRowCapacity()}. Consolidate the lines or issue a second invoice.`,
+    );
+  }
+
   const assets = await loadInvoiceAssets();
   const pdfDoc = await PDFDocument.load(assets.template);
 
@@ -369,9 +380,9 @@ export async function stampInvoice(input: StampInvoiceInput): Promise<Uint8Array
     drawField(page, box, value, { regular, bold });
   }
 
-  const servicesTemplate = COORDS.rowTemplates.servicesTable;
-  if (servicesTemplate) {
-    drawTable(page, servicesTemplate, buildServiceRows(input, servicesTemplate, regular), regular);
+  const labourTemplate = COORDS.rowTemplates.labourTable;
+  if (labourTemplate) {
+    drawTable(page, labourTemplate, buildLabourRows(input), regular);
   }
 
   const partsTemplate = COORDS.rowTemplates.partsTable;

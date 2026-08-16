@@ -1,28 +1,17 @@
 import { z } from 'zod';
 
-import { decimalString, optionalText, uuidString } from './common';
-
-export const partLineSchema = z.object({
-  partName: z.string().trim().min(1, 'Part name is required').max(200),
-  partNumber: z.string().trim().max(60).default(''),
-  qty: decimalString({ label: 'Quantity' }),
-  unitPrice: decimalString({ label: 'Unit price' }),
-});
-
-export type PartLineInput = z.infer<typeof partLineSchema>;
+import { uuidString } from './common';
 
 /**
- * Payload shared by the preview (`/api/invoices/generate`) and the committing
- * call (`/api/invoices/finalize`). Both accept identical invoice content; only
- * finalize additionally requires `sentVia`.
+ * The invoice payload is now just a job reference.
+ *
+ * Everything that used to travel in this body — work carried out, labour, parts,
+ * comments — lives on the job and is read server-side at build time. That is
+ * what makes an invoice re-generatable: there is no client-supplied content that
+ * could differ from what the job says.
  */
 export const invoiceDraftSchema = z.object({
   jobId: uuidString,
-  workCarriedOut: optionalText,
-  labourHours: decimalString({ label: 'Labour hours', allowEmpty: true }),
-  hourlyRate: decimalString({ label: 'Hourly rate', allowEmpty: true }),
-  parts: z.array(partLineSchema).max(50).default([]),
-  otherComments: optionalText,
 });
 
 export type InvoiceDraft = z.infer<typeof invoiceDraftSchema>;
@@ -34,3 +23,12 @@ export const invoiceFinalizeSchema = invoiceDraftSchema.extend({
 });
 
 export type InvoiceFinalizeInput = z.infer<typeof invoiceFinalizeSchema>;
+
+/** Re-sending an existing invoice: same number, freshly stamped from the job. */
+export const invoiceRegenerateSchema = z.object({
+  sentVia: sentViaSchema,
+});
+
+export const invoiceVoidSchema = z.object({
+  reason: z.string().trim().max(300).optional(),
+});

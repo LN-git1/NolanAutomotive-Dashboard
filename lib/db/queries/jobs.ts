@@ -73,16 +73,28 @@ export async function listJobsByStatus(status: JobStatus, limit = 10) {
 }
 
 /**
- * Candidates for the Invoicer picker. Completed jobs are the normal case, but
- * anything not yet paid is allowed so the owner is never blocked by a job whose
- * status they forgot to advance.
+ * Candidates for the Invoicer picker.
  *
- * Jobs that already have an invoice are excluded: a job is invoiced once, and
- * offering it again would only lead to a rejected finalize. The authoritative
- * guard is in the finalize transaction — this just keeps the owner from
- * choosing a job that cannot proceed.
+ * Every job that isn't deleted is offered, including ones already invoiced —
+ * because an existing invoice can now be edited and re-sent, so those jobs are a
+ * legitimate destination rather than a dead end. The picker badges them and the
+ * Invoicer switches to its regenerate path.
+ *
+ * The invoice content rides along so the Invoicer can show what it is about to
+ * stamp without a second round trip. `liveInvoiceId` is null when the only
+ * invoice is voided, which is exactly the state that allows a fresh number.
  */
 export async function listInvoiceableJobs() {
+  const live = db
+    .select({
+      jobId: invoices.jobId,
+      id: sql<string>`${invoices.id}`.as('live_invoice_id'),
+      number: sql<string>`${invoices.invoiceNumber}`.as('live_invoice_number'),
+    })
+    .from(invoices)
+    .where(isNull(invoices.voidedAt))
+    .as('live');
+
   return db
     .select({
       id: jobs.id,
@@ -90,20 +102,61 @@ export async function listInvoiceableJobs() {
       customerName: jobs.customerName,
       vehicleRegistration: jobs.vehicleRegistration,
       status: jobs.status,
+      labourLines: jobs.labourLines,
+      hourlyRate: jobs.hourlyRate,
+      labourTotalOverride: jobs.labourTotalOverride,
+      parts: jobs.parts,
+      otherComments: jobs.otherComments,
+      liveInvoiceId: live.id,
+      liveInvoiceNumber: live.number,
     })
     .from(jobs)
-    .where(
-      and(
-        notDeleted,
-        sql`${jobs.status} <> 'paid'`,
-        sql`NOT EXISTS (SELECT 1 FROM ${invoices} WHERE ${invoices.jobId} = ${jobs.id})`,
-      ),
+    .leftJoin(live, eq(live.jobId, jobs.id))
+    .where(notDeleted)
+    .orderBy(
+      // Ready-to-bill work first, then whatever was touched most recently.
+      sql`CASE WHEN ${jobs.status} = 'completed' THEN 0 WHEN ${jobs.status} = 'paid' THEN 2 ELSE 1 END`,
+      desc(jobs.updatedAt),
     )
-    .orderBy(sql`CASE WHEN ${jobs.status} = 'completed' THEN 0 ELSE 1 END`, desc(jobs.updatedAt))
     .limit(300);
 }
 
-/** Invoiced-but-unpaid jobs with their invoice, for Awaiting Payments. */
+/**
+ * The most recent job for a registration, powering the create form's prefill.
+ * Reads history rather than introducing a customer table — a repeat visit is
+ * just the previous job's details copied forward, and nothing has to stay in sync.
+ */
+export async function findJobByRegistration(registration: string) {
+  const term = registration.trim().toUpperCase();
+  if (term === '') return null;
+
+  const rows = await db
+    .select({
+      jobNumber: jobs.jobNumber,
+      customerName: jobs.customerName,
+      customerPhone: jobs.customerPhone,
+      customerEmail: jobs.customerEmail,
+      customerAddress: jobs.customerAddress,
+      vehicleRegistration: jobs.vehicleRegistration,
+      vehicleMake: jobs.vehicleMake,
+      vehicleModel: jobs.vehicleModel,
+      vehicleYear: jobs.vehicleYear,
+      vehicleColor: jobs.vehicleColor,
+      vehicleVin: jobs.vehicleVin,
+      vehicleMileage: jobs.vehicleMileage,
+    })
+    .from(jobs)
+    .where(and(eq(jobs.vehicleRegistration, term), notDeleted))
+    .orderBy(desc(jobs.createdAt))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+/**
+ * Invoiced-but-unpaid jobs with their invoice, for Awaiting Payments.
+ * Voided invoices are excluded — a voided invoice is not money owed.
+ */
 export async function listAwaitingPayment() {
   return db
     .select({
@@ -111,7 +164,7 @@ export async function listAwaitingPayment() {
       invoice: invoices,
     })
     .from(jobs)
-    .leftJoin(invoices, eq(invoices.jobId, jobs.id))
+    .leftJoin(invoices, and(eq(invoices.jobId, jobs.id), isNull(invoices.voidedAt)))
     .where(and(eq(jobs.status, 'invoiced'), notDeleted))
     .orderBy(desc(jobs.updatedAt));
 }
@@ -124,7 +177,6 @@ export async function countJobsByStatus() {
     .groupBy(jobs.status);
 
   const counts: Record<JobStatus, number> = {
-    new: 0,
     active: 0,
     completed: 0,
     invoiced: 0,

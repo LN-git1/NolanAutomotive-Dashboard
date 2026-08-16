@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { requireSession } from '@/lib/auth/require-session';
 import { allocateNumber, formatJobNumber } from '@/lib/counters';
 import { db } from '@/lib/db';
+import { findJobByRegistration } from '@/lib/db/queries/jobs';
 import { jobAttachments, jobs } from '@/lib/db/schema';
 import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
 import { removeObject } from '@/lib/storage/signedUrl';
@@ -70,6 +71,16 @@ export async function updateJob(jobId: string, formData: FormData): Promise<Acti
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath('/');
   return { ok: true, jobId };
+}
+
+/**
+ * Look up the last job for a registration so the create form can offer to fill
+ * in a returning customer. Returns only the fields the form prefills — there is
+ * no reason to ship a whole job row to the browser for this.
+ */
+export async function lookupJobByRegistration(registration: string) {
+  await requireSession();
+  return findJobByRegistration(registration);
 }
 
 export async function changeJobStatus(jobId: string, status: string): Promise<ActionResult> {

@@ -1,6 +1,9 @@
 {
   "_comment": "Generated defaults derived from the pre-printed label positions extracted from invoice-template.pdf. Coordinates are PDF points, origin bottom-left, y = text baseline. Regenerate or fine-tune with the Template Mapper: TEMPLATE_MAPPER=true pnpm dev -> /dev/template-mapper. NOTE: fields that sit on a pre-printed ruled line carry a maxHeight of roughly one line so they SHRINK to fit rather than wrapping onto the row below. Fields absent from this file are simply not stamped (see README 'Template deviations').",
-  "pageSize": { "width": 612, "height": 792 },
+  "pageSize": {
+    "width": 612,
+    "height": 792
+  },
   "fields": {
     "invoiceNumber": {
       "x": 155,
@@ -24,7 +27,6 @@
       "color": "white",
       "bold": true
     },
-
     "customerName": {
       "x": 158,
       "y": 646.2,
@@ -52,7 +54,6 @@
       "minFontSize": 6.5,
       "align": "left"
     },
-
     "vehicleYear": {
       "x": 432,
       "y": 646.2,
@@ -98,7 +99,6 @@
       "minFontSize": 7,
       "align": "left"
     },
-
     "otherComments": {
       "x": 64,
       "y": 160,
@@ -108,8 +108,7 @@
       "minFontSize": 6,
       "align": "left"
     },
-
-    "totals.servicesSubtotal": {
+    "totals.labourSubtotal": {
       "x": 505,
       "y": 387.9,
       "maxWidth": 62,
@@ -118,7 +117,7 @@
       "minFontSize": 7,
       "align": "right"
     },
-    "totals.servicesTaxRate": {
+    "totals.labourTaxRate": {
       "x": 505,
       "y": 371.4,
       "maxWidth": 62,
@@ -145,7 +144,7 @@
       "minFontSize": 7,
       "align": "right"
     },
-    "totals.totalServices": {
+    "totals.totalLabour": {
       "x": 505,
       "y": 139.8,
       "maxWidth": 62,
@@ -184,29 +183,57 @@
     }
   },
   "rowTemplates": {
-    "servicesTable": {
+    "labourTable": {
       "startY": 508,
       "rowHeight": 20,
-      "maxRows": 5,
+      "maxRows": 6,
       "fontSize": 9,
       "minFontSize": 6.5,
       "columns": {
-        "description": { "x": 64, "width": 418, "align": "left" },
-        "amount": { "x": 490, "width": 77, "align": "right" }
+        "description": {
+          "x": 64,
+          "width": 418,
+          "align": "left"
+        },
+        "hours": {
+          "x": 490,
+          "width": 77,
+          "align": "right"
+        }
       }
     },
     "partsTable": {
       "startY": 315,
       "rowHeight": 20,
-      "maxRows": 5,
+      "maxRows": 6,
       "fontSize": 8.5,
       "minFontSize": 6.5,
       "columns": {
-        "partName": { "x": 64, "width": 231, "align": "left" },
-        "partNumber": { "x": 302, "width": 88, "align": "left" },
-        "qty": { "x": 395, "width": 25, "align": "right" },
-        "unitPrice": { "x": 430, "width": 55, "align": "right" },
-        "amount": { "x": 497, "width": 70, "align": "right" }
+        "partName": {
+          "x": 64,
+          "width": 231,
+          "align": "left"
+        },
+        "partNumber": {
+          "x": 302,
+          "width": 88,
+          "align": "left"
+        },
+        "qty": {
+          "x": 395,
+          "width": 25,
+          "align": "right"
+        },
+        "unitPrice": {
+          "x": 430,
+          "width": 55,
+          "align": "right"
+        },
+        "amount": {
+          "x": 497,
+          "width": 70,
+          "align": "right"
+        }
       }
     }
   }

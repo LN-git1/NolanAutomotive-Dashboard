@@ -61,6 +61,61 @@ export const decimalString = (options: { label: string; allowEmpty?: boolean }) 
       `${options.label} must be a positive number`,
     );
 
+/**
+ * Same decimal, but the field may be absent from the payload entirely — an
+ * unchecked box, a collapsed form section, a row whose key was never set.
+ * `decimalString` rejects `undefined`, which is right for a field that must be
+ * present and wrong for one that need not be.
+ */
+export const optionalDecimalString = (options: { label: string }) =>
+  z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform((value) => (value === undefined || value === null ? '' : String(value).trim()))
+    .refine(
+      (value) => value === '' || /^\d+(\.\d{1,4})?$/.test(value),
+      `${options.label} must be a positive number`,
+    );
+
+/**
+ * ...and null for a nullable column, where "unset" and 0 mean different things
+ * to the person reading the form.
+ */
+export const optionalDecimal = (options: { label: string }) =>
+  optionalDecimalString(options).transform((value) => (value === '' ? null : value));
+
+/**
+ * Rows from a repeating-row editor.
+ *
+ * FormData has no encoding for an array of objects, so the editors post their
+ * rows as a single JSON string in a hidden input. This parses that string and
+ * then validates it with the real item schema, so the server action stays the
+ * only validator — the client is never trusted to have produced sane rows.
+ */
+export const jsonArray = <T extends z.ZodTypeAny>(
+  item: T,
+  options: { label: string; max: number },
+) =>
+  z
+    .string()
+    .optional()
+    .transform((value, ctx): unknown[] => {
+      if (!value || value.trim() === '') return [];
+      try {
+        const parsed: unknown = JSON.parse(value);
+        if (!Array.isArray(parsed)) throw new Error('not an array');
+        return parsed;
+      } catch {
+        ctx.addIssue({ code: 'custom', message: `${options.label} could not be read` });
+        return z.NEVER;
+      }
+    })
+    .pipe(
+      z
+        .array(item)
+        .max(options.max, `${options.label}: at most ${options.max} lines`),
+    );
+
 /** ISO date (yyyy-mm-dd) from a date input, or null. */
 export const optionalDate = z
   .string()

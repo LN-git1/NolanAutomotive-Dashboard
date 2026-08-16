@@ -1,7 +1,10 @@
 import { z } from 'zod';
 
 import {
+  jsonArray,
   optionalDate,
+  optionalDecimal,
+  optionalDecimalString,
   optionalEmail,
   optionalInt,
   optionalText,
@@ -9,7 +12,11 @@ import {
   uuidString,
 } from './common';
 
-export const JOB_STATUSES = ['new', 'active', 'completed', 'invoiced', 'paid'] as const;
+/**
+ * `new` was deliberately removed — a job that exists is a job that is active,
+ * so the extra state cost a tap and earned nothing.
+ */
+export const JOB_STATUSES = ['active', 'completed', 'invoiced', 'paid'] as const;
 export const JOB_PRIORITIES = ['low', 'medium', 'high'] as const;
 
 export const jobStatusSchema = z.enum(JOB_STATUSES);
@@ -17,6 +24,41 @@ export const jobPrioritySchema = z.enum(JOB_PRIORITIES);
 
 const currentYear = new Date().getFullYear();
 
+/**
+ * One row of the invoice's WORK CARRIED OUT table: what was done, and the hours
+ * it took. Hours may be blank for a line that carries no billable time (e.g.
+ * "Road tested"), which prints an empty HOUR(S) cell.
+ */
+export const labourLineSchema = z.object({
+  description: z.string().trim().max(300).default(''),
+  hours: optionalDecimalString({ label: 'Hours' }),
+});
+
+export type LabourLineInput = z.infer<typeof labourLineSchema>;
+
+/**
+ * A blank quantity or price is read as zero rather than rejected: the owner is
+ * mid-entry as often as mistaken, and a line worth nothing is a legitimate thing
+ * to record. A *malformed* number is still an error.
+ */
+export const partLineSchema = z.object({
+  partName: z.string().trim().min(1, 'Part name is required').max(200),
+  partNumber: z.string().trim().max(60).default(''),
+  qty: optionalDecimalString({ label: 'Quantity' }).transform((value) =>
+    value === '' ? '0' : value,
+  ),
+  unitPrice: optionalDecimalString({ label: 'Unit price' }).transform((value) =>
+    value === '' ? '0' : value,
+  ),
+});
+
+export type PartLineInput = z.infer<typeof partLineSchema>;
+
+/**
+ * The job now carries everything that ends up on the invoice. This is the point
+ * of the job-centred rework: one record, entered once, editable forever, and
+ * re-read every time an invoice is generated or regenerated.
+ */
 export const jobInputSchema = z.object({
   customerName: requiredText('Customer name', 200),
   customerPhone: optionalText,
@@ -33,11 +75,20 @@ export const jobInputSchema = z.object({
   vehicleMileage: optionalInt({ label: 'Mileage', min: 0, max: 5_000_000 }),
   vehicleColor: optionalText,
 
-  status: jobStatusSchema.default('new'),
+  status: jobStatusSchema.default('active'),
   priority: jobPrioritySchema.default('medium'),
   dueDate: optionalDate,
+
+  // Invoice content.
+  labourLines: jsonArray(labourLineSchema, { label: 'Work lines', max: 50 }),
+  hourlyRate: optionalDecimal({ label: 'Hourly rate' }),
+  /** When set, this is the labour total outright — hours x rate is ignored. */
+  labourTotalOverride: optionalDecimal({ label: 'Custom labour total' }),
+  parts: jsonArray(partLineSchema, { label: 'Parts', max: 50 }),
+  otherComments: optionalText,
+
+  /** Private. Never printed on an invoice. */
   notes: optionalText,
-  internalNotes: optionalText,
 });
 
 export type JobInput = z.infer<typeof jobInputSchema>;

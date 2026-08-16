@@ -1,70 +1,42 @@
 'use client';
 
-import { FileText, Plus, Trash2 } from 'lucide-react';
+import { FileText, Pencil } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
-import {
-  Alert,
-  Button,
-  buttonClass,
-  Card,
-  CardBody,
-  CardHeader,
-  Field,
-  Input,
-  Textarea,
-} from '@/components/ui';
+import { Alert, Button, buttonClass, Card, CardBody, CardHeader } from '@/components/ui';
 import { JobPicker, type InvoiceableJob } from '@/components/invoicer/job-picker';
 import { SendBar, type FinalizedInvoice, type SendChannel } from '@/components/invoicer/send-bar';
-import { calcInvoiceTotals, formatEur } from '@/lib/money';
+import { calcInvoiceTotals, formatEur, formatHours } from '@/lib/money';
 
-interface PartRow {
-  key: string;
-  partName: string;
-  partNumber: string;
-  qty: string;
-  unitPrice: string;
-}
-
-function emptyRow(): PartRow {
-  return {
-    key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    partName: '',
-    partNumber: '',
-    qty: '1',
-    unitPrice: '',
-  };
-}
-
+/**
+ * The Invoicer is now a thin step: choose a job, check the PDF, send it.
+ *
+ * Nothing about the invoice is editable here. The work, labour, parts and
+ * comments all live on the job, which is what makes an invoice re-generatable —
+ * there is exactly one place the content can be changed, so the document and the
+ * job can never drift apart.
+ */
 export function Invoicer({
   jobs,
-  defaultHourlyRate,
   vatEnabled,
   vatRate,
-  maxParts,
 }: {
   jobs: InvoiceableJob[];
-  defaultHourlyRate: string;
   vatEnabled: boolean;
   vatRate: string;
-  maxParts: number;
 }) {
   const router = useRouter();
 
   const [job, setJob] = useState<InvoiceableJob | null>(null);
-  const [workCarriedOut, setWorkCarriedOut] = useState('');
-  const [labourHours, setLabourHours] = useState('');
-  const [hourlyRate, setHourlyRate] = useState(defaultHourlyRate);
-  const [otherComments, setOtherComments] = useState('');
-  const [parts, setParts] = useState<PartRow[]>([]);
-
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [generating, setGenerating] = useState(false);
   const [pendingChannel, setPendingChannel] = useState<SendChannel | null>(null);
   const [finalized, setFinalized] = useState<FinalizedInvoice | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Object URLs are a leak if not revoked when replaced or unmounted.
   useEffect(() => {
@@ -73,42 +45,32 @@ export function Invoicer({
     };
   }, [previewUrl]);
 
-  /** Live totals, computed with the same module the server uses. */
+  /** Totals shown read-only, computed with the same module the server uses. */
   const totals = useMemo(
     () =>
       calcInvoiceTotals({
-        labourHours,
-        hourlyRate,
-        parts: parts
-          .filter((row) => row.partName.trim() !== '')
-          .map((row) => ({
-            partName: row.partName,
-            partNumber: row.partNumber,
-            qty: row.qty || '0',
-            unitPrice: row.unitPrice || '0',
-          })),
+        labourLines: job?.labourLines ?? [],
+        hourlyRate: job?.hourlyRate,
+        labourTotalOverride: job?.labourTotalOverride,
+        parts: job?.parts ?? [],
         vatRate,
         vatEnabled,
       }),
-    [labourHours, hourlyRate, parts, vatRate, vatEnabled],
+    [job, vatRate, vatEnabled],
   );
 
-  function buildPayload() {
-    return {
-      jobId: job?.id ?? '',
-      workCarriedOut,
-      labourHours,
-      hourlyRate,
-      otherComments,
-      parts: parts
-        .filter((row) => row.partName.trim() !== '')
-        .map((row) => ({
-          partName: row.partName,
-          partNumber: row.partNumber,
-          qty: row.qty || '0',
-          unitPrice: row.unitPrice || '0',
-        })),
-    };
+  const isResend = Boolean(job?.liveInvoiceId);
+  const hasContent =
+    (job?.labourLines.length ?? 0) > 0 || (job?.parts.length ?? 0) > 0;
+
+  function selectJob(next: InvoiceableJob | null) {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setJob(next);
+    setPreviewBlob(null);
+    setPreviewUrl(null);
+    setFinalized(null);
+    setError(null);
+    setNotice(null);
   }
 
   async function handleGenerate() {
@@ -121,7 +83,7 @@ export function Invoicer({
       const response = await fetch('/api/invoices/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildPayload()),
+        body: JSON.stringify({ jobId: job.id }),
       });
 
       if (!response.ok) {
@@ -135,6 +97,12 @@ export function Invoicer({
 
       setPreviewBlob(blob);
       setPreviewUrl(URL.createObjectURL(blob));
+      setNotice(
+        response.headers.get('X-Job-Already-Paid') === '1'
+          ? 'This job is already marked paid, and the customer has the original invoice. ' +
+              'Re-sending replaces their copy.'
+          : null,
+      );
     } catch {
       setError('Could not reach the server. Check your connection and try again.');
     } finally {
@@ -143,21 +111,34 @@ export function Invoicer({
   }
 
   /**
-   * First tap of the two-step send. Commits the invoice and returns the
-   * authoritative PDF; the actual share happens on the next tap inside SendBar,
-   * which is a fresh user gesture (required by navigator.share).
+   * First tap of the two-step send. Commits the invoice (or re-stamps an
+   * existing one) and returns the authoritative PDF; the actual share happens on
+   * the next tap inside SendBar, which is a fresh user gesture — required by
+   * navigator.share.
    */
   async function handleFinalize(channel: SendChannel) {
     if (!job || !previewBlob) return;
 
+    if (isResend) {
+      const confirmed = window.confirm(
+        `Re-send invoice ${job.liveInvoiceNumber}?\n\n` +
+          `It keeps the same number and the stored copy is replaced with this version.`,
+      );
+      if (!confirmed) return;
+    }
+
     setError(null);
     setPendingChannel(channel);
 
+    const endpoint = isResend
+      ? `/api/invoices/${job.liveInvoiceId}/regenerate`
+      : '/api/invoices/finalize';
+
     try {
-      const response = await fetch('/api/invoices/finalize', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...buildPayload(), sentVia: channel }),
+        body: JSON.stringify(isResend ? { sentVia: channel } : { jobId: job.id, sentVia: channel }),
       });
 
       if (!response.ok) {
@@ -179,8 +160,9 @@ export function Invoicer({
       // rather than letting the owner discover a broken link on the job later.
       if (response.headers.get('X-Storage-Failed') === '1') {
         setError(
-          `Invoice ${invoiceNumber} was created, but the PDF could not be saved to storage. ` +
-            `Download it now with the button below — the copy on the job page will be missing.`,
+          `Invoice ${invoiceNumber} was ${isResend ? 're-sent' : 'created'}, but the PDF could ` +
+            `not be saved to storage. Download it now with the button below — the copy on the ` +
+            `job page will be out of date.`,
         );
       }
 
@@ -192,200 +174,90 @@ export function Invoicer({
     }
   }
 
-  function resetForNextInvoice() {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setJob(null);
-    setWorkCarriedOut('');
-    setLabourHours('');
-    setHourlyRate(defaultHourlyRate);
-    setOtherComments('');
-    setParts([]);
-    setPreviewBlob(null);
-    setPreviewUrl(null);
-    setFinalized(null);
-    setError(null);
-  }
-
   const locked = finalized !== null;
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[26rem_1fr]">
-      {/* ------------------------------------------------------------ form */}
+      {/* ---------------------------------------------------- job + summary */}
       <div className="flex flex-col gap-4">
         <Card>
           <CardHeader title="1. Choose a job" description="Search by job number or customer name" />
           <CardBody>
-            <JobPicker jobs={jobs} selected={job} onSelect={setJob} disabled={locked} />
+            <JobPicker jobs={jobs} selected={job} onSelect={selectJob} disabled={locked} />
           </CardBody>
         </Card>
 
-        <Card>
-          <CardHeader title="2. Work and labour" />
-          <CardBody className="flex flex-col gap-4">
-            <Field label="Work carried out" htmlFor="workCarriedOut">
-              <Textarea
-                id="workCarriedOut"
-                rows={5}
-                value={workCarriedOut}
-                disabled={locked}
-                onChange={(event) => setWorkCarriedOut(event.target.value)}
-                placeholder="Describe the work performed. This appears in the Services Performed section."
-              />
-            </Field>
+        {job ? (
+          <Card>
+            <CardHeader
+              title="2. Check the details"
+              description="Entered on the job — edit them there"
+              action={
+                <Link href={`/jobs/${job.id}`} className={buttonClass('secondary', 'sm')}>
+                  <Pencil aria-hidden className="size-4" />
+                  Edit job
+                </Link>
+              }
+            />
+            <CardBody className="flex flex-col gap-4">
+              {!hasContent ? (
+                <Alert>
+                  This job has no work lines or parts yet. Add them on the job before invoicing.
+                </Alert>
+              ) : null}
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Labour hours" htmlFor="labourHours">
-                <Input
-                  id="labourHours"
-                  inputMode="decimal"
-                  value={labourHours}
-                  disabled={locked}
-                  onChange={(event) => setLabourHours(event.target.value)}
-                  placeholder="0"
-                />
-              </Field>
+              <div className="flex flex-col gap-1 text-sm">
+                <p className="text-xs font-medium tracking-wide text-muted uppercase">
+                  Work carried out
+                </p>
+                {job.labourLines.length === 0 ? (
+                  <p className="text-muted">None entered.</p>
+                ) : (
+                  <ul className="flex flex-col gap-0.5">
+                    {job.labourLines.map((line, index) => (
+                      <li key={index} className="flex justify-between gap-3">
+                        <span className="min-w-0 truncate text-ink">{line.description}</span>
+                        <span className="shrink-0 text-muted tabular">{line.hours}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
 
-              <Field label="Hourly rate (€)" htmlFor="hourlyRate">
-                <Input
-                  id="hourlyRate"
-                  inputMode="decimal"
-                  value={hourlyRate}
-                  disabled={locked}
-                  onChange={(event) => setHourlyRate(event.target.value)}
-                  placeholder="0.00"
-                />
-              </Field>
-            </div>
-          </CardBody>
-        </Card>
+              <div className="flex flex-col gap-1 text-sm">
+                <p className="text-xs font-medium tracking-wide text-muted uppercase">
+                  Parts ({job.parts.length})
+                </p>
+                {job.parts.length === 0 ? (
+                  <p className="text-muted">None entered.</p>
+                ) : (
+                  <ul className="flex flex-col gap-0.5">
+                    {job.parts.map((part, index) => (
+                      <li key={index} className="flex justify-between gap-3">
+                        <span className="min-w-0 truncate text-ink">{part.partName}</span>
+                        <span className="shrink-0 text-muted tabular">
+                          {part.qty} × €{part.unitPrice}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </CardBody>
+          </Card>
+        ) : null}
 
         <Card>
           <CardHeader
-            title="3. Parts"
-            description={`Up to ${maxParts} lines fit the template`}
-            action={
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                disabled={locked || parts.length >= maxParts}
-                onClick={() => setParts((rows) => [...rows, emptyRow()])}
-              >
-                <Plus aria-hidden className="size-4" />
-                Add part
-              </Button>
-            }
+            title="Totals"
+            description={vatEnabled ? `VAT at ${vatRate}%` : 'Not VAT registered'}
           />
-          <CardBody className="flex flex-col gap-3">
-            {parts.length === 0 ? (
-              <p className="text-sm text-muted">No parts added.</p>
-            ) : (
-              parts.map((row, index) => (
-                <div key={row.key} className="rounded-md border border-line p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted">Line {index + 1}</span>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="danger"
-                      disabled={locked}
-                      aria-label={`Remove line ${index + 1}`}
-                      onClick={() => setParts((rows) => rows.filter((r) => r.key !== row.key))}
-                    >
-                      <Trash2 aria-hidden className="size-4" />
-                    </Button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <Field label="Part name" htmlFor={`partName-${row.key}`} className="col-span-2">
-                      <Input
-                        id={`partName-${row.key}`}
-                        value={row.partName}
-                        disabled={locked}
-                        onChange={(event) =>
-                          setParts((rows) =>
-                            rows.map((r) =>
-                              r.key === row.key ? { ...r, partName: event.target.value } : r,
-                            ),
-                          )
-                        }
-                      />
-                    </Field>
-
-                    <Field label="Part #" htmlFor={`partNumber-${row.key}`}>
-                      <Input
-                        id={`partNumber-${row.key}`}
-                        value={row.partNumber}
-                        disabled={locked}
-                        onChange={(event) =>
-                          setParts((rows) =>
-                            rows.map((r) =>
-                              r.key === row.key ? { ...r, partNumber: event.target.value } : r,
-                            ),
-                          )
-                        }
-                      />
-                    </Field>
-
-                    <Field label="Qty" htmlFor={`qty-${row.key}`}>
-                      <Input
-                        id={`qty-${row.key}`}
-                        inputMode="decimal"
-                        value={row.qty}
-                        disabled={locked}
-                        onChange={(event) =>
-                          setParts((rows) =>
-                            rows.map((r) =>
-                              r.key === row.key ? { ...r, qty: event.target.value } : r,
-                            ),
-                          )
-                        }
-                      />
-                    </Field>
-
-                    <Field label="Unit price (€)" htmlFor={`unitPrice-${row.key}`} className="col-span-2">
-                      <Input
-                        id={`unitPrice-${row.key}`}
-                        inputMode="decimal"
-                        value={row.unitPrice}
-                        disabled={locked}
-                        onChange={(event) =>
-                          setParts((rows) =>
-                            rows.map((r) =>
-                              r.key === row.key ? { ...r, unitPrice: event.target.value } : r,
-                            ),
-                          )
-                        }
-                      />
-                    </Field>
-                  </div>
-                </div>
-              ))
-            )}
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader title="4. Other comments" />
-          <CardBody>
-            <Field label="Comments" htmlFor="otherComments">
-              <Textarea
-                id="otherComments"
-                rows={3}
-                value={otherComments}
-                disabled={locked}
-                onChange={(event) => setOtherComments(event.target.value)}
-              />
-            </Field>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader title="Totals" description={vatEnabled ? `VAT at ${vatRate}%` : 'Not VAT registered'} />
           <CardBody className="flex flex-col gap-1 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted">Services</span>
-              <span className="tabular">{formatEur(totals.servicesSubtotalCents)}</span>
+              <span className="text-muted">
+                Labour{totals.labourIsOverridden ? ' (custom)' : ` (${formatHours(totals.totalHoursCentis)} h)`}
+              </span>
+              <span className="tabular">{formatEur(totals.labourSubtotalCents)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted">Parts</span>
@@ -406,6 +278,14 @@ export function Invoicer({
       {/* --------------------------------------------------------- preview */}
       <div className="flex flex-col gap-3">
         {error ? <Alert>{error}</Alert> : null}
+        {notice && !error ? <Alert>{notice}</Alert> : null}
+
+        {isResend && !locked ? (
+          <Alert>
+            This job already has invoice {job?.liveInvoiceNumber}. Sending again keeps that number
+            and replaces the stored PDF.
+          </Alert>
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           <Button onClick={handleGenerate} disabled={!job || generating || locked}>
@@ -413,7 +293,7 @@ export function Invoicer({
           </Button>
 
           {locked ? (
-            <Button variant="secondary" onClick={resetForNextInvoice}>
+            <Button variant="secondary" onClick={() => selectJob(null)}>
               Start another invoice
             </Button>
           ) : null}
