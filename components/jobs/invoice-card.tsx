@@ -90,14 +90,21 @@ export function InvoiceCard({ invoices }: { invoices: JobInvoiceRow[] }) {
               {invoices.map((invoice) => (
                 <tr key={invoice.id}>
                   <Td>
-                    <Link
+                    {/*
+                      A plain <a>, not next/link. Link prefetches its target, and
+                      this one 307s to a signed R2 URL — so merely hovering the
+                      row fired a cross-origin prefetch that failed CORS and
+                      filled the console with errors. Nothing to prefetch here
+                      anyway: it is a file download, not a route.
+                    */}
+                    <a
                       href={`/api/invoices/${invoice.id}/pdf`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-medium text-brand-dark hover:underline"
                     >
                       {invoice.invoiceNumber}
-                    </Link>
+                    </a>
                     {invoice.voidedAt ? (
                       <span className="ml-2 rounded-full bg-danger-soft px-2 py-0.5 text-xs font-medium text-danger">
                         VOID

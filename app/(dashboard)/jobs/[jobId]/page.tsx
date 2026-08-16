@@ -5,7 +5,7 @@ import { AttachmentManager } from '@/components/jobs/attachment-manager';
 import { InvoiceCard } from '@/components/jobs/invoice-card';
 import { JobActions } from '@/components/jobs/job-actions';
 import { JobForm } from '@/components/jobs/job-form';
-import { Badge, Card, CardHeader, LinkButton } from '@/components/ui';
+import { Badge, Card, CardHeader } from '@/components/ui';
 import { getJobWithAttachments } from '@/lib/db/queries/jobs';
 import { getSettings } from '@/lib/db/queries/settings';
 import { labourRowCapacity, partsRowCapacity } from '@/lib/pdf/stamp';
@@ -21,16 +21,15 @@ export default async function JobDetailPage({ params }: PageProps<'/jobs/[jobId]
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold text-ink">{job.jobNumber}</h1>
-          <Badge value={job.status} />
-          <Badge value={job.priority} />
-        </div>
-
-        <LinkButton href="/invoicer" variant="secondary">
-          Open Invoicer
-        </LinkButton>
+      {/*
+        No "Open Invoicer" shortcut here. Invoicing starts from the Invoicer —
+        sidebar on desktop, bottom bar on a phone — where a job is chosen and the
+        invoice generated. One route in, rather than two.
+      */}
+      <div className="flex items-center gap-3">
+        <h1 className="text-lg font-semibold text-ink">{job.jobNumber}</h1>
+        <Badge value={job.status} />
+        <Badge value={job.priority} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_20rem]">

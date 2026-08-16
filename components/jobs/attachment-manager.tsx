@@ -4,7 +4,7 @@ import { Paperclip, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
-import { Alert, Button, Empty } from '@/components/ui';
+import { Alert, Button, buttonClass, Empty } from '@/components/ui';
 import { Skeleton } from '@/components/ui/skeleton';
 import { deleteAttachment, recordAttachment } from '@/lib/actions/jobs';
 import type { JobAttachment } from '@/lib/db/schema';
@@ -108,18 +108,21 @@ export function AttachmentManager({
     }
   }
 
-  async function openAttachment(id: string, download: boolean) {
-    setError(null);
-
-    const response = await fetch(`/api/attachments/${id}/signed-url${download ? '?download=1' : ''}`);
-    if (!response.ok) {
-      setError('Could not open that file.');
-      return;
-    }
-
-    const { url } = (await response.json()) as { url: string };
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
+  /**
+   * View and Download are plain links, NOT buttons that fetch and then call
+   * `window.open()`.
+   *
+   * The previous version awaited a signed URL and opened it programmatically,
+   * which browsers classify as a popup because it no longer runs inside the
+   * click's own call stack. Desktop Chrome allows it; iOS Safari does not, and
+   * inside the installed standalone PWA — how the owner actually uses this —
+   * View silently did nothing at all.
+   *
+   * An anchor pointing at a route that redirects needs no JavaScript, so there
+   * is no popup to block. `/api/invoices/[id]/pdf` has always worked this way.
+   */
+  const viewHref = (id: string) => `/api/attachments/${id}/signed-url?redirect=1`;
+  const downloadHref = (id: string) => `/api/attachments/${id}/signed-url?redirect=1&download=1`;
 
   function handleDelete(attachment: JobAttachment) {
     if (!window.confirm(`Delete “${attachment.fileName}”? This cannot be undone.`)) return;
@@ -186,20 +189,22 @@ export function AttachmentManager({
               </div>
 
               <div className="flex shrink-0 gap-1">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => void openAttachment(attachment.id, false)}
+                <a
+                  href={viewHref(attachment.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={buttonClass('secondary', 'sm')}
+                  aria-label={`View ${attachment.fileName}`}
                 >
                   View
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => void openAttachment(attachment.id, true)}
+                </a>
+                <a
+                  href={downloadHref(attachment.id)}
+                  className={buttonClass('secondary', 'sm')}
+                  aria-label={`Download ${attachment.fileName}`}
                 >
                   Download
-                </Button>
+                </a>
                 <Button
                   size="sm"
                   variant="danger"
