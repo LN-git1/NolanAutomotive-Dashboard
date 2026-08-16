@@ -1,5 +1,135 @@
 # Changelog
 
+## 16/08/2026 @ 20:49:54 IST — "claude-sonnet-5"
+
+**Project completion: 100.00%**
+
+Basis: 18 of 18 items in this session's own approved plan — 12 fix items (A1–A6, B1–B3, C1–C3) plus
+all 6 live-production verification checks the plan specified, all closed. This figure is scoped to
+today's plan, not a claim about the whole project: the previous entries' separate "keep-alive cron
+check" item (due on or after 22/08/2026) is untouched by this session and remains open against that
+older tally, which this entry does not have access to and so does not attempt to extend.
+
+### Goal
+
+A broad bug-fix and turnaround/layout pass, requested directly: "suggest for me some bug fixes and/or
+improvements/changes to make... shorter processes, quicker turnarounds, better layouts." Three parallel
+research agents surveyed the codebase for data-integrity gaps, slow/wasteful flows, and mobile layout
+issues; the highest-impact findings from each were verified directly against the code (one agent claim —
+that parts `qty` should switch to `inputMode="numeric"` — was checked and found wrong against this app's
+own domain knowledge that quantities are genuinely fractional, and dropped) before being written into a
+plan and approved for the full scope, including the mobile table redesign.
+
+### Fixed — a live invoice's money could vanish from every "owed" total without being voided
+
+`getOutstandingInvoiceTotalCents` and `listAwaitingPayment` both filtered on `jobs.status = 'invoiced'`.
+`changeJobStatus` lets the owner move a job's status to anything, any time — deliberately, so more work
+found after invoicing doesn't get stuck. But flipping a job with a live €500 invoice back to `active`
+silently dropped that €500 from Awaiting Payments and the Overview's outstanding total, while the
+invoice itself stayed live and un-voided. Now both queries key "owed" off invoice truth instead: a
+non-voided invoice on a job that isn't `paid`. Verified live: invoiced a real test job (J-0009,
+€147.60), flipped its status to `active` — Total outstanding stayed at €63,449.55 and the job stayed
+listed; voided the invoice — total dropped to exactly €63,301.95 and the job disappeared. New test:
+`tests/awaiting-payment.test.ts`, gated on `TEST_DATABASE_URL` like the existing `allocateNumber` test,
+since this is a JOIN + WHERE correctness property a mock can't demonstrate.
+
+### Fixed — supplier bill receipts could be uploaded but never viewed, and leaked storage on delete
+
+`bill-form.tsx` uploaded a receipt and stored `supplierBills.attachmentStoragePath`, but no route ever
+signed a URL for it — `/api/attachments/[id]/signed-url` only ever queried `jobAttachments`. An uploaded
+receipt was permanently unreachable. Worse, `deleteSupplierBill` deleted only the DB row, unlike
+`deleteAttachment` for jobs, so every deleted bill with a receipt orphaned a file in R2 forever. Added
+`app/api/supplier-bills/[id]/receipt/route.ts`, matching the invoice-PDF route's shape, and a "View
+receipt" link next to each bill's actions. `deleteSupplierBill` now looks up the storage path first and
+best-effort removes the R2 object before deleting the row. Verified live end to end: created a test
+supplier and bill with a real receipt file, confirmed the signed URL genuinely served the file (`200`),
+deleted the bill, then re-fetched the *same still-valid* signed URL and confirmed R2 now returns `404` —
+proof the object was actually removed, not just the database row.
+
+### Fixed — the parts-total preview could disagree with the stamped invoice for fractional quantities
+
+`job-form.tsx` computed each part line as `toCents(qty) * toCents(unitPrice) / 100` — `toCents` only
+keeps 2 decimal places, while `partLineSchema` permits 4. For qty `1.2345` at €10.00/unit, the live
+preview showed €12.30 while the real invoice (via `applyQuantity`, the authoritative path) stamped
+€12.35. Exported `applyQuantity` from `lib/money.ts` and made the form preview use it directly, so both
+paths share one implementation. New test in `tests/money.test.ts` pins the exact case: `1.2345 × €10.00`
+now agrees at €12.35 on both paths.
+
+### Fixed — supplier/settings actions had no error handling, and money input had no digit cap
+
+`createSupplier`, `addSupplierBill`, `setBillPaid`, `deleteSupplierBill`, and `updateSettings` had no
+try/catch, unlike `createJob`. `supplierBills.amount` is `numeric(12,2)`, but `decimalString` had no
+upper bound, so an oversized value passed validation and then threw an unhandled Postgres overflow out
+of the server action. Wrapped each action body in try/catch returning a clean `{ ok: false, error }`.
+Added an optional `maxIntegerDigits` to `decimalString` and applied an 8-digit cap to
+`supplierBillInputSchema`'s amount. New test in `tests/validation.test.ts` confirms the cap rejects an
+oversized value and a default (uncapped) schema still doesn't.
+
+### Fixed — declared-but-unwired validation, and stale text from the old invoicing model
+
+`EditorColumn.required` was set on the parts-name column but never applied to the rendered `<Input>`,
+so a nameless part only failed server-side. `jobIdSchema`, `jobStatusChangeSchema`, `billIdSchema` were
+defined but never imported by the actions that take a raw id string — now parsed at the top of
+`changeJobStatus`, `setBillPaid`, and `deleteSupplierBill` before touching the database. Also corrected
+three leftover descriptions of the old preview-then-commit invoicing model (Settings page, a doc comment
+in `lib/invoices/build.ts`, and `peekNextNumber`'s comment in `lib/counters.ts`) to describe the current
+one-step "generate is create" model.
+
+### Changed — attachment uploads now run concurrently, not one at a time
+
+The upload loop awaited get-signed-url → PUT → `recordAttachment` **per file**, fully serialising a
+batch of job photos on the slow workshop connection this app is built for. Replaced the `for` loop with
+`Promise.allSettled` over each file's independent pipeline — a bad photo no longer blocks or cancels the
+others already in flight. Verified live: uploaded 4 files to a test job, confirmed all 4 in-flight rows
+appeared simultaneously (not sequentially), all 4 settled in ~2.4s, and all 4 survived a hard page
+reload, proving genuine server-side persistence rather than optimistic client state.
+
+### Changed — saving an edited job no longer double-pushes browser history
+
+`router.push` ran unconditionally on save, and for an edit it pushed the exact URL already on screen —
+a duplicate history entry that made the owner tap Back twice to actually leave the job page. Now only
+`push`es when creating a new job; an edit calls `router.refresh()` alone. Verified live: edited and saved
+a real test job, then a single `history.back()` landed cleanly on `/jobs` — not stuck on the job page.
+
+### Changed — the job form no longer re-renders on every keystroke in a labour/parts line
+
+`LineEditor` lifted the full row array to `JobForm` on every character typed, and `JobForm` is one
+unmemoized component, so typing a work description also re-executed the Customer, Vehicle, and
+Scheduling sections and re-serialised the row JSON on every keystroke. Row state now lives entirely in
+`LineEditor`; it reports only a derived `{ count, total }` upward via `onTotalsChange`, so an unrelated
+keystroke that doesn't move the total triggers React's own bail-out on an unchanged primitive instead of
+a full parent re-render.
+
+### Changed — mobile table redesign, app-wide
+
+Every table used `min-w-[36rem]` unconditionally, so a 5–6 column table needed a sideways scroll on a
+390px phone — on Awaiting Payments, that scroll was the only way to reach "Mark as paid" at all. Added a
+CSS-only responsive-table pattern to `globals.css` (rows become `data-label` + `::before` labelled cards
+below 640px; a real `<thead>` from `sm` up) and rolled `label="…"` onto every `<Td>` across all six
+tables in the app. Widened `sm`-sized row-action buttons to a real ~40px touch target (was ~34px) and
+increased the gap between adjacent buttons in the attachment list. Smaller ordering fixes: the add-row
+button now also appears after the last row (was only above the list), and the supplier/bill "Add" forms
+now appear before their lists on a single-column phone. Verified visually — not just by reading the CSS
+— at both 390px and 1400px, on real pages with real data, on this machine's dev environment and again on
+the live production site.
+
+**Deliberately not changed:** the plan called for adding `autoComplete="name"/"tel"/"email"` to the job
+form's customer fields. Implemented, then reverted on reflection: those tokens are for the *signed-in
+user's own* saved browser profile, and these fields hold the *customer's* details — a real, easy mistake
+on a small screen (the owner's own name/number suggested into a customer field). Left at the default, so
+the browser still offers plain form-history suggestions of previously typed customer names without
+risking anyone's own identity landing in the wrong field.
+
+### Files Touched
+
+`app/(dashboard)/{awaiting-payments,jobs,settings,suppliers}/**`,
+`app/api/supplier-bills/[id]/receipt/route.ts` (new), `app/globals.css`,
+`components/jobs/{attachment-manager,invoice-card,job-form,line-editor}.tsx`,
+`components/suppliers/bill-form.tsx`, `components/ui/index.tsx`,
+`lib/actions/{jobs,settings,suppliers}.ts`, `lib/counters.ts`, `lib/db/queries/{jobs,overview}.ts`,
+`lib/invoices/build.ts`, `lib/money.ts`, `lib/validation/{common,supplier}.ts`,
+`tests/awaiting-payment.test.ts` (new), `tests/money.test.ts`, `tests/validation.test.ts`
+
 ## 16/08/2026 @ 16:46:11 IST — "claude-opus-5"
 
 **Project completion: 99.29%**
