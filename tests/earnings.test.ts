@@ -27,13 +27,21 @@ describe.skipIf(!TEST_DATABASE_URL)('getEarningsSummary / getEarningsMonthInvoic
 
   const MONTH_KEY = '2026-01';
   const ISSUE_DATE = '2026-01-15';
+  const DUE_DATE_MONTH_KEY = '2026-03';
+  const DUE_DATE = '2026-03-10';
 
   const jobId = randomUUID();
   const invoiceId = randomUUID();
   const deletedJobId = randomUUID();
   const deletedInvoiceId = randomUUID();
+  const dueDateJobId = randomUUID();
+  const dueDateInvoiceId = randomUUID();
 
-  async function insertJobAndInvoice(id: string, invId: string, deletedAt: Date | null = null) {
+  async function insertJobAndInvoice(
+    id: string,
+    invId: string,
+    { deletedAt = null, dueDate = null }: { deletedAt?: Date | null; dueDate?: string | null } = {},
+  ) {
     await db.insert(jobs).values({
       id,
       jobNumber: `TEST-${id.slice(0, 8)}`,
@@ -41,6 +49,7 @@ describe.skipIf(!TEST_DATABASE_URL)('getEarningsSummary / getEarningsMonthInvoic
       customerName: 'Earnings Test',
       vehicleRegistration: 'TEST-REG',
       deletedAt,
+      dueDate,
     });
 
     await db.insert(invoices).values({
@@ -67,12 +76,42 @@ describe.skipIf(!TEST_DATABASE_URL)('getEarningsSummary / getEarningsMonthInvoic
     ({ toCents } = await import('@/lib/money'));
 
     await insertJobAndInvoice(jobId, invoiceId);
-    await insertJobAndInvoice(deletedJobId, deletedInvoiceId, new Date());
+    await insertJobAndInvoice(deletedJobId, deletedInvoiceId, { deletedAt: new Date() });
+    await insertJobAndInvoice(dueDateJobId, dueDateInvoiceId, { dueDate: DUE_DATE });
   });
 
   afterAll(async () => {
-    await db.delete(invoices).where(sql`${invoices.id} IN (${invoiceId}, ${deletedInvoiceId})`);
-    await db.delete(jobs).where(sql`${jobs.id} IN (${jobId}, ${deletedJobId})`);
+    await db
+      .delete(invoices)
+      .where(sql`${invoices.id} IN (${invoiceId}, ${deletedInvoiceId}, ${dueDateInvoiceId})`);
+    await db.delete(jobs).where(sql`${jobs.id} IN (${jobId}, ${deletedJobId}, ${dueDateJobId})`);
+  });
+
+  /**
+   * The exact bug this fix closes: a job worked (and due) in one month but
+   * invoiced weeks later must land in the month it was due, not the month the
+   * paperwork happened to be generated.
+   */
+  it("groups by the job's due date, not the invoice's issue date, when both are set", async () => {
+    const summary = await getEarningsSummary();
+
+    const issueMonth = summary.months.find((m) => m.key === MONTH_KEY);
+    const dueMonth = summary.months.find((m) => m.key === DUE_DATE_MONTH_KEY);
+    expect(dueMonth).toBeDefined();
+
+    const issueMonthInvoices = await getEarningsMonthInvoices(MONTH_KEY);
+    const dueMonthInvoices = await getEarningsMonthInvoices(DUE_DATE_MONTH_KEY);
+
+    expect(dueMonthInvoices.some((inv) => inv.id === dueDateInvoiceId)).toBe(true);
+    expect(issueMonthInvoices.some((inv) => inv.id === dueDateInvoiceId)).toBe(false);
+    // Sanity: the January-bucket job from the other test data is unaffected.
+    expect(issueMonth?.key ?? MONTH_KEY).toBe(MONTH_KEY);
+  });
+
+  /** No due date at all falls back to the invoice's issue date, not silently dropped. */
+  it('falls back to issue date when a job has no due date', async () => {
+    const monthInvoices = await getEarningsMonthInvoices(MONTH_KEY);
+    expect(monthInvoices.some((inv) => inv.id === invoiceId)).toBe(true);
   });
 
   it('counts a paid job\'s invoice, in both the summary and the month detail', async () => {
