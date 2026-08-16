@@ -1,3 +1,5 @@
+import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import type { Metadata, Viewport } from 'next';
 
 import './globals.css';
@@ -76,7 +78,28 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        {children}
+
+        {/*
+          Vercel Web Analytics and Speed Insights.
+
+          Both products were already switched on for the project — their script
+          endpoints under /_vercel/ were serving 200 — but nothing in the app
+          ever loaded them, so both dashboards were collecting nothing. These two
+          components are the missing half.
+
+          Safe for this app specifically: Vercel Web Analytics is cookieless and
+          stores no personal data, which matters because this dashboard holds
+          customer names, addresses and phone numbers. It records page paths and
+          referrers, not people. Speed Insights sends Core Web Vitals only.
+
+          Both no-op in development and outside Vercel, so neither affects local
+          work or the test suite.
+        */}
+        <Analytics />
+        <SpeedInsights />
+      </body>
     </html>
   );
 }
