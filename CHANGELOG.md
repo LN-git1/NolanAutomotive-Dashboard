@@ -1,5 +1,61 @@
 # Changelog
 
+## 16/08/2026 @ 16:23:39 IST — "claude-opus-5"
+
+**Project completion: 99.29%**
+
+Basis: 139 of 140 discrete build requirements — the previous entry's three are now verified live, and
+one was added and closed (moving the deep links under unit test). The open item is still the keep-alive
+cron check, due on or after 22/08/2026.
+
+### Goal
+
+Verify the send flow against the live site, and put the part that no browser test can see under test.
+
+### Changed — the deep links are now a tested unit
+
+A `mailto:` is assigned to `window.location.href`, which issues **no network request**, so a browser
+test cannot observe it. That is precisely why a missing recipient survived every test this project had.
+
+`lib/send-links.ts` builds both links as pure functions, covered by 11 unit tests: the recipient is
+present, subject and body are encoded, the `@` survives unescaped (encoding it breaks some clients), an
+absent email still yields a valid link, the number is internationalised for `wa.me`, and an unusable
+number falls back to the contact picker rather than opening the *wrong* chat.
+
+A note for anyone testing this later: overriding `window.location` in Playwright to capture the mailto
+**breaks Next's client-side navigation** and the page stops routing. Patch `window.open` only, and
+assert the mailto through the confirmation the UI shows.
+
+### Verified live on a freshly created job
+
+| Check | Result |
+|---|---|
+| Create invoice | **5 seconds**, one step — previously two ~10s waits and two taps |
+| Invoice row | created immediately, `sent_via`/`sent_at` null — issued ≠ sent |
+| Numbering | exactly one number consumed |
+| Email | opens addressed to `margaret@example.ie`, PDF downloaded to attach |
+| WhatsApp | `wa.me/353874303785` — `087 430 3785` internationalised, message pre-filled |
+| Delivery | recorded as `email`, then re-recorded as `whatsapp` |
+
+### Noted — deployments stalled, and why
+
+Between 13:23 and 15:29 Vercel stopped creating deployments: pushes landed on GitHub, no deployment
+appeared, and the site carried on serving the previous build. Not a failed build — none was attempted.
+
+It was **not** an account pause (no banner, and a manual redeploy ran fine), and the Git connection was
+intact. The project was renamed in that window, which is the only change that lines up. A manual build
+from `main` restored it, and pushes have auto-deployed since.
+
+Two things worth remembering. **Vercel's Redeploy rebuilds the same commit, not the branch head** — the
+sub-minute rebuild that resulted looked like a success but shipped nothing new; the live page still read
+"previewing is free". And the migration in the previous entry was deliberately backward-compatible, so
+the old build kept working against the new schema for the two hours it was serving.
+
+### Files Touched
+
+- `lib/send-links.ts`, `tests/send-links.test.ts` (new)
+- `components/invoicer/send-bar.tsx` — uses the tested builders
+
 ## 16/08/2026 @ 15:28:38 IST — "claude-opus-5"
 
 **Project completion: 99.28%**
