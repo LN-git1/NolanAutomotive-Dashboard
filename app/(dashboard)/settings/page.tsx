@@ -52,8 +52,9 @@ export default async function SettingsPage() {
           <p className="text-xs font-medium text-muted">Next invoice number</p>
           <p className="mt-1 text-lg font-semibold text-ink tabular">{nextInvoiceNumber}</p>
           <p className="mt-2 text-xs text-muted">
-            A number is only used when an invoice is actually sent. Previewing in the Invoicer
-            never consumes one, which is what keeps the sequence free of gaps.
+            Creating an invoice in the Invoicer uses this number immediately. Editing and
+            re-sending an invoice afterwards keeps the same number, so the sequence stays free of
+            gaps.
           </p>
         </CardBody>
       </Card>

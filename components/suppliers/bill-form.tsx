@@ -1,5 +1,6 @@
 'use client';
 
+import { Paperclip } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition, type FormEvent } from 'react';
 
@@ -20,6 +21,7 @@ export function BillForm({ supplierId }: { supplierId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [uploading, setUploading] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
 
   async function uploadAttachment(file: File): Promise<string | null> {
     // Must match the Content-Type on the PUT below — R2 signs for that value.
@@ -73,6 +75,7 @@ export function BillForm({ supplierId }: { supplierId: string }) {
         }
 
         formRef.current?.reset();
+        setFileName(null);
         router.refresh();
       } catch (submitError) {
         setError(submitError instanceof Error ? submitError.message : 'Could not add the bill.');
@@ -113,7 +116,17 @@ export function BillForm({ supplierId }: { supplierId: string }) {
       </Field>
 
       <Field label="Receipt" htmlFor="attachment" hint="Optional photo or PDF">
-        <Input id="attachment" name="attachment" type="file" className="py-1.5" />
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-line bg-surface px-3.5 py-2 text-sm font-medium hover:bg-canvas">
+          <Paperclip aria-hidden className="size-4" />
+          {fileName ?? 'Choose file'}
+          <input
+            id="attachment"
+            name="attachment"
+            type="file"
+            className="visually-hidden"
+            onChange={(event) => setFileName(event.target.files?.[0]?.name ?? null)}
+          />
+        </label>
       </Field>
 
       <Button type="submit" disabled={busy}>

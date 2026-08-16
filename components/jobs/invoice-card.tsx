@@ -89,7 +89,7 @@ export function InvoiceCard({ invoices }: { invoices: JobInvoiceRow[] }) {
             <tbody>
               {invoices.map((invoice) => (
                 <tr key={invoice.id}>
-                  <Td>
+                  <Td label="Number">
                     {/*
                       A plain <a>, not next/link. Link prefetches its target, and
                       this one 307s to a signed R2 URL — so merely hovering the
@@ -111,8 +111,10 @@ export function InvoiceCard({ invoices }: { invoices: JobInvoiceRow[] }) {
                       </span>
                     ) : null}
                   </Td>
-                  <Td className="text-muted">{formatDate(invoice.issueDate)}</Td>
-                  <Td className="text-right tabular">
+                  <Td label="Issued" className="text-muted">
+                    {formatDate(invoice.issueDate)}
+                  </Td>
+                  <Td label="Total" className="text-right tabular">
                     <span className={invoice.voidedAt ? 'text-muted line-through' : undefined}>
                       {numericToEur(invoice.grandTotal)}
                     </span>

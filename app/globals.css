@@ -166,6 +166,57 @@ body {
   }
 }
 
+/**
+ * Responsive tables below 640px.
+ *
+ * Every wide table in this app (Jobs, Awaiting Payments, supplier bills,
+ * Overview) used to force a horizontal scroll on a phone, which on Awaiting
+ * Payments put "Mark as paid" — the entire reason for the page — off the
+ * visible screen. Below `sm`, `Table` turns each row into a bordered card and
+ * each cell into a "label: value" line instead of a column, using the cell's
+ * own `data-label` attribute (set by `Td`'s `label` prop) as the label. No
+ * JavaScript and no separate mobile markup: this is the one table primitive,
+ * rendered once, read differently by the browser depending on width — a
+ * Server Component table gets it for free. From `sm` up this block does not
+ * apply and the table renders exactly as it always did.
+ */
+@media (max-width: 639px) {
+  .rtable thead {
+    display: none;
+  }
+
+  .rtable tr {
+    display: block;
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+    padding: 0.625rem 0.75rem;
+  }
+
+  .rtable tr + tr {
+    margin-top: 0.625rem;
+  }
+
+  .rtable td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.375rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .rtable td:last-child {
+    border-bottom: none;
+  }
+
+  .rtable td::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-weight: 500;
+    color: var(--muted);
+  }
+}
+
 /* Momentum scrolling for the horizontally scrollable tables. */
 .overflow-x-auto {
   -webkit-overflow-scrolling: touch;

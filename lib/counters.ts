@@ -52,10 +52,11 @@ export async function allocateNumber(tx: DbOrTx, key: CounterKey): Promise<numbe
 /**
  * Read what the next value WOULD be without consuming it.
  *
- * Used only to render a provisional invoice number on the Invoicer preview.
- * The preview is explicitly not authoritative — the number is re-stamped from
- * the real allocation at finalize time, so a concurrent allocation between peek
- * and finalize is harmless.
+ * Used only by the Settings page, to display the invoice number that will be
+ * used next. Not authoritative — if another invoice is generated in the
+ * meantime, `allocateNumber` is what actually consumes a value, so a
+ * concurrent allocation between this read and that one is harmless; the
+ * Settings card just shows a stale number until the page next reloads.
  */
 export async function peekNextNumber(tx: DbOrTx, key: CounterKey): Promise<number> {
   const result = await tx.execute<{ next_value: number }>(sql`

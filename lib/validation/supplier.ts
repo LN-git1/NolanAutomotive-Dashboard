@@ -11,7 +11,9 @@ export type SupplierInput = z.infer<typeof supplierInputSchema>;
 
 export const supplierBillInputSchema = z.object({
   supplierId: uuidString,
-  amount: decimalString({ label: 'Amount' }),
+  // 8 integer digits is generous for a small garage's supplier bills (up to
+  // ~€100m) while staying safely under the amount column's numeric(12,2) cap.
+  amount: decimalString({ label: 'Amount', maxIntegerDigits: 8 }),
   billDate: requiredDate,
   reference: optionalText,
   notes: optionalText,

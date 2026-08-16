@@ -2,13 +2,13 @@
 
 import { ChevronRight, Wand2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState, useTransition, type FormEvent, type ReactNode } from 'react';
+import { useState, useTransition, type FormEvent, type ReactNode } from 'react';
 
 import { Alert, Button, Card, CardBody, CardHeader, Field, Input, Select, Textarea } from '@/components/ui';
 import { LABOUR_COLUMNS, LineEditor, PARTS_COLUMNS } from '@/components/jobs/line-editor';
 import { VehicleFields } from '@/components/jobs/vehicle-fields';
 import { createJob, lookupJobByRegistration, updateJob } from '@/lib/actions/jobs';
-import { formatEur, formatHours, sumLabourHours, toCents } from '@/lib/money';
+import { applyQuantity, formatEur, formatHours, sumLabourHours, toCents } from '@/lib/money';
 import { JOB_PRIORITIES, JOB_STATUSES } from '@/lib/validation/job';
 import type { Job } from '@/lib/db/schema';
 
@@ -88,19 +88,32 @@ export function JobForm({
   const [prefillApplied, setPrefillApplied] = useState(0);
   const [lookingUp, setLookingUp] = useState(false);
 
-  const [labourRows, setLabourRows] = useState<Record<string, string>[]>(
-    () => (job?.labourLines ?? []).map((line) => ({ ...line })),
-  );
+  /**
+   * The row data itself lives entirely inside each `LineEditor` — this form
+   * never holds a mirrored copy. Only the two numbers below (count, total)
+   * come back up, via `onTotalsChange`. That is what keeps typing a work
+   * description or a part name from re-rendering the rest of this form: the
+   * total is unchanged, so `setLabourSummary`/`setPartsSummary` receive an
+   * `Object.is`-equal value and React bails out rather than re-rendering.
+   *
+   * Initial values are computed directly from `job` — the same arithmetic
+   * `LineEditor` will report back once mounted — so there is no flash from an
+   * empty summary before the first render.
+   */
+  const [labourSummary, setLabourSummary] = useState(() => ({
+    count: job?.labourLines?.length ?? 0,
+    total: sumLabourHours(
+      (job?.labourLines ?? []).map((line) => ({ description: '', hours: line.hours ?? '' })),
+    ),
+  }));
   const [hourlyRate, setHourlyRate] = useState(job?.hourlyRate ?? defaultHourlyRate);
   const [labourOverride, setLabourOverride] = useState(job?.labourTotalOverride ?? '');
-  const [partRows, setPartRows] = useState<Record<string, string>[]>(
-    () => (job?.parts ?? []).map((part) => ({ ...part })),
-  );
+  const [partsSummary, setPartsSummary] = useState(() => ({
+    count: job?.parts?.length ?? 0,
+    total: (job?.parts ?? []).reduce((sum, part) => sum + applyQuantity(part.qty, part.unitPrice), 0),
+  }));
 
-  const totalHoursCentis = useMemo(
-    () => sumLabourHours(labourRows.map((row) => ({ description: '', hours: row.hours ?? '' }))),
-    [labourRows],
-  );
+  const totalHoursCentis = labourSummary.total;
 
   const overrideActive = labourOverride.trim() !== '';
   // hundredth-hours x cents-per-hour / 100 = cents. Mirrors calcInvoiceTotals.
@@ -108,14 +121,10 @@ export function JobForm({
     ? toCents(labourOverride)
     : Math.round((totalHoursCentis * toCents(hourlyRate)) / 100);
 
-  const partsCents = useMemo(
-    () =>
-      partRows.reduce(
-        (sum, row) => sum + Math.round((toCents(row.qty || '0') * toCents(row.unitPrice || '0')) / 100),
-        0,
-      ),
-    [partRows],
-  );
+  // applyQuantity, not a hand-rolled qty*price: it preserves qty to 4 decimal
+  // places, matching the authoritative path (calcInvoiceTotals / the stamped
+  // PDF) exactly, so this live total can never disagree with the real one.
+  const partsCents = partsSummary.total;
 
   /**
    * Look up the registration when the field loses focus. Only on a new job:
@@ -159,8 +168,14 @@ export function JobForm({
         return;
       }
 
-      router.push(result.jobId ? `/jobs/${result.jobId}` : '/jobs');
-      router.refresh();
+      if (job) {
+        // Editing: already at this exact URL. Pushing it again added a
+        // duplicate history entry, so leaving the page needed Back twice.
+        router.refresh();
+      } else {
+        router.push(result.jobId ? `/jobs/${result.jobId}` : '/jobs');
+        router.refresh();
+      }
     });
   }
 
@@ -217,6 +232,9 @@ export function JobForm({
       <div key={prefillApplied} className="flex flex-col gap-3">
         <Section title="Customer" defaultOpen>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* No autoComplete="name"/"tel"/"email" below — this is the
+                customer's info, not the user's; profile autofill would offer
+                Lee's own name/number/email instead. */}
             <Field label="Name" htmlFor="customerName" required className="sm:col-span-2">
               <Input
                 id="customerName"
@@ -288,6 +306,7 @@ export function JobForm({
               <Input
                 id="vehicleVin"
                 name="vehicleVin"
+                autoCapitalize="characters"
                 defaultValue={applied?.vehicleVin ?? job?.vehicleVin ?? ''}
               />
             </Field>
@@ -299,17 +318,22 @@ export function JobForm({
         title="Work and labour"
         description="Prints on the invoice — each line shows its hours"
         defaultOpen={!isNew}
-        badge={labourRows.length > 0 ? `${labourRows.length}` : undefined}
+        badge={labourSummary.count > 0 ? `${labourSummary.count}` : undefined}
       >
         <div className="flex flex-col gap-4">
           <LineEditor
             name="labourLines"
             columns={LABOUR_COLUMNS}
-            initial={labourRows}
+            initial={(job?.labourLines ?? []).map(
+              (l): Record<string, string> => ({ description: l.description, hours: l.hours }),
+            )}
             capacity={labourCapacity}
             addLabel="Add work line"
             emptyLabel="No work lines yet."
-            onChange={setLabourRows}
+            computeTotal={(rows) =>
+              sumLabourHours(rows.map((row) => ({ description: '', hours: row.hours ?? '' })))
+            }
+            onTotalsChange={setLabourSummary}
           />
 
           <div className="grid grid-cols-2 gap-3 border-t border-line pt-4">
@@ -356,19 +380,29 @@ export function JobForm({
 
       <Section
         title="Parts"
-        defaultOpen={!isNew && partRows.length > 0}
-        badge={partRows.length > 0 ? `${partRows.length}` : undefined}
+        defaultOpen={!isNew && partsSummary.count > 0}
+        badge={partsSummary.count > 0 ? `${partsSummary.count}` : undefined}
       >
         <div className="flex flex-col gap-3">
           <LineEditor
             name="parts"
             columns={PARTS_COLUMNS}
-            initial={partRows}
+            initial={(job?.parts ?? []).map(
+              (p): Record<string, string> => ({
+                partName: p.partName,
+                partNumber: p.partNumber,
+                qty: p.qty,
+                unitPrice: p.unitPrice,
+              }),
+            )}
             capacity={partsCapacity}
             addLabel="Add part"
             emptyLabel="No parts added."
             rowDefaults={{ qty: '1' }}
-            onChange={setPartRows}
+            computeTotal={(rows) =>
+              rows.reduce((sum, row) => sum + applyQuantity(row.qty, row.unitPrice), 0)
+            }
+            onTotalsChange={setPartsSummary}
           />
           <p className="text-sm text-muted">
             Parts total: <span className="font-semibold text-ink tabular">{formatEur(partsCents)}</span>

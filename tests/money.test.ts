@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  applyQuantity,
   applyRate,
   calcInvoiceTotals,
   formatAmount,
@@ -157,5 +158,35 @@ describe('calcInvoiceTotals', () => {
 
     expect(totals.grandTotalCents).toBe(0);
     expect(totals.totalTaxCents).toBe(0);
+  });
+
+  /**
+   * The job form's live parts-total preview computes each row with
+   * `applyQuantity` directly (not through a full `calcInvoiceTotals` call, since
+   * VAT/labour aren't relevant to that preview). The two paths must never
+   * disagree on a single part's line total — a qty with more than 2 decimal
+   * places is exactly where a naive `toCents(qty) * toCents(unitPrice) / 100`
+   * calculation used to drift from this one, because `toCents` only keeps 2
+   * decimal places of precision.
+   */
+  it('agrees with a standalone applyQuantity call for a fractional quantity', () => {
+    const qty = '1.2345';
+    const unitPrice = '10.00';
+
+    const totals = calcInvoiceTotals({
+      labourLines: [],
+      hourlyRate: '0',
+      parts: [{ partName: 'Sealant', partNumber: 'S-1', qty, unitPrice }],
+      vatRate: '0',
+      vatEnabled: false,
+    });
+
+    const previewCents = applyQuantity(qty, unitPrice);
+
+    expect(toCents(totals.parts[0]!.amount)).toBe(previewCents);
+    expect(totals.partsSubtotalCents).toBe(previewCents);
+    // 1.2345 x 10.00 = 12.345 -> rounds to 12.35, not the 12.30 a 2-decimal
+    // truncation of the quantity would have produced.
+    expect(previewCents).toBe(1_235);
   });
 });

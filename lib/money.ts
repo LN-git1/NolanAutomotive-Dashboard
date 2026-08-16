@@ -203,8 +203,12 @@ export function calcInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotals {
  * Multiply a (possibly fractional) quantity by a unit price without floats.
  * Quantity is taken to 4 decimal places, which is far beyond anything a garage
  * will enter but keeps 1/3-style values from drifting.
+ *
+ * Exported so the job form's live parts-total preview can share this exact
+ * arithmetic rather than a hand-rolled approximation — the preview and the
+ * stamped invoice must never disagree on a part's line total.
  */
-function applyQuantity(
+export function applyQuantity(
   quantity: string | number | null | undefined,
   unitPrice: string | number | null | undefined,
 ): number {

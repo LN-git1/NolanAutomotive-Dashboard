@@ -38,7 +38,11 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
  * clears the ~44px touch target guidance on small screens.
  */
 const BUTTON_SIZES: Record<ButtonSize, string> = {
-  sm: 'px-3 py-2 text-xs sm:px-2.5 sm:py-1.5',
+  // `sm` used to carry no `min-h` at all — roughly 34px, well under the same
+  // 44px guidance `md` states explicitly above. It is what every table/list
+  // row action actually uses, so this was the size the design system's own
+  // stated intent was quietly missing.
+  sm: 'min-h-10 px-3 py-2 text-xs sm:min-h-0 sm:px-2.5 sm:py-1.5',
   md: 'min-h-11 px-4 py-2.5 text-sm sm:min-h-0 sm:px-3.5 sm:py-2',
 };
 
@@ -184,10 +188,15 @@ export function Badge({ value, className }: { value: string; className?: string 
 
 /* ------------------------------------------------------------- table bits */
 
+/**
+ * Below `sm` this renders as stacked cards, not a scrolling table — see the
+ * `.rtable` rules in `globals.css`. Label every `<Td>` (via its `label` prop)
+ * so the mobile card form reads as "Job: J-0004" rather than a blank line.
+ */
 export function Table({ className, ...props }: ComponentProps<'table'>) {
   return (
     <div className="w-full overflow-x-auto">
-      <table className={cn('w-full min-w-[36rem] border-collapse text-sm', className)} {...props} />
+      <table className={cn('rtable w-full border-collapse text-sm sm:min-w-[36rem]', className)} {...props} />
     </div>
   );
 }
@@ -204,8 +213,21 @@ export function Th({ className, ...props }: ComponentProps<'th'>) {
   );
 }
 
-export function Td({ className, ...props }: ComponentProps<'td'>) {
-  return <td className={cn('border-b border-line px-3 py-2 align-top', className)} {...props} />;
+export function Td({
+  className,
+  label,
+  ...props
+}: ComponentProps<'td'> & {
+  /** Shown as this cell's label in the stacked mobile card, below `sm`. */
+  label?: string;
+}) {
+  return (
+    <td
+      data-label={label}
+      className={cn('border-b border-line px-3 py-2 align-top', className)}
+      {...props}
+    />
+  );
 }
 
 /* ------------------------------------------------------------ empty state */

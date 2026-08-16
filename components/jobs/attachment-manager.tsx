@@ -45,67 +45,103 @@ export function AttachmentManager({
   const [inFlight, setInFlight] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
 
+  /** One file's full pipeline: get a signed URL, PUT the bytes, record the row. */
+  async function uploadOne(file: File): Promise<void> {
+    // mimeType must match the Content-Type sent on the PUT below — R2 signs
+    // the URL for that exact value and rejects a mismatch.
+    const mimeType = file.type || 'application/octet-stream';
+
+    const urlResponse = await fetch('/api/attachments/upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'job', jobId, fileName: file.name, mimeType }),
+    });
+
+    if (!urlResponse.ok) {
+      const body = (await urlResponse.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(body?.error ?? `Could not start the upload for ${file.name}.`);
+    }
+
+    const { uploadUrl, storagePath } = (await urlResponse.json()) as {
+      uploadUrl: string;
+      storagePath: string;
+    };
+
+    const putResponse = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': mimeType },
+      body: file,
+    });
+
+    if (!putResponse.ok) {
+      throw new Error(`Upload failed for ${file.name}.`);
+    }
+
+    const recorded = await recordAttachment({
+      jobId,
+      storagePath,
+      fileName: file.name,
+      mimeType: file.type || null,
+      fileSizeBytes: file.size,
+    });
+
+    if (!recorded.ok) throw new Error(recorded.error ?? `Could not save ${file.name}.`);
+  }
+
+  /**
+   * Files run concurrently, not one at a time.
+   *
+   * Each file's pipeline (signed URL -> PUT -> record) is independent of every
+   * other file's, so a strictly sequential loop was paying for two extra
+   * network round trips per file that could have overlapped with the next
+   * file's transfer. On the slow workshop connection this app is built for,
+   * that is real, avoidable time — several seconds across a typical batch of
+   * job photos.
+   *
+   * `allSettled`, not `all`: one bad photo must not cancel the others that are
+   * already partway through uploading, matching this file's own existing
+   * tolerance for a partial failure leaving an orphaned object in R2.
+   */
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
 
+    const fileList = Array.from(files);
     setError(null);
     setUploading(true);
-    setInFlight(Array.from(files).map((file) => file.name));
+    setInFlight(fileList.map((file) => file.name));
 
-    try {
-      for (const file of Array.from(files)) {
-        // mimeType must match the Content-Type sent on the PUT below — R2 signs
-        // the URL for that exact value and rejects a mismatch.
-        const mimeType = file.type || 'application/octet-stream';
+    const results = await Promise.allSettled(
+      fileList.map((file) =>
+        uploadOne(file).finally(() => {
+          // Drop this file's placeholder as soon as IT lands, independent of
+          // the others, so a batch of five visibly counts down as each
+          // finishes rather than clearing all at once at the end.
+          setInFlight((names) => names.filter((name) => name !== file.name));
+        }),
+      ),
+    );
 
-        const urlResponse = await fetch('/api/attachments/upload-url', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ kind: 'job', jobId, fileName: file.name, mimeType }),
-        });
+    const failures = results.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
 
-        if (!urlResponse.ok) {
-          const body = (await urlResponse.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(body?.error ?? 'Could not start the upload.');
-        }
-
-        const { uploadUrl, storagePath } = (await urlResponse.json()) as {
-          uploadUrl: string;
-          storagePath: string;
-        };
-
-        const putResponse = await fetch(uploadUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': mimeType },
-          body: file,
-        });
-
-        if (!putResponse.ok) {
-          throw new Error(`Upload failed for ${file.name}.`);
-        }
-
-        const recorded = await recordAttachment({
-          jobId,
-          storagePath,
-          fileName: file.name,
-          mimeType: file.type || null,
-          fileSizeBytes: file.size,
-        });
-
-        if (!recorded.ok) throw new Error(recorded.error ?? 'Could not save the attachment.');
-
-        // Drop this file's placeholder as soon as it lands, so uploading five
-        // photos visibly counts down rather than clearing all at once.
-        setInFlight((names) => names.filter((name) => name !== file.name));
-      }
-
-      router.refresh();
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Upload failed.');
-    } finally {
-      setUploading(false);
-      setInFlight([]);
+    if (failures.length > 0) {
+      setError(
+        failures.length === fileList.length
+          ? failures[0]?.reason instanceof Error
+            ? failures[0].reason.message
+            : 'Upload failed.'
+          : `${failures.length} of ${fileList.length} files failed to upload.`,
+      );
     }
+
+    if (failures.length < fileList.length) {
+      // At least one file made it — refresh so it appears in the list.
+      router.refresh();
+    }
+
+    setUploading(false);
+    setInFlight([]);
   }
 
   /**
@@ -171,7 +207,9 @@ export function AttachmentManager({
                 <p className="truncate text-sm text-muted">{name}</p>
                 <p className="text-xs text-muted">Uploading…</p>
               </div>
-              <Skeleton className="h-8 w-24 shrink-0 rounded-md" />
+              {/* h-10, matching the sm button's new min-h-10, so the real
+                  buttons don't jump the row taller when they replace this. */}
+              <Skeleton className="h-10 w-24 shrink-0 rounded-md" />
             </li>
           ))}
         </ul>
@@ -188,7 +226,9 @@ export function AttachmentManager({
                 <p className="text-xs text-muted">{formatSize(attachment.fileSizeBytes)}</p>
               </div>
 
-              <div className="flex shrink-0 gap-1">
+              {/* gap-2, not gap-1 — three tappable targets in a row need more
+                  than 4px between them to not be a mis-tap magnet. */}
+              <div className="flex shrink-0 gap-2">
                 <a
                   href={viewHref(attachment.id)}
                   target="_blank"

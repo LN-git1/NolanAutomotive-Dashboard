@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 
 import { db } from '../index';
 import { invoices, jobAttachments, jobs, supplierBills, suppliers } from '../schema';
@@ -15,9 +15,13 @@ import { invoices, jobAttachments, jobs, supplierBills, suppliers } from '../sch
 /**
  * Sum of grand totals for invoices whose job is still awaiting payment.
  *
- * Voided invoices are excluded: a voided invoice is not money anyone owes. The
- * row is kept so the number stays consumed and the sequence has no gaps, which
- * is exactly why it has to be filtered out here rather than deleted.
+ * "Owed" is invoice truth, not job-status truth: a non-voided invoice on a job
+ * that isn't `paid`. It is deliberately NOT keyed on `status = 'invoiced'` —
+ * the owner can move a job's status to anything at any time (e.g. back to
+ * `active` because more work is needed), and doing so must not make a real,
+ * live invoice vanish from what the business is owed. The only two things that
+ * ever remove money from this total are being marked paid or being voided,
+ * both explicit actions with their own confirmation.
  */
 export async function getOutstandingInvoiceTotalCents(): Promise<number> {
   const rows = await db
@@ -27,7 +31,7 @@ export async function getOutstandingInvoiceTotalCents(): Promise<number> {
     .from(invoices)
     .innerJoin(jobs, eq(invoices.jobId, jobs.id))
     .where(
-      and(eq(jobs.status, 'invoiced'), isNull(jobs.deletedAt), isNull(invoices.voidedAt)),
+      and(ne(jobs.status, 'paid'), isNull(jobs.deletedAt), isNull(invoices.voidedAt)),
     );
 
   return Number(rows[0]?.total ?? 0);

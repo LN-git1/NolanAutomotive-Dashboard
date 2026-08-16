@@ -10,7 +10,7 @@ import { findJobByRegistration } from '@/lib/db/queries/jobs';
 import { jobAttachments, jobs } from '@/lib/db/schema';
 import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
 import { removeObject } from '@/lib/storage/signedUrl';
-import { jobInputSchema, jobStatusSchema } from '@/lib/validation/job';
+import { jobInputSchema, jobStatusChangeSchema } from '@/lib/validation/job';
 
 export interface ActionResult {
   ok: boolean;
@@ -86,13 +86,13 @@ export async function lookupJobByRegistration(registration: string) {
 export async function changeJobStatus(jobId: string, status: string): Promise<ActionResult> {
   await requireSession();
 
-  const parsed = jobStatusSchema.safeParse(status);
-  if (!parsed.success) return { ok: false, error: 'Invalid status' };
+  const parsed = jobStatusChangeSchema.safeParse({ jobId, status });
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid status' };
 
   await db
     .update(jobs)
-    .set({ status: parsed.data, updatedAt: new Date() })
-    .where(and(eq(jobs.id, jobId), isNull(jobs.deletedAt)));
+    .set({ status: parsed.data.status, updatedAt: new Date() })
+    .where(and(eq(jobs.id, parsed.data.jobId), isNull(jobs.deletedAt)));
 
   revalidatePath('/jobs');
   revalidatePath(`/jobs/${jobId}`);

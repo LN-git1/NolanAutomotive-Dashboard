@@ -68,16 +68,30 @@ export default async function SupplierDetailPage({
               <tbody>
                 {supplier.bills.map((bill) => (
                   <tr key={bill.id}>
-                    <Td className="text-muted">{formatDate(bill.billDate)}</Td>
-                    <Td>
+                    <Td label="Date" className="text-muted">
+                      {formatDate(bill.billDate)}
+                    </Td>
+                    <Td label="Reference">
                       <div>{bill.reference ?? '—'}</div>
                       {bill.notes ? <div className="text-xs text-muted">{bill.notes}</div> : null}
+                      {bill.attachmentStoragePath ? (
+                        <a
+                          href={`/api/supplier-bills/${bill.id}/receipt`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-brand-dark hover:underline"
+                        >
+                          View receipt
+                        </a>
+                      ) : null}
                     </Td>
-                    <Td className="text-right tabular">{numericToEur(bill.amount)}</Td>
-                    <Td>
+                    <Td label="Amount" className="text-right tabular">
+                      {numericToEur(bill.amount)}
+                    </Td>
+                    <Td label="Status">
                       <Badge value={bill.paidAt ? 'paid' : 'invoiced'} />
                     </Td>
-                    <Td>
+                    <Td label="Actions">
                       <BillActions
                         billId={bill.id}
                         paid={bill.paidAt !== null}
@@ -91,7 +105,9 @@ export default async function SupplierDetailPage({
           )}
         </Card>
 
-        <Card>
+        {/* order-first on mobile, same reasoning as the supplier list page:
+            adding a bill shouldn't require scrolling past the whole list. */}
+        <Card className="order-first xl:order-none">
           <CardHeader title="Add bill" />
           <BillForm supplierId={supplier.id} />
         </Card>

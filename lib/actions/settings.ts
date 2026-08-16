@@ -30,23 +30,27 @@ export async function updateSettings(formData: FormData): Promise<ActionResult> 
     updatedAt: new Date(),
   };
 
-  await db
-    .insert(settings)
-    .values(values)
-    .onConflictDoUpdate({
-      target: settings.id,
-      set: {
-        businessName: sql`excluded.business_name`,
-        businessAddress: sql`excluded.business_address`,
-        businessPhone: sql`excluded.business_phone`,
-        businessEmail: sql`excluded.business_email`,
-        vatRegistered: sql`excluded.vat_registered`,
-        vatNumber: sql`excluded.vat_number`,
-        defaultVatRate: sql`excluded.default_vat_rate`,
-        defaultHourlyRate: sql`excluded.default_hourly_rate`,
-        updatedAt: sql`excluded.updated_at`,
-      },
-    });
+  try {
+    await db
+      .insert(settings)
+      .values(values)
+      .onConflictDoUpdate({
+        target: settings.id,
+        set: {
+          businessName: sql`excluded.business_name`,
+          businessAddress: sql`excluded.business_address`,
+          businessPhone: sql`excluded.business_phone`,
+          businessEmail: sql`excluded.business_email`,
+          vatRegistered: sql`excluded.vat_registered`,
+          vatNumber: sql`excluded.vat_number`,
+          defaultVatRate: sql`excluded.default_vat_rate`,
+          defaultHourlyRate: sql`excluded.default_hourly_rate`,
+          updatedAt: sql`excluded.updated_at`,
+        },
+      });
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Could not save settings' };
+  }
 
   revalidatePath('/settings');
   revalidatePath('/invoicer');

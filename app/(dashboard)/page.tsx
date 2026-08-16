@@ -47,14 +47,18 @@ function JobList({ jobs, emptyText }: { jobs: Job[]; emptyText: string }) {
       <tbody>
         {jobs.map((job) => (
           <tr key={job.id}>
-            <Td>
+            <Td label="Job">
               <Link href={`/jobs/${job.id}`} className="font-medium text-brand-dark hover:underline">
                 {job.jobNumber}
               </Link>
             </Td>
-            <Td>{job.customerName}</Td>
-            <Td className="text-muted">{job.vehicleRegistration}</Td>
-            <Td className="text-muted">{formatDate(job.dueDate)}</Td>
+            <Td label="Customer">{job.customerName}</Td>
+            <Td label="Vehicle" className="text-muted">
+              {job.vehicleRegistration}
+            </Td>
+            <Td label="Due" className="text-muted">
+              {formatDate(job.dueDate)}
+            </Td>
           </tr>
         ))}
       </tbody>
@@ -141,16 +145,22 @@ async function RecentInvoices() {
       <tbody>
         {recentInvoices.map((invoice) => (
           <tr key={invoice.id}>
-            <Td className="font-medium">{invoice.invoiceNumber}</Td>
-            <Td>
+            <Td label="Invoice" className="font-medium">
+              {invoice.invoiceNumber}
+            </Td>
+            <Td label="Job">
               <Link href={`/jobs/${invoice.jobId}`} className="text-brand-dark hover:underline">
                 {invoice.jobNumber}
               </Link>
             </Td>
-            <Td>{invoice.customerName}</Td>
-            <Td className="text-muted">{formatDate(invoice.issueDate)}</Td>
-            <Td className="text-right tabular">{numericToEur(invoice.grandTotal)}</Td>
-            <Td>
+            <Td label="Customer">{invoice.customerName}</Td>
+            <Td label="Issued" className="text-muted">
+              {formatDate(invoice.issueDate)}
+            </Td>
+            <Td label="Total" className="text-right tabular">
+              {numericToEur(invoice.grandTotal)}
+            </Td>
+            <Td label="Status">
               <Badge value={invoice.jobStatus} />
             </Td>
           </tr>

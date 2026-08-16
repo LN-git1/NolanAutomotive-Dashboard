@@ -15,13 +15,13 @@ import type { Job, Settings } from '@/lib/db/schema';
 export { buildInvoiceFileName } from './fileName';
 
 /**
- * Turns a job into everything needed to stamp a PDF and, if the owner sends it,
- * to persist an invoice row.
+ * Turns a job into everything needed to stamp a PDF and, the first time, to
+ * persist an invoice row.
  *
- * `/api/invoices/generate` (preview), `/api/invoices/finalize` (commit) and
- * `/api/invoices/[id]/regenerate` (re-send) all call this with nothing but a job
- * id. Sharing one builder is what guarantees the previewed document, the stored
- * document and the re-sent document are identical apart from the invoice number.
+ * `/api/invoices/generate` calls this whether it is issuing a new invoice or
+ * regenerating the live one for a job that already has one — both paths share
+ * this one builder, which is what guarantees a regenerated document always
+ * matches the job's current content exactly.
  */
 
 export class InvoiceBuildError extends Error {}

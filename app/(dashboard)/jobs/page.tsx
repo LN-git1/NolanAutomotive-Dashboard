@@ -103,7 +103,7 @@ export default async function JobsPage({ searchParams }: PageProps<'/jobs'>) {
             <tbody>
               {jobs.map((job) => (
                 <tr key={job.id}>
-                  <Td>
+                  <Td label="Job">
                     <Link
                       href={`/jobs/${job.id}`}
                       className="font-medium text-brand-dark hover:underline"
@@ -111,25 +111,27 @@ export default async function JobsPage({ searchParams }: PageProps<'/jobs'>) {
                       {job.jobNumber}
                     </Link>
                   </Td>
-                  <Td>
+                  <Td label="Customer">
                     <div>{job.customerName}</div>
                     {job.customerPhone ? (
                       <div className="text-xs text-muted">{job.customerPhone}</div>
                     ) : null}
                   </Td>
-                  <Td>
+                  <Td label="Vehicle">
                     <div className="font-medium">{job.vehicleRegistration}</div>
                     <div className="text-xs text-muted">
                       {[job.vehicleMake, job.vehicleModel].filter(Boolean).join(' ') || '—'}
                     </div>
                   </Td>
-                  <Td>
+                  <Td label="Status">
                     <Badge value={job.status} />
                   </Td>
-                  <Td>
+                  <Td label="Priority">
                     <Badge value={job.priority} />
                   </Td>
-                  <Td className="text-muted">{formatDate(job.dueDate)}</Td>
+                  <Td label="Due" className="text-muted">
+                    {formatDate(job.dueDate)}
+                  </Td>
                 </tr>
               ))}
             </tbody>

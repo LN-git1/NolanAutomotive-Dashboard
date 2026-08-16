@@ -43,6 +43,12 @@ function newRow(columns: EditorColumn[], defaults: Record<string, string>): Edit
   };
 }
 
+/** What a caller is told after any row changes — never the rows themselves. */
+export interface EditorSummary {
+  count: number;
+  total: number;
+}
+
 export function LineEditor({
   name,
   columns,
@@ -51,7 +57,8 @@ export function LineEditor({
   addLabel,
   emptyLabel,
   rowDefaults = {},
-  onChange,
+  computeTotal,
+  onTotalsChange,
 }: {
   /** Hidden input name — the key the server action reads. */
   name: string;
@@ -61,7 +68,21 @@ export function LineEditor({
   addLabel: string;
   emptyLabel: string;
   rowDefaults?: Record<string, string>;
-  onChange?: (rows: Record<string, string>[]) => void;
+  /** Reduces the current rows to whatever "total" means for this table. */
+  computeTotal?: (rows: Record<string, string>[]) => number;
+  /**
+   * Fired after every row change with the derived count/total, never the rows
+   * themselves.
+   *
+   * The row state lives entirely here, not mirrored into the parent form —
+   * that used to mean every keystroke in a description or part-number field
+   * (which affects no total) still re-rendered the whole job form, including
+   * unrelated sections. Reporting only two numbers means a caller that stores
+   * them in plain state gets React's own bail-out on an unchanged primitive:
+   * editing text that doesn't move the total skips the parent's re-render
+   * rather than merely shrinking what gets passed up.
+   */
+  onTotalsChange?: (summary: EditorSummary) => void;
 }) {
   const fieldId = useId();
   const [rows, setRows] = useState<EditorRow[]>(() =>
@@ -73,7 +94,8 @@ export function LineEditor({
 
   function update(next: EditorRow[]) {
     setRows(next);
-    onChange?.(next.map((row) => row.values));
+    const values = next.map((row) => row.values);
+    onTotalsChange?.({ count: values.length, total: computeTotal ? computeTotal(values) : 0 });
   }
 
   // Blank rows are dropped rather than posted: an empty row the owner added and
@@ -84,6 +106,17 @@ export function LineEditor({
 
   const over = rows.length > capacity;
 
+  function addRow() {
+    update([...rows, newRow(columns, rowDefaults)]);
+  }
+
+  const addButton = (
+    <Button type="button" size="sm" variant="secondary" onClick={addRow}>
+      <Plus aria-hidden className="size-4" />
+      {addLabel}
+    </Button>
+  );
+
   return (
     <div className="flex flex-col gap-3">
       <input type="hidden" name={name} value={JSON.stringify(payload)} />
@@ -93,15 +126,7 @@ export function LineEditor({
           {rows.length} of {capacity} lines
           {over ? ' — more than the invoice template can print' : ''}
         </p>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          onClick={() => update([...rows, newRow(columns, rowDefaults)])}
-        >
-          <Plus aria-hidden className="size-4" />
-          {addLabel}
-        </Button>
+        {addButton}
       </div>
 
       {rows.length === 0 ? (
@@ -141,6 +166,10 @@ export function LineEditor({
                     aria-label={`${column.label} line ${index + 1}`}
                     inputMode={column.numeric ? 'decimal' : undefined}
                     placeholder={column.placeholder}
+                    // Client-side backstop for what the server already rejects
+                    // (partLineSchema requires a name) — catches it before
+                    // submission instead of after a round trip.
+                    required={column.required}
                     value={row.values[column.key] ?? ''}
                     onChange={(event) =>
                       update(
@@ -158,6 +187,10 @@ export function LineEditor({
           </div>
         ))
       )}
+
+      {/* Same control again, after the last row — filling row 5 and wanting a
+          6th used to mean scrolling back to the top to find this button. */}
+      {rows.length > 0 ? <div className="flex justify-end">{addButton}</div> : null}
     </div>
   );
 }

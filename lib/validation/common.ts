@@ -51,15 +51,32 @@ export const optionalInt = (options: { min?: number; max?: number; label: string
       `${options.label} must be at most ${options.max}`,
     );
 
-/** Decimal string for a money/quantity field, kept as a string end-to-end. */
-export const decimalString = (options: { label: string; allowEmpty?: boolean }) =>
+/**
+ * Decimal string for a money/quantity field, kept as a string end-to-end.
+ *
+ * `maxIntegerDigits` guards against a value that would overflow its Postgres
+ * `numeric` column — without it, a value like `999999999999.99` passes this
+ * check and validation, then throws an unhandled overflow error out of the
+ * server action instead of a clean, user-facing rejection.
+ */
+export const decimalString = (options: {
+  label: string;
+  allowEmpty?: boolean;
+  maxIntegerDigits?: number;
+}) =>
   z
     .union([z.string(), z.number()])
     .transform((value) => String(value ?? '').trim())
     .refine(
       (value) => (options.allowEmpty && value === '') || /^\d+(\.\d{1,4})?$/.test(value),
       `${options.label} must be a positive number`,
-    );
+    )
+    .refine((value) => {
+      if (options.maxIntegerDigits === undefined) return true;
+      if (options.allowEmpty && value === '') return true;
+      const [intPart = ''] = value.split('.');
+      return intPart.length <= options.maxIntegerDigits;
+    }, `${options.label} is too large`);
 
 /**
  * Same decimal, but the field may be absent from the payload entirely — an

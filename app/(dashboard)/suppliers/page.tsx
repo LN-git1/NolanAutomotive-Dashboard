@@ -44,7 +44,7 @@ export default async function SuppliersPage() {
               <tbody>
                 {suppliers.map((supplier) => (
                   <tr key={supplier.id}>
-                    <Td>
+                    <Td label="Supplier">
                       <Link
                         href={`/suppliers/${supplier.id}`}
                         className="font-medium text-brand-dark hover:underline"
@@ -55,8 +55,10 @@ export default async function SuppliersPage() {
                         <div className="text-xs text-muted">{supplier.notes}</div>
                       ) : null}
                     </Td>
-                    <Td className="text-muted">{supplier.billCount}</Td>
-                    <Td className="text-right tabular">
+                    <Td label="Bills" className="text-muted">
+                      {supplier.billCount}
+                    </Td>
+                    <Td label="Outstanding" className="text-right tabular">
                       {formatEur(Number(supplier.outstandingCents))}
                     </Td>
                   </tr>
@@ -66,7 +68,11 @@ export default async function SuppliersPage() {
           )}
         </Card>
 
-        <Card>
+        {/* order-first: on a single-column phone this appears before the
+            supplier list, so adding one doesn't need scrolling past it first.
+            xl:order-none returns it to its natural (second) position once the
+            two-column layout has room for both side by side. */}
+        <Card className="order-first xl:order-none">
           <CardHeader title="Add supplier" />
           <SupplierForm />
         </Card>

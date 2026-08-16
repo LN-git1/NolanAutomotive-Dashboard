@@ -51,7 +51,7 @@ export default async function AwaitingPaymentsPage() {
             <tbody>
               {rows.map(({ job, invoice }) => (
                 <tr key={job.id}>
-                  <Td>
+                  <Td label="Job">
                     <Link
                       href={`/jobs/${job.id}`}
                       className="font-medium text-brand-dark hover:underline"
@@ -60,8 +60,8 @@ export default async function AwaitingPaymentsPage() {
                     </Link>
                     <div className="text-xs text-muted">{job.vehicleRegistration}</div>
                   </Td>
-                  <Td>{job.customerName}</Td>
-                  <Td>
+                  <Td label="Customer">{job.customerName}</Td>
+                  <Td label="Invoice">
                     {invoice ? (
                       <Link
                         href={`/api/invoices/${invoice.id}/pdf`}
@@ -75,11 +75,13 @@ export default async function AwaitingPaymentsPage() {
                       <span className="text-muted">—</span>
                     )}
                   </Td>
-                  <Td className="text-muted">{formatDate(invoice?.issueDate)}</Td>
-                  <Td className="text-right tabular">
+                  <Td label="Issued" className="text-muted">
+                    {formatDate(invoice?.issueDate)}
+                  </Td>
+                  <Td label="Total" className="text-right tabular">
                     {invoice ? numericToEur(invoice.grandTotal) : '—'}
                   </Td>
-                  <Td className="text-right">
+                  <Td label="Action" className="text-right">
                     <MarkPaidButton jobId={job.id} jobNumber={job.jobNumber} />
                   </Td>
                 </tr>

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, ilike, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 
 import { db } from '../index';
 import { invoices, jobs, type JobStatus } from '../schema';
@@ -158,8 +158,15 @@ export async function findJobByRegistration(registration: string) {
 }
 
 /**
- * Invoiced-but-unpaid jobs with their invoice, for Awaiting Payments.
- * Voided invoices are excluded — a voided invoice is not money owed.
+ * Jobs with a live invoice that isn't paid, for Awaiting Payments.
+ *
+ * Deliberately an INNER join filtered on `status <> 'paid'`, not `status =
+ * 'invoiced'`: the owner can move a job's status to anything at any time (the
+ * status dropdown allows it unconditionally), and doing so must not make a
+ * real, live invoice disappear from what is owed. What actually removes a job
+ * from this list is being marked paid or the invoice being voided — both
+ * explicit actions — not an incidental status change made for an unrelated
+ * reason. Matches the same logic in `getOutstandingInvoiceTotalCents`.
  */
 export async function listAwaitingPayment() {
   return db
@@ -168,8 +175,8 @@ export async function listAwaitingPayment() {
       invoice: invoices,
     })
     .from(jobs)
-    .leftJoin(invoices, and(eq(invoices.jobId, jobs.id), isNull(invoices.voidedAt)))
-    .where(and(eq(jobs.status, 'invoiced'), notDeleted))
+    .innerJoin(invoices, and(eq(invoices.jobId, jobs.id), isNull(invoices.voidedAt)))
+    .where(and(ne(jobs.status, 'paid'), notDeleted))
     .orderBy(desc(jobs.updatedAt));
 }
 

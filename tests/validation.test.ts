@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { toCsv } from '@/lib/csv';
+import { decimalString } from '@/lib/validation/common';
 import { invoiceDraftSchema, invoiceFinalizeSchema } from '@/lib/validation/invoice';
 import { jobInputSchema, partLineSchema } from '@/lib/validation/job';
 import { settingsInputSchema } from '@/lib/validation/settings';
@@ -130,6 +131,34 @@ describe('settingsInputSchema', () => {
     });
 
     expect(result.vatRegistered).toBe(true);
+  });
+});
+
+describe('decimalString', () => {
+  /**
+   * `supplierBills.amount` is `numeric(12, 2)` — 10 integer digits. Without a
+   * cap, a value like this passes the regex/positive-number check and then
+   * throws an unhandled Postgres overflow out of the server action instead of
+   * a clean, user-facing rejection.
+   */
+  it('rejects a value over the configured digit cap', () => {
+    const schema = decimalString({ label: 'Amount', maxIntegerDigits: 8 });
+
+    expect(schema.safeParse('123456789.00').success).toBe(false);
+    expect(schema.safeParse('12345678.00').success).toBe(true);
+  });
+
+  it('imposes no cap when maxIntegerDigits is not set', () => {
+    const schema = decimalString({ label: 'Amount' });
+
+    expect(schema.safeParse('999999999999.99').success).toBe(true);
+  });
+
+  it('still rejects a malformed value even under a configured cap', () => {
+    const schema = decimalString({ label: 'Amount', maxIntegerDigits: 8 });
+
+    expect(schema.safeParse('not a number').success).toBe(false);
+    expect(schema.safeParse('-5').success).toBe(false);
   });
 });
 
