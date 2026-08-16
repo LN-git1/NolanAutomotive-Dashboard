@@ -1,5 +1,74 @@
 # Changelog
 
+## 16/08/2026 @ 23:20:57 IST — "claude-sonnet-5"
+
+**Project completion: 100.00%**
+
+Basis: 15 of 15 files in this session's own approved plan (Part A: delete-supplier; Part B1-B4:
+the Earnings view's query layer, actions, panel, routes, and cache-freshness wiring), plus all 4
+live-verification checks the plan specified, each confirmed twice — once locally, once again on
+production after deploy. Scoped to today's plan, same convention as the previous entry: not a claim
+about the whole project, and the separate "keep-alive cron check" item from earlier entries is
+untouched by this session.
+
+### Goal
+
+Two requests via `/goal`: fix a real bug (no way to delete a supplier from "Owed to others" at all),
+and add a new "Earnings" view — all-time total, 30-day average, collapsible month-by-month breakdown
+— shown inline on Overview for desktop and reached by a right-to-left swipe on mobile. The visual
+reference was a screenshot of a Fansly earnings list; only the collapsible-monthly-list pattern was
+borrowed, not its "Top X%" percentile badges, which have no equivalent on a garage's own books.
+
+### Fixed — supplier deletion, and the receipt-orphan bug it would otherwise repeat
+
+`lib/actions/suppliers.ts` had create/add-bill/mark-paid/delete-bill, but no way to delete a supplier
+at all. `supplierBills.supplierId` is `ON DELETE CASCADE`, so a bare delete would have silently
+orphaned every deleted bill's R2 receipt — the exact bug `deleteSupplierBill` itself had until it was
+fixed earlier today, just for N receipts instead of one. New `deleteSupplier` reads every bill's
+receipt path first, then a single bulk `removeObjects` call (the same helper the factory reset
+already uses for this shape) before the cascade removes the rows. Wired into both the supplier list
+and detail pages. Verified live, both places, both with a real uploaded receipt: delete removes the
+supplier and its bills, and the same still-valid signed URL that served the receipt (`200`) before
+deleting returns `404` after — proof the R2 object, not just the database row, is actually gone.
+
+### Added — an Earnings view, deliberately cash-basis
+
+Jobs carry no `paidAt` timestamp — only `supplierBills.paidAt` exists, for the other side of the
+business. A direct production query, run before committing to a design, showed accrual revenue (every
+non-voided invoice) and cash revenue (only invoices whose job is `paid`) diverging by tens of
+thousands of euros, because this app already has a "Total outstanding" tile for invoiced-but-unpaid
+work. Labelling accrual revenue "Earned" would have shown money that hasn't been collected, sitting
+directly under a tile saying how much hasn't been collected. Earnings therefore only counts invoices
+whose job is `paid`, non-voided, not soft-deleted, grouped by `issueDate`'s month as the best
+available proxy for "when collected." Two small aggregate queries, not a row-level fetch — invoice
+detail for a given month is fetched lazily via a server action only when that month is actually
+expanded (collapsed by default, per spec), confirmed live to fetch exactly once per month regardless
+of how many times it's re-collapsed and re-expanded.
+
+Shown inline on Overview from `lg` up — not `xl`, which is what the sidebar/mobile-chrome switch
+actually uses everywhere else in this app; gating on `xl` would have meant a real 1024-1279px desktop
+viewport got the desktop shell but not this section. On mobile, reached at `/earnings` via a
+right-to-left swipe or a tap-fallback pill (both needed — a gesture-only route is undiscoverable).
+The swipe handler ignores drags starting inside a `<table>`: a page-wide handler would otherwise
+compete with a wide table's own horizontal scroll in the 640-1023px tablet band, confirmed as a real
+conflict (not hypothetical) before writing the guard, and confirmed live afterward that a swipe
+starting on a table correctly does nothing while a swipe starting elsewhere still navigates.
+
+Verified live on production end-to-end: created a throwaway job, invoiced and marked it paid — Earned
+all time and the current month's row both picked it up immediately, 30-day average computed exactly
+(÷30, e.g. €73.80 → €2.46); voided the invoice — both figures dropped back to zero. `<details>`/
+`<summary>` used for the month rows rather than hand-rolled state, matching `job-form.tsx`'s existing
+collapsible-section pattern.
+
+### Files Touched
+
+`lib/actions/suppliers.ts`, `components/suppliers/supplier-actions.tsx` (new),
+`app/(dashboard)/suppliers/{page,[supplierId]/page}.tsx`, `lib/db/queries/earnings.ts` (new),
+`lib/actions/earnings.ts` (new), `lib/validation/earnings.ts` (new), `tests/earnings.test.ts` (new),
+`components/earnings/{earnings-panel,swipe-nav}.tsx` (new),
+`app/(dashboard)/earnings/{page,loading}.tsx` (new), `app/(dashboard)/page.tsx`, `lib/actions/jobs.ts`,
+`app/api/invoices/[id]/void/route.ts`
+
 ## 16/08/2026 @ 20:49:54 IST — "claude-sonnet-5"
 
 **Project completion: 100.00%**
