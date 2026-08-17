@@ -21,6 +21,8 @@ export interface DayCell {
   inCurrentMonth: boolean;
   isToday: boolean;
   isWeekend: boolean;
+  isTimeOff: boolean;
+  timeOffLabel: string | null;
   jobs: Job[];
 }
 
@@ -33,7 +35,14 @@ export function todayIso(): string {
   return isoDate(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
-/** Jobs booked into a date range, soonest first. Paid work is history, not schedule. */
+/**
+ * Jobs booked into a date range, soonest first. Paid work is history, not
+ * schedule. Within a day, timed jobs sort by `dueTime` — plain string
+ * comparison is correct here because it is always zero-padded "HH:MM", so
+ * lexicographic order is chronological order. Postgres's default ASC null
+ * ordering (NULLS LAST) puts jobs with no set time after the timed ones on
+ * the same day, tie-broken by job number.
+ */
 export async function listScheduledJobs(fromIso: string, toIso: string) {
   return db
     .select()
@@ -46,7 +55,7 @@ export async function listScheduledJobs(fromIso: string, toIso: string) {
         lte(jobs.dueDate, toIso),
       ),
     )
-    .orderBy(asc(jobs.dueDate), asc(jobs.jobNumber));
+    .orderBy(asc(jobs.dueDate), asc(jobs.dueTime), asc(jobs.jobNumber));
 }
 
 /**
@@ -96,8 +105,16 @@ export async function countJobsPerDay(fromIso: string, toIso: string) {
 /**
  * Build a Monday-first month grid, padded with the surrounding days so every
  * row has seven cells. Irish week starts Monday, not Sunday.
+ *
+ * `timeOffByDate` defaults to empty so existing callers (and tests) that only
+ * pass `jobsByDate` keep working unchanged.
  */
-export function buildMonthGrid(year: number, month: number, jobsByDate: Map<string, Job[]>): DayCell[] {
+export function buildMonthGrid(
+  year: number,
+  month: number,
+  jobsByDate: Map<string, Job[]>,
+  timeOffByDate: Map<string, string | null> = new Map(),
+): DayCell[] {
   const today = todayIso();
   const firstOfMonth = new Date(Date.UTC(year, month, 1));
   const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
@@ -116,6 +133,8 @@ export function buildMonthGrid(year: number, month: number, jobsByDate: Map<stri
       inCurrentMonth,
       isToday: date === today,
       isWeekend: weekday === 0 || weekday === 6,
+      isTimeOff: timeOffByDate.has(date),
+      timeOffLabel: timeOffByDate.get(date) ?? null,
       jobs: jobsByDate.get(date) ?? [],
     });
   };

@@ -65,6 +65,19 @@ export const settings = pgTable('settings', {
 });
 
 /**
+ * Days the owner is unavailable — shown struck off on Schedule. Not FK'd to
+ * anything; a standalone calendar, not customer/financial data, so — like
+ * `settings` — it is deliberately excluded from `factoryReset`.
+ */
+export const timeOff = pgTable('time_off', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  startDate: date('start_date').notNull(),
+  endDate: date('end_date').notNull(),
+  label: text('label'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * One labour line as printed in the template's WORK CARRIED OUT table: a
  * description and the hours spent on it. The template's second column is
  * HOUR(S), not money — the euro figure appears only in the SUBTOTAL box.
@@ -100,6 +113,13 @@ export const jobs = pgTable(
     status: jobStatusEnum('status').notNull().default('active'),
     priority: priorityEnum('priority').notNull().default('medium'),
     dueDate: date('due_date'),
+    // Stored as a plain "HH:MM" string, not a Postgres TIME column — TIME
+    // round-trips as "HH:MM:SS", which would drift from what
+    // <input type="time"> both submits and expects back. Text keeps read and
+    // write byte-for-byte identical, the same reasoning `dueDate` already
+    // gets in `lib/db/queries/schedule.ts`'s docstring. Optional: a job can
+    // have a date with no exact time yet.
+    dueTime: text('due_time'),
 
     customerName: text('customer_name').notNull(),
     customerPhone: text('customer_phone'),
@@ -334,3 +354,4 @@ export type Supplier = typeof suppliers.$inferSelect;
 export type SupplierBill = typeof supplierBills.$inferSelect;
 export type Payment = typeof payments.$inferSelect;
 export type Settings = typeof settings.$inferSelect;
+export type TimeOff = typeof timeOff.$inferSelect;

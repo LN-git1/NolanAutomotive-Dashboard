@@ -144,6 +144,17 @@ export const optionalDate = z
     'Enter a valid date',
   );
 
+/** 24-hour "HH:MM" from a time input, or null. Matches what `<input type="time">` submits exactly. */
+export const optionalTime = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value && value !== '' ? value : null))
+  .refine(
+    (value) => value === null || /^([01]\d|2[0-3]):[0-5]\d$/.test(value),
+    'Enter a valid time',
+  );
+
 export const requiredDate = z
   .string()
   .trim()

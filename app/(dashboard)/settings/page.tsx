@@ -2,9 +2,11 @@ import type { Metadata } from 'next';
 
 import { FactoryReset } from '@/components/settings/factory-reset';
 import { SettingsForm } from '@/components/settings/settings-form';
+import { TimeOffCard } from '@/components/settings/time-off';
 import { Card, CardBody, CardHeader } from '@/components/ui';
 import { getResetCounts } from '@/lib/db/queries/overview';
 import { getSettings } from '@/lib/db/queries/settings';
+import { listAllTimeOff } from '@/lib/db/queries/time-off';
 import { peekNextNumber } from '@/lib/counters';
 import { db } from '@/lib/db';
 import { formatInvoiceNumber } from '@/lib/counters';
@@ -23,7 +25,11 @@ const EXPORTS = [
 ] as const;
 
 export default async function SettingsPage() {
-  const [settings, resetCounts] = await Promise.all([getSettings(), getResetCounts()]);
+  const [settings, resetCounts, timeOffEntries] = await Promise.all([
+    getSettings(),
+    getResetCounts(),
+    listAllTimeOff(),
+  ]);
 
   // Shown so the owner can see where the sequence currently stands.
   let nextInvoiceNumber = '—';
@@ -58,6 +64,8 @@ export default async function SettingsPage() {
           </p>
         </CardBody>
       </Card>
+
+      <TimeOffCard entries={timeOffEntries} />
 
       <Card>
         <CardHeader title="Data export" description="Downloads as CSV" />

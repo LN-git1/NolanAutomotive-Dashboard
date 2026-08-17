@@ -8,6 +8,7 @@ import {
   optionalEmail,
   optionalInt,
   optionalText,
+  optionalTime,
   requiredText,
   uuidString,
 } from './common';
@@ -78,6 +79,7 @@ export const jobInputSchema = z.object({
   status: jobStatusSchema.default('active'),
   priority: jobPrioritySchema.default('medium'),
   dueDate: optionalDate,
+  dueTime: optionalTime,
 
   // Invoice content.
   labourLines: jsonArray(labourLineSchema, { label: 'Work lines', max: 50 }),

@@ -13,9 +13,18 @@ import {
   shiftMonth,
   todayIso,
 } from '@/lib/db/queries/schedule';
-import { formatDate } from '@/lib/format';
+import { listTimeOffInRange, timeOffDateMap } from '@/lib/db/queries/time-off';
+import { formatDate, formatTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Job } from '@/lib/db/schema';
+
+const MONTH_SHORT = MONTH_NAMES.map((name) => name.slice(0, 3));
+
+/** "2026-08-20" -> "20 Aug", for the compact header summary. */
+function formatShortDate(iso: string): string {
+  const [, month, day] = iso.split('-');
+  return `${Number(day)} ${MONTH_SHORT[Number(month) - 1]}`;
+}
 
 export const metadata: Metadata = { title: 'Schedule' };
 export const dynamic = 'force-dynamic';
@@ -34,12 +43,14 @@ function workload(count: number): { label: string; className: string } {
 }
 
 function JobChip({ job }: { job: Job }) {
+  const time = formatTime(job.dueTime);
   return (
     <Link
       href={`/jobs/${job.id}`}
       className="block truncate rounded border border-line bg-canvas px-1.5 py-1 text-[11px] leading-tight hover:bg-info-soft"
-      title={`${job.jobNumber} — ${job.customerName} (${job.vehicleRegistration})`}
+      title={`${time ? `${time} — ` : ''}${job.jobNumber} — ${job.customerName} (${job.vehicleRegistration})`}
     >
+      {time ? <span className="text-muted">{time}</span> : null}{' '}
       <span className="font-medium text-ink">{job.jobNumber}</span>{' '}
       <span className="text-muted">{job.customerName}</span>
     </Link>
@@ -54,12 +65,15 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
   );
 
   const { from, to } = monthGridRange(year, month);
-  const [scheduled, unscheduled] = await Promise.all([
+  const [scheduled, unscheduled, timeOffEntries] = await Promise.all([
     listScheduledJobs(from, to),
     listUnscheduledJobs(),
+    listTimeOffInRange(from, to),
   ]);
 
   // Bucket by date once, rather than filtering the list inside every cell.
+  // `scheduled` already arrives ordered soonest-first (by date, then time,
+  // then job number), so each day's bucket comes out chronological for free.
   const byDate = new Map<string, Job[]>();
   for (const job of scheduled) {
     if (!job.dueDate) continue;
@@ -68,7 +82,7 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
     byDate.set(job.dueDate, list);
   }
 
-  const cells = buildMonthGrid(year, month, byDate);
+  const cells = buildMonthGrid(year, month, byDate, timeOffDateMap(timeOffEntries, from, to));
   const prev = shiftMonth(year, month, -1);
   const next = shiftMonth(year, month, 1);
   const today = todayIso();
@@ -79,9 +93,16 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
     .slice(0, 30);
 
   const bookedThisMonth = cells.filter((c) => c.inCurrentMonth).reduce((n, c) => n + c.jobs.length, 0);
-  const freeDaysThisMonth = cells.filter(
-    (c) => c.inCurrentMonth && !c.isWeekend && c.jobs.length === 0,
-  ).length;
+
+  // Time off overlapping the actual month (not the grid's padding days either
+  // side of it) — a short, honest mention rather than a "free days" count
+  // that would need to reconcile weekends being bookable with time-off days
+  // not being. See CHANGELOG for why that count was removed outright.
+  const monthFrom = cells.find((c) => c.inCurrentMonth)?.date ?? from;
+  const monthTo = [...cells].reverse().find((c) => c.inCurrentMonth)?.date ?? to;
+  const timeOffThisMonth = timeOffEntries.filter(
+    (entry) => entry.startDate <= monthTo && entry.endDate >= monthFrom,
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -89,8 +110,22 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
         <div>
           <h1 className="text-lg font-semibold text-ink">Schedule</h1>
           <p className="text-sm text-muted">
-            {bookedThisMonth} {bookedThisMonth === 1 ? 'job' : 'jobs'} booked this month ·{' '}
-            {freeDaysThisMonth} free weekday{freeDaysThisMonth === 1 ? '' : 's'}
+            {bookedThisMonth} {bookedThisMonth === 1 ? 'job' : 'jobs'} booked this month
+            {timeOffThisMonth.length > 0 ? (
+              <>
+                {' '}
+                ·{' '}
+                {timeOffThisMonth
+                  .map((entry) => {
+                    const range =
+                      entry.startDate === entry.endDate
+                        ? formatShortDate(entry.startDate)
+                        : `${formatShortDate(entry.startDate)} – ${formatShortDate(entry.endDate)}`;
+                    return entry.label ? `Off ${range} (${entry.label})` : `Off ${range}`;
+                  })
+                  .join(', ')}
+              </>
+            ) : null}
           </p>
         </div>
         <LinkButton href="/jobs/new">New job</LinkButton>
@@ -137,13 +172,15 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
           <div className="grid grid-cols-7">
             {cells.map((cell) => {
               const load = workload(cell.jobs.length);
+              const timeOff = cell.isTimeOff && cell.inCurrentMonth;
               return (
                 <div
                   key={cell.date}
                   className={cn(
                     'min-h-28 border-r border-b border-line p-1.5 last:border-r-0',
                     !cell.inCurrentMonth && 'bg-canvas/60',
-                    cell.isWeekend && cell.inCurrentMonth && 'bg-canvas/40',
+                    cell.isWeekend && cell.inCurrentMonth && !timeOff && 'bg-canvas/40',
+                    timeOff && 'bg-warn-soft',
                   )}
                 >
                   <div className="mb-1 flex items-center justify-between gap-1">
@@ -153,6 +190,7 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
                         cell.isToday && 'bg-brand font-semibold text-white',
                         !cell.isToday && cell.inCurrentMonth && 'text-ink',
                         !cell.inCurrentMonth && 'text-muted',
+                        timeOff && !cell.isToday && 'text-warn line-through',
                       )}
                     >
                       {cell.dayOfMonth}
@@ -161,6 +199,12 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
                       <span className={cn('text-[10px]', load.className)}>{cell.jobs.length}</span>
                     ) : null}
                   </div>
+
+                  {timeOff ? (
+                    <p className="truncate text-[10px] font-medium text-warn">
+                      Off{cell.timeOffLabel ? ` · ${cell.timeOffLabel}` : ''}
+                    </p>
+                  ) : null}
 
                   <div className="flex flex-col gap-1">
                     {cell.jobs.slice(0, 3).map((job) => (
@@ -191,28 +235,38 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
                       {cell.isToday ? 'Today · ' : ''}
                       {formatDate(cell.date)}
                     </span>
-                    <span className={cn('text-xs', workload(cell.jobs.length).className)}>
-                      {workload(cell.jobs.length).label}
-                    </span>
+                    {cell.isTimeOff ? (
+                      <span className="text-xs font-medium text-warn">
+                        Off{cell.timeOffLabel ? ` · ${cell.timeOffLabel}` : ''}
+                      </span>
+                    ) : (
+                      <span className={cn('text-xs', workload(cell.jobs.length).className)}>
+                        {workload(cell.jobs.length).label}
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    {cell.jobs.map((job) => (
-                      <Link
-                        key={job.id}
-                        href={`/jobs/${job.id}`}
-                        className="flex items-center justify-between gap-2 rounded-md border border-line px-3 py-2"
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium text-ink">
-                            {job.jobNumber} — {job.customerName}
+                    {cell.jobs.map((job) => {
+                      const time = formatTime(job.dueTime);
+                      return (
+                        <Link
+                          key={job.id}
+                          href={`/jobs/${job.id}`}
+                          className="flex items-center justify-between gap-2 rounded-md border border-line px-3 py-2"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium text-ink">
+                              {time ? `${time} · ` : ''}
+                              {job.jobNumber} — {job.customerName}
+                            </span>
+                            <span className="block truncate text-xs text-muted">
+                              {job.vehicleRegistration}
+                            </span>
                           </span>
-                          <span className="block truncate text-xs text-muted">
-                            {job.vehicleRegistration}
-                          </span>
-                        </span>
-                        <Badge value={job.status} />
-                      </Link>
-                    ))}
+                          <Badge value={job.status} />
+                        </Link>
+                      );
+                    })}
                   </div>
                 </li>
               ))}

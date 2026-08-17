@@ -59,7 +59,7 @@ export default function DashboardError({
               className="inline-flex h-10 items-center gap-2 rounded-md border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-canvas sm:h-9"
             >
               <Phone aria-hidden className="size-4" />
-              Still stuck? Call Lee — 083 201 3732
+              Still stuck? Call Support — 083 201 3732
             </a>
           </div>
 

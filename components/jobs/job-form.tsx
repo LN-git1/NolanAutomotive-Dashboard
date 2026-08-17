@@ -233,8 +233,8 @@ export function JobForm({
         <Section title="Customer" defaultOpen>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* No autoComplete="name"/"tel"/"email" below — this is the
-                customer's info, not the user's; profile autofill would offer
-                Lee's own name/number/email instead. */}
+                customer's info, not the owner's; profile autofill would offer
+                the owner's own name/number/email instead. */}
             <Field label="Name" htmlFor="customerName" required className="sm:col-span-2">
               <Input
                 id="customerName"
@@ -432,9 +432,17 @@ export function JobForm({
             </Select>
           </Field>
 
-          <Field label="Due date" htmlFor="dueDate">
-            <Input id="dueDate" name="dueDate" type="date" defaultValue={job?.dueDate ?? ''} />
-          </Field>
+          {/* Date and time share one grid slot, split evenly, rather than each
+              taking a full column — they're one decision ("when"), not two. */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Due date" htmlFor="dueDate">
+              <Input id="dueDate" name="dueDate" type="date" defaultValue={job?.dueDate ?? ''} />
+            </Field>
+
+            <Field label="Due time" htmlFor="dueTime">
+              <Input id="dueTime" name="dueTime" type="time" defaultValue={job?.dueTime ?? ''} />
+            </Field>
+          </div>
 
           <Field
             label="Other comments"

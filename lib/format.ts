@@ -30,6 +30,20 @@ export function todayIsoDate(): string {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
+/** "HH:MM" (24-hour, as stored/submitted) -> "4:30pm". */
+export function formatTime(value: string | null | undefined): string | null {
+  if (!value) return null;
+
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+
+  const hour24 = Number(match[1]);
+  const minute = match[2];
+  const period = hour24 >= 12 ? 'pm' : 'am';
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${minute}${period}`;
+}
+
 /** A numeric column returned by Drizzle as a string -> display euros. */
 export function numericToEur(value: string | null | undefined): string {
   if (value === null || value === undefined || value === '') return '€0.00';

@@ -76,6 +76,25 @@ describe('buildMonthGrid', () => {
     expect(cells.find((c) => c.date === '2026-08-12')?.jobs).toHaveLength(2);
     expect(cells.find((c) => c.date === '2026-08-13')?.jobs).toHaveLength(0);
   });
+
+  it('marks time-off days and carries the label through, leaving other days untouched', () => {
+    const timeOff = new Map([
+      ['2026-08-20', 'Family holiday'],
+      ['2026-08-21', null],
+    ]);
+    const cells = buildMonthGrid(2026, 7, new Map(), timeOff);
+
+    const first = cells.find((c) => c.date === '2026-08-20');
+    const second = cells.find((c) => c.date === '2026-08-21');
+    const untouched = cells.find((c) => c.date === '2026-08-22');
+
+    expect(first?.isTimeOff).toBe(true);
+    expect(first?.timeOffLabel).toBe('Family holiday');
+    expect(second?.isTimeOff).toBe(true);
+    expect(second?.timeOffLabel).toBeNull();
+    expect(untouched?.isTimeOff).toBe(false);
+    expect(untouched?.timeOffLabel).toBeNull();
+  });
 });
 
 describe('monthGridRange', () => {
