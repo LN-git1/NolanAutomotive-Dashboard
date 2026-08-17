@@ -1,5 +1,82 @@
 # Changelog
 
+## 17/08/2026 @ 20:30:43 IST — "claude-sonnet-5"
+
+**Project completion: 100.00%**
+
+Basis: 6 of 6 items from this request shipped and verified — the error-banner name fix, exact
+job-time scheduling, chronological same-day ordering, the weekend-availability fix, the Settings
+time-off modal, and time off struck off the Schedule calendar. Verified with a real browser against
+both local dev (full round-trip: set a time, save, reload, confirm the stored value; add and delete
+a time-off entry through the actual modal) and the live production deployment after the migration
+and code both shipped (confirmed the "N jobs booked this month" line and the new Settings section
+render correctly with real data). The error boundary's copy fix was verified by reading the
+rendered file rather than forcing a live database outage on production, consistent with this
+project's standing rule to only ever test that specific failure mode against a Preview deployment.
+
+### Fixed — the error banner named the wrong person
+
+The "can't reach your data" banner (added earlier today) read "Call Lee — 083 201 3732". That
+phone number belongs to the dashboard's actual owner, but their name isn't Lee — `lee@` is just the
+address the DB-down alert email happens to go to, and that got wrongly carried over into the
+call-to-action's copy. Now reads "Call Support". A stray code comment in `job-form.tsx` had the
+same mistaken assumption baked in (guessing why customer-form autofill is disabled) and is
+corrected too, though it was never user-facing.
+
+### Fixed — Schedule couldn't tell two same-day jobs apart, and miscounted "free" days
+
+Two jobs booked for the same date rendered identically and in an arbitrary order (by job number),
+because a job's `dueDate` was a bare date with no time component at all. Separately, the header's
+"N free weekdays" figure explicitly excluded Saturday and Sunday from ever counting as free — correct
+for a Monday-to-Friday business, wrong for this one, where the owner works weekends. Both traced
+back to the same unexamined assumption: a conventional working week.
+
+### Added — an optional exact time on every job, always sorted chronologically
+
+`jobs` gains a nullable `due_time` column, stored as a plain `"HH:MM"` string rather than a Postgres
+`TIME` column — `TIME` round-trips as `"HH:MM:SS"`, which would drift from what
+`<input type="time">` both submits and expects back on the next load; text keeps read and write
+byte-for-byte identical, confirmed against a real `psql` round-trip before committing to the column
+type. Entered in the job form directly beside "Due date" as a 50/50 paired field, not a separate
+row — one decision ("when"), not two. Schedule's query now orders by date, then time, then job
+number, so a day's jobs are always chronological without the page doing any sorting of its own; the
+month grid and the mobile agenda both display the time when one is set, "4:30pm" not "16:30".
+
+### Changed — weekends count, no more "free days" figure
+
+The header's "N free weekdays this month" line is gone outright rather than patched to include
+weekends: once weekends are bookable and time-off days need to be excluded too, "free days" stops
+being an honest single number and starts requiring a definition nobody asked for. The header now
+just states jobs booked, plus — only when relevant — which days this month are blocked off (see
+below). Weekend cells keep their existing subtle shading so they're still easy to spot at a glance,
+but no longer count against the owner or get excluded from anything.
+
+### Added — a time-off calendar in Settings, struck off the Schedule grid
+
+New `time_off` table (start date, end date, optional label) — deliberately not FK'd to jobs, and
+deliberately left out of the factory reset alongside `settings`: it isn't customer or financial
+data, it's the owner's real calendar, and a "clear test data" button should not be able to erase it.
+Settings gained a "Time off" card: an "Add time off" button opens this app's first real modal
+(everywhere else — Mark as paid, Factory reset — uses an inline armed reveal specifically because
+`components/ui/index.tsx` has no `'use client'` directive by design; this modal lives entirely on
+its own outside that barrel, so it doesn't touch that constraint at all). Days covered by an entry
+render struck through with an amber tint and an "Off" label on the Schedule month grid, and the
+header line names the range in the months it falls in, e.g. "3 jobs booked this month · Off 20 Aug
+– 22 Aug (Family holiday)".
+
+### Files Touched
+
+`app/(dashboard)/error.tsx`, `components/jobs/job-form.tsx` (comment only), `lib/db/schema.ts`
+(`due_time` column, new `timeOff` table), `drizzle/migrations/0006_shiny_silver_centurion.sql` (new,
+applied to both local and production), `lib/validation/common.ts` (new `optionalTime`),
+`lib/validation/job.ts`, `lib/validation/time-off.ts` (new), `lib/db/queries/schedule.ts` (ordering,
+`DayCell.isTimeOff`/`timeOffLabel`, `buildMonthGrid`'s new param), `lib/db/queries/time-off.ts` (new
+— `listTimeOffInRange`, `listAllTimeOff`, `timeOffDateMap`), `lib/actions/time-off.ts` (new —
+`addTimeOff`, `deleteTimeOff`), `lib/format.ts` (new `formatTime`), `components/settings/time-off.tsx`
+(new — the modal), `app/(dashboard)/settings/page.tsx`, `app/(dashboard)/schedule/page.tsx`,
+`app/api/export/jobs/route.ts` (due time added to the CSV), `tests/schedule.test.ts`,
+`tests/time-off.test.ts` (new).
+
 ## 17/08/2026 @ 19:56:38 IST — "claude-sonnet-5"
 
 **Project completion: 100.00%**
