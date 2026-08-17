@@ -1,5 +1,84 @@
 # Changelog
 
+## 17/08/2026 @ 19:56:38 IST — "claude-sonnet-5"
+
+**Project completion: 100.00%**
+
+Basis: 4 of 4 parts of the approved plan (cron time, DB-down email alerting, an in-app error
+banner, payment history on the job page) are code-complete and pass static verification
+(`typecheck`/`lint`/`test` all clean). 0 of 4 live checks from the plan's Verification section have
+run yet — they need a real deploy, and the email alert specifically needs the user to finish a
+stated prerequisite (Resend signup + domain verification + env vars) that hasn't happened. Scope
+narrowed from an original four-issue list via three rounds of clarifying questions; two items were
+explicitly parked, not built (see Changed, below).
+
+### Goal
+
+A review of the last five changelog entries surfaced four loose ends: an unconfirmed keep-alive
+cron (was it actually stopping the Supabase project from pausing?), no alerting if the database
+ever really did go down, no way to see a job's payment history now that partial payments exist, and
+two deliberately-parked gaps (refund/credit-note flow, the status dropdown bypassing payment
+tracking). Three rounds of questions narrowed this into a concrete plan; "proceed" carried it
+through to code.
+
+### Changed — cron moved off 4am UTC, to 2am Irish time
+
+`vercel.json`: `"0 4 * * *"` → `"0 1 * * *"`. Vercel Cron schedules are fixed UTC with no DST
+awareness, so this reads as 2am IST now and drifts to 1am once clocks go back to GMT in late
+October — the closest a static schedule gets, and immaterial for a keep-alive ping. Frequency is
+still once a day; this is a time-of-day change only.
+
+### Added — email alert when the health check fails, and an in-app "can't reach your data" banner
+
+New `lib/email/resend.ts` — this app's first transactional email integration. Lazy singleton
+(`getResendClient()`) mirroring `lib/storage/r2.ts`'s `getR2()` exactly: the API key is read inside
+the function, not at module scope, so a missing key fails only the first real send attempt, not the
+build. `sendDbDownAlert(detail)` emails `lee@nolanautomotive.ie` (hardcoded — a known, stable
+destination) every time `/api/health`'s `SELECT 1` fails, no dedup, so a multi-day outage keeps
+nagging rather than alerting once and going quiet. The sender address is deliberately **not**
+hardcoded (`RESEND_FROM` env var instead) — it depends on whichever domain actually gets verified
+in Resend during setup, and a hardcoded guess that didn't match would have Resend reject the send
+with `invalid_from_address`, silently swallowed by the health route's best-effort catch, with no
+visible symptom at all. `/api/health`'s catch block now schedules the alert via Next's `after()` so
+a slow or broken Resend call can never delay the 503 response itself, wrapped in its own try/catch
+either way.
+
+New `app/(dashboard)/error.tsx` — no error boundary of any kind existed anywhere in this app before
+this. Renders inside `DashboardShell` (sidebar and chrome stay visible; only the failed page's own
+content is replaced), confirmed safe because `app/(dashboard)/layout.tsx`'s `requireSession()` only
+verifies a signed cookie and never touches the database — a DB outage can't take down the layout
+itself before `error.tsx` gets a chance to catch it. Deliberately does not try to distinguish "this
+specifically is a database error" from any other failure (a real distinction at the code level —
+postgres.js throws a plain `Error` with an OS error code like `ECONNREFUSED` for a network failure
+versus a `PostgresError` for other rejections — but a fragile one to lean on, and the safety advice
+is identical either way): "Can't reach your data right now... Don't add, edit, or delete anything
+until this is sorted," a "Try again" button wired to `reset()`, and a `tel:` link to call the owner.
+No dismiss button — it only clears once a retry actually succeeds.
+
+### Added — read-only payment history on the job page
+
+`getJobWithAttachments` (`lib/db/queries/jobs.ts`) now nests one level deeper —
+`invoices: { with: { payments: true } }` — reusing the `payments` relation added for partial
+payments, so this is still one query. New `components/jobs/payment-history.tsx`, a plain Server
+Component (no client JS needed) matching `InvoiceCard`'s visual style: date + amount only, no
+running-balance column, flattened across the job's live (non-voided) invoices, placed directly
+after `InvoiceCard` on the job detail page.
+
+### Changed — two items explicitly parked, not built, recorded here so the reasoning isn't lost
+
+Correcting an invoice after a deposit exists (a refund/credit-note flow) stays a hard block — "not
+urgent," confirmed by the user. The job-status dropdown can still set a job to `paid` directly,
+bypassing `recordPayment` entirely — "leave exactly as-is," matching this app's existing philosophy
+that the owner can override any status at any time. Neither is flagged in-app; this changelog entry
+and memory are the tracking mechanism, per the user's explicit call.
+
+### Files Touched
+
+`vercel.json`, `lib/email/resend.ts` (new), `app/api/health/route.ts`, `.env.example`,
+`app/(dashboard)/error.tsx` (new), `lib/db/queries/jobs.ts`, `components/jobs/payment-history.tsx`
+(new), `app/(dashboard)/jobs/[jobId]/page.tsx`, `package.json` + `pnpm-lock.yaml` (added the
+`resend` dependency).
+
 ## 17/08/2026 @ 00:39:20 IST — "claude-sonnet-5"
 
 **Project completion: 100.00%**

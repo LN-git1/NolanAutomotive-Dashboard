@@ -66,7 +66,7 @@ export async function getJob(jobId: string) {
 export async function getJobWithAttachments(jobId: string) {
   return db.query.jobs.findFirst({
     where: and(eq(jobs.id, jobId), notDeleted),
-    with: { attachments: true, invoices: true },
+    with: { attachments: true, invoices: { with: { payments: true } } },
   });
 }
 

@@ -5,6 +5,7 @@ import { AttachmentManager } from '@/components/jobs/attachment-manager';
 import { InvoiceCard } from '@/components/jobs/invoice-card';
 import { JobActions } from '@/components/jobs/job-actions';
 import { JobForm } from '@/components/jobs/job-form';
+import { PaymentHistory } from '@/components/jobs/payment-history';
 import { Badge, Card, CardHeader } from '@/components/ui';
 import { getJobWithAttachments } from '@/lib/db/queries/jobs';
 import { getSettings } from '@/lib/db/queries/settings';
@@ -61,6 +62,12 @@ export default async function JobDetailPage({ params }: PageProps<'/jobs/[jobId]
               grandTotal: invoice.grandTotal,
               voidedAt: invoice.voidedAt ? invoice.voidedAt.toISOString() : null,
             }))}
+          />
+
+          <PaymentHistory
+            payments={job.invoices
+              .filter((invoice) => !invoice.voidedAt)
+              .flatMap((invoice) => invoice.payments)}
           />
         </div>
       </div>

@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
+import { after } from 'next/server';
 
 import { db } from '@/lib/db';
+import { sendDbDownAlert } from '@/lib/email/resend';
 
 export const runtime = 'nodejs';
 
@@ -29,8 +31,21 @@ export async function GET(request: Request) {
   try {
     await db.execute(sql`SELECT 1`);
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Database unreachable';
+
+    // Scheduled via after() so a slow or broken Resend call can never delay
+    // the 503 itself — the cron and any caller get the real status back
+    // immediately either way.
+    after(async () => {
+      try {
+        await sendDbDownAlert(message);
+      } catch (alertError) {
+        console.error('Failed to send DB-down alert email:', alertError);
+      }
+    });
+
     return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : 'Database unreachable' },
+      { ok: false, error: message },
       { status: 503, headers: { 'Cache-Control': 'no-store' } },
     );
   }
