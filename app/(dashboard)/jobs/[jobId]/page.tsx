@@ -9,6 +9,7 @@ import { PaymentHistory } from '@/components/jobs/payment-history';
 import { Badge, Card, CardHeader } from '@/components/ui';
 import { getJobWithAttachments } from '@/lib/db/queries/jobs';
 import { getSettings } from '@/lib/db/queries/settings';
+import { toCents } from '@/lib/money';
 import { labourRowCapacity, partsRowCapacity } from '@/lib/pdf/stamp';
 
 export const metadata: Metadata = { title: 'Job' };
@@ -19,6 +20,24 @@ export default async function JobDetailPage({ params }: PageProps<'/jobs/[jobId]
   const [job, settings] = await Promise.all([getJobWithAttachments(jobId), getSettings()]);
 
   if (!job) notFound();
+
+  /*
+    The one non-voided invoice, with what is still owed on it — `JobActions`
+    needs both to drive the mark-paid modal. `getJobWithAttachments` already
+    loads invoices with their payments, so this costs no extra query. `toCents`
+    because Drizzle hands back `numeric` columns as strings.
+  */
+  const live = job.invoices.find((invoice) => !invoice.voidedAt);
+  const liveInvoice = live
+    ? {
+        id: live.id,
+        remainingCents: Math.max(
+          toCents(live.grandTotal) -
+            live.payments.reduce((sum, payment) => sum + toCents(payment.amount), 0),
+          0,
+        ),
+      }
+    : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -46,7 +65,12 @@ export default async function JobDetailPage({ params }: PageProps<'/jobs/[jobId]
         <div className="flex flex-col gap-4">
           <Card>
             <CardHeader title="Actions" />
-            <JobActions jobId={job.id} status={job.status} />
+            <JobActions
+              jobId={job.id}
+              jobNumber={job.jobNumber}
+              status={job.status}
+              liveInvoice={liveInvoice}
+            />
           </Card>
 
           <Card>

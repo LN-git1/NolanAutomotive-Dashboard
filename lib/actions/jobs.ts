@@ -70,6 +70,9 @@ export async function updateJob(jobId: string, formData: FormData): Promise<Acti
   revalidatePath('/jobs');
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath('/');
+  // dueDate is the Monthly breakdown's grouping key — editing it moves money
+  // between months.
+  revalidatePath('/earnings');
   return { ok: true, jobId };
 }
 
@@ -83,11 +86,32 @@ export async function lookupJobByRegistration(registration: string) {
   return findJobByRegistration(registration);
 }
 
+/**
+ * Move a job to any status EXCEPT `paid`.
+ *
+ * `paid` is refused here on purpose. Earnings sums the `payments` table, so a
+ * status flipped straight to `paid` with no payment behind it would contribute
+ * nothing while claiming to be settled — the same money-disappears bug that
+ * gating Earnings on `status` caused in the first place. The job page
+ * intercepts the status dropdown and forces the real payment flow instead
+ * (`MarkPaidModal`), which routes through `recordPayment`, so the status flips
+ * as a consequence of the money landing rather than instead of it.
+ *
+ * The guard lives here and not only in the UI because this is the layer that
+ * has to hold: a stale client, or a future caller, must not be able to bypass it.
+ */
 export async function changeJobStatus(jobId: string, status: string): Promise<ActionResult> {
   await requireSession();
 
   const parsed = jobStatusChangeSchema.safeParse({ jobId, status });
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid status' };
+
+  if (parsed.data.status === 'paid') {
+    return {
+      ok: false,
+      error: 'Record a payment to mark this job paid, so the money is counted in Earnings.',
+    };
+  }
 
   await db
     .update(jobs)
@@ -116,6 +140,10 @@ export async function softDeleteJob(jobId: string): Promise<ActionResult> {
 
   revalidatePath('/jobs');
   revalidatePath('/');
+  // A deleted job's payments drop out of Earnings, and its invoice out of
+  // Awaiting Payments.
+  revalidatePath('/earnings');
+  revalidatePath('/awaiting-payments');
   return { ok: true };
 }
 
