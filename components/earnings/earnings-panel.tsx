@@ -64,7 +64,14 @@ function MonthRow({
                 >
                   {invoice.jobNumber} — {invoice.customerName}
                 </Link>
-                <span className="shrink-0 tabular text-ink">{formatEur(toCents(invoice.grandTotal))}</span>
+                <span className="shrink-0 text-right tabular text-ink">
+                  {formatEur(invoice.receivedCents)}
+                  {invoice.receivedCents < toCents(invoice.grandTotal) ? (
+                    <span className="block text-xs text-muted">
+                      of {formatEur(toCents(invoice.grandTotal))}
+                    </span>
+                  ) : null}
+                </span>
               </li>
             ))}
           </ul>
@@ -86,13 +93,14 @@ export function EarningsPanel({ summary }: { summary: EarningsSummary }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 items-stretch gap-3">
         <Card>
           <CardBody>
             <p className="text-xs font-medium text-muted">Earned all time</p>
             <p className="mt-1 text-2xl font-semibold text-ink tabular">
               {formatEur(summary.allTimeCents)}
             </p>
+            <p className="mt-1 text-xs text-muted">Cash received</p>
           </CardBody>
         </Card>
         <Card>
@@ -101,13 +109,13 @@ export function EarningsPanel({ summary }: { summary: EarningsSummary }) {
             <p className="mt-1 text-2xl font-semibold text-ink tabular">
               {formatEur(summary.last30DayAvgCents)}
             </p>
-            <p className="mt-1 text-xs text-muted">Paid invoices, by issue date</p>
+            <p className="mt-1 text-xs text-muted">Cash received, last 30 days</p>
           </CardBody>
         </Card>
       </div>
 
       <Card>
-        <CardHeader title="Monthly" />
+        <CardHeader title="Monthly" description="By job due date" />
         {summary.months.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-muted">No earnings recorded yet.</p>
         ) : (
