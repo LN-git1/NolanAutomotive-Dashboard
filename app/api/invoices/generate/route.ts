@@ -1,4 +1,5 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
+import { revalidatePath } from 'next/cache';
 
 import { requireApiSession } from '@/lib/auth/require-session';
 import { allocateNumber, formatInvoiceNumber } from '@/lib/counters';
@@ -51,6 +52,24 @@ export const maxDuration = 60;
  * invoice: same number, same issue date, same storage path, no new number. That
  * is what makes "edit the job and send it again" work.
  */
+/**
+ * Issuing or regenerating an invoice changes the jobs list, the Overview and
+ * what the business is owed, none of which this route used to tell Next about —
+ * the Invoicer's own `router.refresh()` only refreshes the route it is mounted
+ * on.
+ *
+ * Deliberately NOT `/earnings`: Earnings sums `payments`, a new invoice has
+ * none, and regenerating is refused outright once any payment exists, so
+ * neither path here can move those figures.
+ */
+function revalidateInvoicePaths(jobId: string) {
+  revalidatePath('/');
+  revalidatePath('/jobs');
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath('/awaiting-payments');
+  revalidatePath('/invoicer');
+}
+
 export async function POST(request: Request) {
   const denied = await requireApiSession();
   if (denied) return denied;
@@ -124,6 +143,8 @@ export async function POST(request: Request) {
         .update(invoices)
         .set(invoiceSnapshot(built))
         .where(eq(invoices.id, existing.id));
+
+      revalidateInvoicePaths(jobId);
 
       return pdfResponse(
         bytes,
@@ -214,6 +235,8 @@ export async function POST(request: Request) {
     } catch {
       storageFailed = true;
     }
+
+    revalidateInvoicePaths(jobId);
 
     return pdfResponse(
       bytes,

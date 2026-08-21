@@ -107,7 +107,7 @@ export async function factoryReset(confirmation: string): Promise<ResetResult> {
       invoiceRows.map((row) => row.path).filter(Boolean),
     );
 
-    for (const path of ['/', '/jobs', '/invoicer', '/awaiting-payments', '/suppliers', '/settings']) {
+    for (const path of ['/', '/jobs', '/invoicer', '/awaiting-payments', '/earnings', '/suppliers', '/settings']) {
       revalidatePath(path);
     }
 
