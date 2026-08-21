@@ -1,5 +1,149 @@
 # Changelog
 
+## 21/08/2026 @ 23:03:04 IST — "claude-opus-5"
+
+**Project completion: 100.00%**
+
+Basis: 7 of 7 items from this request shipped — the cash-basis Earnings rewrite, the split date
+basis, the month drill-down showing received-vs-total, the corrected card labels, the forced
+payment modal, the server-side guard against a bare `paid` transition, and the four missing
+revalidation calls. Six of the seven were verified end-to-end in a real browser against a local
+database seeded to mirror production's exact shapes; the seventh (revalidation) was verified by
+inspection rather than by reproducing a stale cache, which is the same standard this project
+already applies to the DB-down error boundary. Production figures were confirmed separately with a
+read-only query against the live database before and after the change. 185 unit/integration tests
+pass, typecheck and lint are clean.
+
+### Fixed — Earnings showed €0 while €700 of real cash sat in the database
+
+All three Earnings figures — "Earned all time", "30 day avg", and "Monthly" — read €0.00 / €0.00 /
+"No earnings recorded yet." on production, while J-0020 (a €1,095 invoice) had €700 recorded
+against it. Confirmed by direct query: there was not a single non-deleted job with
+`status = 'paid'` in the database, so every earnings query returned nothing.
+
+**Cause.** `getEarningsSummary` gated on `jobs.status = 'paid'` and summed the invoice's full
+`grandTotal`. It never read the `payments` table at all. A partially-paid invoice therefore
+contributed nothing no matter how much money had actually landed. This was a regression introduced
+by the partial-payments feature (`a95fdc3`): that commit taught `getOutstandingInvoiceTotalCents`
+to net payments out of "Owed", but left Earnings on the old status gate. The result was a ledger
+that no longer balanced — J-0020's €700 dropped out of "Total outstanding" and arrived nowhere.
+
+**Fix.** All three metrics now select `FROM payments`, joining out to `invoices` and `jobs`, with
+no status gate — cash counts the day it lands. Voided invoices and soft-deleted jobs remain
+excluded, unchanged. Before and after on live production data: **Earned all time €1,350 → €2,050**,
+**30 day avg €45.00 → €68.33**, the difference being exactly J-0020's €700 partial.
+
+**Why this and not a status fallback.** Counting `grandTotal` when an invoice has no payments was
+rejected outright: it double-counts the moment a partial also exists, which would have reported
+J-0020 as €1,095 + €700.
+
+### Changed — the 30-day average now follows the payment date, the monthly breakdown does not
+
+On 17/08 Earnings was deliberately moved onto `COALESCE(jobs.dueDate, invoices.issueDate)` because
+two jobs due in June and July were both landing in August, the month their paperwork happened to be
+generated. That reasoning is about **monthly attribution** and still holds, so the Monthly
+breakdown is untouched.
+
+It does not hold for a rolling average. A 30-day window keyed on when work was *scheduled* would
+still not move when a payment is recorded today against a job due six weeks ago — the exact symptom
+being reported here would have survived the fix, and today's data would have hidden that, because
+J-0020's due date happens to fall inside the window. The trailing window therefore keys on
+`payments.paidAt`, and a regression test covers a payment made today against a job due 60 days ago.
+
+The window bound was also wrong: `>= CURRENT_DATE - INTERVAL '30 days'` spans 31 inclusive days
+against a divisor of 30, quietly understating the average. It is now `29 days`, which is exactly 30
+calendar days including today.
+
+Because the two figures now use different date bases on purpose, each card names its own: "Cash
+received", "Cash received, last 30 days", and "By job due date" on the Monthly header. The 30-day
+card previously claimed "Paid invoices, by issue date", which was wrong even before this change —
+the query had used the due date since 17/08.
+
+### Changed — the month drill-down shows what was actually received
+
+With the header now summing payments, listing each invoice's full `grandTotal` underneath would no
+longer add up to it — J-0020 would have shown €1,095 under a €700 header. Expanding a month now
+shows cash received per invoice with the invoice total beneath it when the two differ, so a partial
+reads "€700.00 of €1,095.00" and the rows still reconcile with the header. `invoiceCount` uses
+`COUNT(DISTINCT invoices.id)` so two instalments against one invoice stay one invoice.
+
+### Added — setting a job's status to "paid" now forces the real payment flow
+
+Every job page has a Status dropdown that could be set straight to `paid` with no payment recorded.
+That was harmless while Earnings summed `grandTotal` off the status — but once Earnings sums
+`payments`, such a job would claim to be settled while contributing nothing, reintroducing the same
+money-disappears bug through a different door. Production contains no such job today, so the
+verification above would have passed while the regression shipped.
+
+Choosing `paid` now opens a blocking modal that records the actual payment — full or partial, the
+same choice Awaiting Payments already offers — and the status flips as a *consequence* of the money
+landing rather than instead of it. A partial leaves the job awaiting the balance, which the modal
+says up front. On a job with no live invoice there is no amount to pay against, so the modal asks
+for the invoice first and links to the Invoicer; payments attach to invoices, not jobs, and that
+rule is not being bent.
+
+The modal cannot be dismissed by clicking the backdrop, pressing Escape, or an X. The only ways out
+are recording a payment or an explicit "Cancel — leave status unchanged", so a misclick on a
+dropdown stays recoverable without offering a silent way to skip the money. It lives outside
+`components/ui/index.tsx`, matching `time-off.tsx`, because that barrel has no `'use client'` by
+design and a shared Modal there would force every consumer app-wide to become client-side.
+
+`changeJobStatus` refuses `paid` server-side as well. The guard is in the action and not only the
+UI because that is the layer that has to hold against a stale client or a future caller — the
+Earnings comment now states the invariant and names the precondition it depends on.
+
+**Note this closes an escape hatch:** both voiding and regenerating an invoice are refused once any
+payment exists, so a job marked paid this way can no longer be voided or re-issued. That is correct
+under the new model — marking paid now genuinely asserts cash was collected — but it is a
+capability that existed before and does not now.
+
+### Added — a shared PaymentForm
+
+The modal and the Awaiting Payments button offer the same full/partial choice and write to the same
+ledger, so duplicating the toggle and amount box would have let them drift. `PaymentForm` is
+presentation only: it reports a chosen payment upward and never calls a server action, so each
+caller keeps its own pending/error handling. No behaviour change to Awaiting Payments.
+
+### Fixed — four mutations left the pages that display their results stale
+
+Real staleness, though not the cause of the €0. `updateJob` can change `dueDate`, which is the
+Monthly breakdown's grouping key, and `softDeleteJob` removes a job's money entirely — both
+revalidated `/` but not `/earnings`. `factoryReset` omitted `/earnings` from its path list.
+`/api/invoices/generate` imported nothing from `next/cache` at all, so issuing or regenerating an
+invoice left the jobs list, the Overview and Awaiting Payments stale until a hard reload — the
+Invoicer's own `router.refresh()` only refreshes the route it is mounted on. All now revalidate
+what they actually change. Deliberately *not* `/earnings` from the generate route: Earnings sums
+payments, a new invoice has none, and regenerating is refused once any payment exists.
+
+### Expected behaviour that will look like a bug
+
+Monthly buckets by job due date and orders newest-first, so **a deposit taken today on a job due
+next month will appear as a future month at the top of the list**. Before this change a
+future-dated job had to be fully paid to appear at all; now any deposit does it, and
+deposit-now-balance-later is exactly what the `payments` table was built for. This is the chosen
+semantics working as specified, not a defect.
+
+Separately, "Earned all time" excludes fully-collected money on soft-deleted jobs — deleting a job
+is how test money gets removed, and 18 of 24 production jobs are deleted test data.
+
+### Files Touched
+
+- `lib/db/queries/earnings.ts` — all three metrics rewritten onto `payments`; `EARNED_PAYMENT`
+  replaces `EARNED_INVOICE`; new `LAST_30_DAYS`; month detail returns `receivedCents` + `grandTotal`
+- `components/earnings/earnings-panel.tsx` — card subtitles, Monthly date-basis label, received-vs-total rows
+- `components/payments/payment-form.tsx` — **new**, the shared full/partial payment UI
+- `components/payments/mark-paid-modal.tsx` — **new**, the blocking modal and its no-invoice state
+- `components/payments/mark-paid-button.tsx` — consumes the shared form
+- `components/jobs/job-actions.tsx` — intercepts `paid`, opens the modal
+- `app/(dashboard)/jobs/[jobId]/page.tsx` — derives the live invoice and remaining balance
+- `lib/actions/jobs.ts` — `changeJobStatus` refuses `paid`; `/earnings` revalidation on update and delete
+- `lib/actions/danger.ts` — `/earnings` added to the factory-reset path list
+- `app/api/invoices/generate/route.ts` — the missing `revalidatePath` calls
+- `tests/earnings.test.ts` — rewritten for cash-basis semantics
+- `tests/job-status-guard.test.ts` — **new**, covers the refused `paid` transition
+- `docs/superpowers/specs/2026-08-21-earnings-cash-basis-design.md` — **new**, the approved design
+- `docs/superpowers/plans/2026-08-21-earnings-cash-basis.md` — **new**, the implementation plan
+
 ## 17/08/2026 @ 20:30:43 IST — "claude-sonnet-5"
 
 **Project completion: 100.00%**
