@@ -1,5 +1,40 @@
 # Changelog
 
+## 22/08/2026 @ 01:53:08 IST — "claude-sonnet-5"
+
+**Project completion: 100.00%**
+
+Basis: 1 of 1 follow-up request shipped — mobile grid cells show real job chips instead of a bare
+count. Verified with a fresh mobile-viewport screenshot against the local dev data seeded in the
+previous entry. Typecheck, lint, and the 158-test suite are clean.
+
+### Changed — mobile calendar cells show actual job chips, not just a count badge
+
+The previous entry's mobile grid showed only the day number and a small coloured count ("2", "1")
+per cell — the chips themselves were `hidden` below the `md` breakpoint because a phone-width column
+seemed too narrow for them. Feedback (with a Google Calendar mobile screenshot as reference): that's
+not enough — the cell itself should show what's actually booked, truncated, the same way Google
+Calendar's own month view shows a truncated title chip per day, not just a number.
+
+**Fix.** `JobChip` now renders at every width. Since a phone column has room for roughly one chip
+and a desktop column has room for three, each cell shows a tier-appropriate slice — 1 chip below
+`sm`, 2 from `sm`, 3 from `md` — by rendering all three candidate chips and hiding index 1 and 2
+behind `sm:block`/`md:block`, rather than slicing the array in JS (which can't be responsive). The
+"+N more" overflow line is likewise computed for each tier and hidden outside it, so a day with 2
+jobs shows "+1 more" on a phone but the full second chip from `sm` up, where it fits.
+
+The top-corner count badge (redundant now that the actual chip is visible) was removed, along with
+the `workload()`-derived `load` variable that only fed it — `workload()` itself is untouched, still
+used by the day-detail panel and the agenda fallback below the grid.
+
+Cell minimum heights went from `min-h-16 sm:min-h-20 md:min-h-28` to `min-h-20 sm:min-h-24 md:min-h-28`
+to give the now-visible chip room without the day number and "+more" line crowding it.
+
+### Files Touched
+
+- `app/(dashboard)/schedule/page.tsx` — chip visibility made responsive per tier instead of
+  hidden below `md`; count badge and its `load` variable removed; cell min-heights bumped.
+
 ## 22/08/2026 @ 01:31:25 IST — "claude-sonnet-5"
 
 **Project completion: 100.00%**

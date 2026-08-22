@@ -233,14 +233,13 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
 
           <div className="grid grid-cols-7">
             {cells.map((cell) => {
-              const load = workload(cell.jobs.length);
               const timeOff = cell.isTimeOff && cell.inCurrentMonth;
               const isSelected = cell.date === selectedDate;
               return (
                 <div
                   key={cell.date}
                   className={cn(
-                    'relative min-h-16 border-r border-b border-line p-1.5 last:border-r-0 sm:min-h-20 md:min-h-28',
+                    'relative min-h-20 border-r border-b border-line p-1.5 last:border-r-0 sm:min-h-24 md:min-h-28',
                     !cell.inCurrentMonth && 'bg-canvas/60',
                     cell.isWeekend && cell.inCurrentMonth && !timeOff && !isSelected && 'bg-canvas/40',
                     timeOff && 'bg-warn-soft',
@@ -270,9 +269,6 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
                       >
                         {cell.dayOfMonth}
                       </span>
-                      {cell.inCurrentMonth && cell.jobs.length > 0 ? (
-                        <span className={cn('text-[10px]', load.className)}>{cell.jobs.length}</span>
-                      ) : null}
                     </div>
 
                     {timeOff ? (
@@ -281,14 +277,35 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
                       </p>
                     ) : null}
 
-                    {/* Chips: from md up only — a phone-width column only has
-                        room for the day number and the count badge above. */}
-                    <div className="hidden flex-col gap-1 md:flex">
-                      {cell.jobs.slice(0, 3).map((job) => (
-                        <JobChip key={job.id} job={job} className="pointer-events-auto" />
+                    {/* Chips render at every width now — a phone column is too
+                        narrow for three, so each cell shows more of them as
+                        the column widens: 1 below `sm`, 2 from `sm`, 3 from
+                        `md`. The "+N more" count is computed per tier and
+                        each version is hidden outside its own breakpoint. */}
+                    <div className="flex flex-col gap-1">
+                      {cell.jobs.slice(0, 3).map((job, i) => (
+                        <JobChip
+                          key={job.id}
+                          job={job}
+                          className={cn(
+                            'pointer-events-auto',
+                            i === 1 && 'hidden sm:block',
+                            i === 2 && 'hidden md:block',
+                          )}
+                        />
                       ))}
+                      {cell.jobs.length > 1 ? (
+                        <span className="px-1 text-[10px] text-muted sm:hidden">
+                          +{cell.jobs.length - 1} more
+                        </span>
+                      ) : null}
+                      {cell.jobs.length > 2 ? (
+                        <span className="hidden px-1 text-[10px] text-muted sm:block md:hidden">
+                          +{cell.jobs.length - 2} more
+                        </span>
+                      ) : null}
                       {cell.jobs.length > 3 ? (
-                        <span className="px-1 text-[10px] text-muted">
+                        <span className="hidden px-1 text-[10px] text-muted md:block">
                           +{cell.jobs.length - 3} more
                         </span>
                       ) : null}
