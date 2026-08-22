@@ -43,6 +43,15 @@ export function buildInvoicePath(invoiceNumber: string): string {
 }
 
 /**
+ * Import uploads (a screenshot or voice recording, parsed once and
+ * discarded) have no `jobId` yet — the job doesn't exist until after import
+ * succeeds — so they can't use `buildJobAttachmentPath`, which requires one.
+ */
+export function buildImportPath(fileName: string): string {
+  return `imports/${randomUUID()}-${sanitiseFileName(fileName)}`;
+}
+
+/**
  * Mint a presigned URL the browser can PUT bytes directly to.
  *
  * Uploads deliberately bypass the Next.js server: Vercel caps serverless
@@ -151,4 +160,27 @@ export async function removeObjects(bucket: string, storagePaths: string[]): Pro
   }
 
   return paths.length;
+}
+
+/**
+ * Read an object's bytes directly, server-side — used to base64-encode an
+ * imported screenshot/recording into an OpenRouter request. Mirrors the
+ * private `fetchObject` helper in `lib/pdf/assets.ts` (which is hardcoded to
+ * `INVOICES_BUCKET`), generalized here by bucket so both call sites could
+ * eventually share one implementation.
+ */
+export async function fetchObjectBytes(bucket: string, storagePath: string): Promise<Uint8Array> {
+  const result = await getR2().send(new GetObjectCommand({ Bucket: bucket, Key: storagePath }));
+
+  if (!result.Body) {
+    throw new Error(`Object "${storagePath}" is empty in R2.`);
+  }
+
+  const bytes = await result.Body.transformToByteArray();
+
+  if (bytes.byteLength === 0) {
+    throw new Error(`Object "${storagePath}" downloaded as zero bytes.`);
+  }
+
+  return bytes;
 }
