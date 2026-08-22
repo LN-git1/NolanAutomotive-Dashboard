@@ -2,7 +2,7 @@
 
 import { ChevronRight, Wand2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, useTransition, type FormEvent, type ReactNode } from 'react';
 
 import { Alert, Button, Card, CardBody, CardHeader, Field, Input, Select, Textarea } from '@/components/ui';
 import { LABOUR_COLUMNS, LineEditor, PARTS_COLUMNS } from '@/components/jobs/line-editor';
@@ -11,8 +11,17 @@ import { createJob, lookupJobByRegistration, updateJob } from '@/lib/actions/job
 import { applyQuantity, formatEur, formatHours, sumLabourHours, toCents } from '@/lib/money';
 import { JOB_PRIORITIES, JOB_STATUSES } from '@/lib/validation/job';
 import type { Job } from '@/lib/db/schema';
+import type { ImportPrefill } from '@/lib/import/map';
 
 type Prefill = Awaited<ReturnType<typeof lookupJobByRegistration>>;
+
+/**
+ * Key a stashed import-parse result is written under (by
+ * `components/jobs/new-job-modal.tsx`) so this form can pick it up on mount.
+ * Exported so the writer imports the same constant rather than duplicating
+ * the string.
+ */
+export const IMPORT_PREFILL_KEY = 'nolan:job-import-prefill';
 
 /**
  * Sections fold, because this form now carries everything that ends up on an
@@ -88,6 +97,49 @@ export function JobForm({
   const [prefillApplied, setPrefillApplied] = useState(0);
   const [lookingUp, setLookingUp] = useState(false);
 
+  const [imported, setImported] = useState<ImportPrefill | null>(null);
+
+  /**
+   * Must be a `useEffect`, not a lazy `useState` initializer. This component is
+   * rendered from a Server Component and hydrated — a lazy initializer runs
+   * during SSR too, where `sessionStorage` doesn't exist, so the server would
+   * render "nothing imported" while the client's first hydration pass rendered
+   * the real payload: a hydration mismatch on every prefilled `defaultValue`.
+   * An effect runs strictly after hydration, so SSR and the first client
+   * render agree, and the remount below (which reads `imported`) happens
+   * cleanly afterward with no mismatch.
+   *
+   * Consumes and clears immediately — a stale entry from an earlier abandoned
+   * import must never leak into a later, unrelated blank-form visit.
+   *
+   * Guarded to `isNew`: an import prefill only ever makes sense on a fresh
+   * job. Without this guard, a stale sessionStorage entry (from an import the
+   * owner started but never finished landing on `/jobs/new`) would silently
+   * consume itself and pollute an unrelated EXISTING job's fields the next
+   * time any `JobForm` happened to mount in the same tab — an edit page is
+   * exactly the "unrelated visit" the doc comment above is warning about, not
+   * just a blank one. Returning early here also leaves the entry untouched in
+   * storage, so a genuinely pending import is still there for whenever the
+   * owner does land on `/jobs/new`.
+   */
+  useEffect(() => {
+    if (!isNew) return;
+    const raw = sessionStorage.getItem(IMPORT_PREFILL_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(IMPORT_PREFILL_KEY);
+    try {
+      const parsedImport = JSON.parse(raw) as ImportPrefill;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from an external system (sessionStorage) that doesn't exist during SSR, not a derivable-from-props value; this IS the sanctioned use of an effect, see the doc comment above.
+      setImported(parsedImport);
+      if (registration.trim() === '' && parsedImport.vehicleRegistration) {
+        setRegistration(parsedImport.vehicleRegistration);
+      }
+    } catch {
+      // A corrupted entry is a missing convenience, not an error worth showing.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount, deliberately not re-running on `registration`/`isNew` changes
+  }, []);
+
   /**
    * The row data itself lives entirely inside each `LineEditor` — this form
    * never holds a mirrored copy. Only the two numbers below (count, total)
@@ -112,6 +164,27 @@ export function JobForm({
     count: job?.parts?.length ?? 0,
     total: (job?.parts ?? []).reduce((sum, part) => sum + applyQuantity(part.qty, part.unitPrice), 0),
   }));
+
+  /**
+   * `labourSummary`/`partsSummary` above are otherwise only ever computed
+   * once at mount, from `job` — nothing else recomputes them when a
+   * `LineEditor` remounts with new `initial` rows, since `onTotalsChange`
+   * only fires from a user editing a row by hand. Without this, an import
+   * that lands with real hours/parts would show "0 lines / €0.00" until the
+   * owner touched a row themselves.
+   */
+  useEffect(() => {
+    if (!imported) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberately re-deriving these two summaries from `imported`, the same external-payload sync as the effect above; see that effect's doc comment.
+    setLabourSummary({
+      count: imported.labourLines.length,
+      total: sumLabourHours(imported.labourLines.map((l) => ({ description: '', hours: l.hours ?? '' }))),
+    });
+    setPartsSummary({
+      count: imported.parts.length,
+      total: imported.parts.reduce((sum, p) => sum + applyQuantity(p.qty, p.unitPrice), 0),
+    });
+  }, [imported]);
 
   const totalHoursCentis = labourSummary.total;
 
@@ -153,6 +226,28 @@ export function JobForm({
   }
 
   const applied = prefillApplied > 0 ? prefill : null;
+
+  /**
+   * Drives the Customer+Vehicle remount, since both `applied` (the
+   * registration-lookup "Use these details" button) and `imported` can
+   * supply those fields. `imported` flips exactly once (null -> object, on
+   * mount) and then stays stable, so this only changes twice in a session at
+   * most: once if/when an import lands, and again each time the
+   * registration-lookup button is tapped.
+   */
+  const formVersion = `${prefillApplied}:${imported ? 1 : 0}`;
+
+  /**
+   * Work/labour, Parts, and Scheduling/notes are driven only by `imported`
+   * — never `applied`. A returning customer's PREVIOUS job's labour lines,
+   * due date, or notes have no business appearing on a new one, so `Prefill`
+   * (the registration-lookup type) is never read for these. Keying these
+   * sections on `formVersion` instead would remount them every time "Use
+   * these details" is tapped too, silently discarding any labour/parts rows
+   * or notes the owner had already typed by hand — exactly what Task 10's
+   * manual verification checklist confirms must NOT happen.
+   */
+  const importVersion = imported ? 1 : 0;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -229,7 +324,7 @@ export function JobForm({
         </CardBody>
       </Card>
 
-      <div key={prefillApplied} className="flex flex-col gap-3">
+      <div key={formVersion} className="flex flex-col gap-3">
         <Section title="Customer" defaultOpen>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* No autoComplete="name"/"tel"/"email" below — this is the
@@ -239,7 +334,7 @@ export function JobForm({
               <Input
                 id="customerName"
                 name="customerName"
-                defaultValue={applied?.customerName ?? job?.customerName ?? ''}
+                defaultValue={applied?.customerName ?? imported?.customerName ?? job?.customerName ?? ''}
                 required
               />
             </Field>
@@ -249,7 +344,7 @@ export function JobForm({
                 id="customerPhone"
                 name="customerPhone"
                 type="tel"
-                defaultValue={applied?.customerPhone ?? job?.customerPhone ?? ''}
+                defaultValue={applied?.customerPhone ?? imported?.customerPhone ?? job?.customerPhone ?? ''}
               />
             </Field>
 
@@ -258,7 +353,7 @@ export function JobForm({
                 id="customerEmail"
                 name="customerEmail"
                 type="email"
-                defaultValue={applied?.customerEmail ?? job?.customerEmail ?? ''}
+                defaultValue={applied?.customerEmail ?? imported?.customerEmail ?? job?.customerEmail ?? ''}
               />
             </Field>
 
@@ -267,7 +362,7 @@ export function JobForm({
                 id="customerAddress"
                 name="customerAddress"
                 rows={3}
-                defaultValue={applied?.customerAddress ?? job?.customerAddress ?? ''}
+                defaultValue={applied?.customerAddress ?? imported?.customerAddress ?? job?.customerAddress ?? ''}
               />
             </Field>
           </div>
@@ -280,16 +375,16 @@ export function JobForm({
         >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <VehicleFields
-              defaultYear={applied?.vehicleYear ?? job?.vehicleYear}
-              defaultMake={applied?.vehicleMake ?? job?.vehicleMake}
-              defaultModel={applied?.vehicleModel ?? job?.vehicleModel}
+              defaultYear={applied?.vehicleYear ?? imported?.vehicleYear ?? job?.vehicleYear}
+              defaultMake={applied?.vehicleMake ?? imported?.vehicleMake ?? job?.vehicleMake}
+              defaultModel={applied?.vehicleModel ?? imported?.vehicleModel ?? job?.vehicleModel}
             />
 
             <Field label="Colour" htmlFor="vehicleColor">
               <Input
                 id="vehicleColor"
                 name="vehicleColor"
-                defaultValue={applied?.vehicleColor ?? job?.vehicleColor ?? ''}
+                defaultValue={applied?.vehicleColor ?? imported?.vehicleColor ?? job?.vehicleColor ?? ''}
               />
             </Field>
 
@@ -298,7 +393,7 @@ export function JobForm({
                 id="vehicleMileage"
                 name="vehicleMileage"
                 inputMode="numeric"
-                defaultValue={applied?.vehicleMileage ?? job?.vehicleMileage ?? ''}
+                defaultValue={applied?.vehicleMileage ?? imported?.vehicleMileage ?? job?.vehicleMileage ?? ''}
               />
             </Field>
 
@@ -307,7 +402,7 @@ export function JobForm({
                 id="vehicleVin"
                 name="vehicleVin"
                 autoCapitalize="characters"
-                defaultValue={applied?.vehicleVin ?? job?.vehicleVin ?? ''}
+                defaultValue={applied?.vehicleVin ?? imported?.vehicleVin ?? job?.vehicleVin ?? ''}
               />
             </Field>
           </div>
@@ -317,16 +412,19 @@ export function JobForm({
       <Section
         title="Work and labour"
         description="Prints on the invoice — each line shows its hours"
-        defaultOpen={!isNew}
+        defaultOpen={!isNew || (imported?.labourLines?.length ?? 0) > 0}
         badge={labourSummary.count > 0 ? `${labourSummary.count}` : undefined}
       >
         <div className="flex flex-col gap-4">
           <LineEditor
+            key={importVersion}
             name="labourLines"
             columns={LABOUR_COLUMNS}
-            initial={(job?.labourLines ?? []).map(
-              (l): Record<string, string> => ({ description: l.description, hours: l.hours }),
-            )}
+            initial={
+              imported && imported.labourLines.length > 0
+                ? imported.labourLines.map((l): Record<string, string> => ({ description: l.description, hours: l.hours }))
+                : (job?.labourLines ?? []).map((l): Record<string, string> => ({ description: l.description, hours: l.hours }))
+            }
             capacity={labourCapacity}
             addLabel="Add work line"
             emptyLabel="No work lines yet."
@@ -385,16 +483,24 @@ export function JobForm({
       >
         <div className="flex flex-col gap-3">
           <LineEditor
+            key={importVersion}
             name="parts"
             columns={PARTS_COLUMNS}
-            initial={(job?.parts ?? []).map(
-              (p): Record<string, string> => ({
-                partName: p.partName,
-                partNumber: p.partNumber,
-                qty: p.qty,
-                unitPrice: p.unitPrice,
-              }),
-            )}
+            initial={
+              imported && imported.parts.length > 0
+                ? imported.parts.map((p): Record<string, string> => ({
+                    partName: p.partName,
+                    partNumber: p.partNumber,
+                    qty: p.qty,
+                    unitPrice: p.unitPrice,
+                  }))
+                : (job?.parts ?? []).map((p): Record<string, string> => ({
+                    partName: p.partName,
+                    partNumber: p.partNumber,
+                    qty: p.qty,
+                    unitPrice: p.unitPrice,
+                  }))
+            }
             capacity={partsCapacity}
             addLabel="Add part"
             emptyLabel="No parts added."
@@ -410,7 +516,21 @@ export function JobForm({
         </div>
       </Section>
 
-      <Section title="Scheduling and notes">
+      {/*
+        `key={importVersion}` remounts this section's fields the one time an
+        import lands, the same reason the LineEditors above are keyed on it:
+        `defaultValue` is only read at mount, so without a remount the
+        `imported?.X` values added below to `dueDate`/`dueTime`/`priority`/
+        `otherComments`/`notes` would never actually reach the screen even
+        though the value is technically in the `??` chain. `defaultOpen`
+        needs no such trick — `open` is a plain DOM attribute Section
+        re-applies every render.
+      */}
+      <Section
+        key={importVersion}
+        title="Scheduling and notes"
+        defaultOpen={Boolean(imported?.dueDate || imported?.dueTime || imported?.otherComments || imported?.notes)}
+      >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Status" htmlFor="status">
             <Select id="status" name="status" defaultValue={job?.status ?? 'active'}>
@@ -423,7 +543,7 @@ export function JobForm({
           </Field>
 
           <Field label="Priority" htmlFor="priority">
-            <Select id="priority" name="priority" defaultValue={job?.priority ?? 'medium'}>
+            <Select id="priority" name="priority" defaultValue={imported?.priority ?? job?.priority ?? 'medium'}>
               {JOB_PRIORITIES.map((priority) => (
                 <option key={priority} value={priority} className="capitalize">
                   {priority}
@@ -436,11 +556,21 @@ export function JobForm({
               taking a full column — they're one decision ("when"), not two. */}
           <div className="grid grid-cols-2 gap-4">
             <Field label="Due date" htmlFor="dueDate">
-              <Input id="dueDate" name="dueDate" type="date" defaultValue={job?.dueDate ?? ''} />
+              <Input
+                id="dueDate"
+                name="dueDate"
+                type="date"
+                defaultValue={imported?.dueDate ?? job?.dueDate ?? ''}
+              />
             </Field>
 
             <Field label="Due time" htmlFor="dueTime">
-              <Input id="dueTime" name="dueTime" type="time" defaultValue={job?.dueTime ?? ''} />
+              <Input
+                id="dueTime"
+                name="dueTime"
+                type="time"
+                defaultValue={imported?.dueTime ?? job?.dueTime ?? ''}
+              />
             </Field>
           </div>
 
@@ -454,7 +584,7 @@ export function JobForm({
               id="otherComments"
               name="otherComments"
               rows={3}
-              defaultValue={job?.otherComments ?? ''}
+              defaultValue={imported?.otherComments ?? job?.otherComments ?? ''}
             />
           </Field>
 
@@ -464,7 +594,12 @@ export function JobForm({
             hint="Private. NEVER printed on an invoice."
             className="sm:col-span-3"
           >
-            <Textarea id="notes" name="notes" rows={3} defaultValue={job?.notes ?? ''} />
+            <Textarea
+              id="notes"
+              name="notes"
+              rows={3}
+              defaultValue={imported?.notes ?? job?.notes ?? ''}
+            />
           </Field>
         </div>
       </Section>
