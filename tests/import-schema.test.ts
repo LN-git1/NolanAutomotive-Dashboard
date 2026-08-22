@@ -38,10 +38,13 @@ describe('extractedJobSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('drops rather than throws on a malformed labour line', () => {
-    // A non-object entry in the array is the kind of thing a model occasionally
-    // produces — the array item schema should reject just that entry's shape,
-    // not the whole array, when used with .safeParse at the call site.
+  it('rejects the whole extraction when a labour line is not an object', () => {
+    // A non-object entry in the array is a severe, rare malformation — unlike a
+    // missing/wrong-typed field within an otherwise-correct object (already
+    // handled leniently by optional fields and string|number unions), this
+    // fails the whole parse rather than being dropped per-item. The parse
+    // route's "could not read that — try again" fallback is the intended
+    // recovery path for this case, not per-item filtering.
     const result = extractedJobSchema.safeParse({
       labourLines: [{ description: 'Fine', hours: '1' }, 'not an object'],
     });
@@ -57,5 +60,23 @@ describe('extractedJobSchema', () => {
     expect(shape.status).toBeUndefined();
     expect(shape.hourlyRate).toBeUndefined();
     expect(shape.labourTotalOverride).toBeUndefined();
+  });
+
+  it('strips status, hourlyRate, and labourTotalOverride from parsed output even if present in input', () => {
+    const result = extractedJobSchema.safeParse({
+      customerName: 'Sarah Doyle',
+      status: 'paid',
+      hourlyRate: '99.00',
+      labourTotalOverride: '0.00',
+      labourLines: [],
+      parts: [],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect('status' in result.data).toBe(false);
+      expect('hourlyRate' in result.data).toBe(false);
+      expect('labourTotalOverride' in result.data).toBe(false);
+    }
   });
 });

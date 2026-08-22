@@ -44,8 +44,8 @@ export const extractedJobSchema = z.object({
   dueTime: z.string().trim().optional(),
   priority: z.string().trim().optional(),
 
-  labourLines: z.array(extractedLabourLineSchema).max(50).optional().default([]),
-  parts: z.array(extractedPartLineSchema).max(50).optional().default([]),
+  labourLines: z.array(extractedLabourLineSchema).max(50).default([]),
+  parts: z.array(extractedPartLineSchema).max(50).default([]),
 
   otherComments: z.string().trim().max(1000).optional(),
   notes: z.string().trim().max(1000).optional(),
