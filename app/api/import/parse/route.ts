@@ -37,7 +37,16 @@ export async function POST(request: Request) {
 
   const input = parsed.data;
 
-  const admitted = await admitParseAttempt(db, input.kind);
+  let admitted: boolean;
+  try {
+    admitted = await admitParseAttempt(db, input.kind);
+  } catch {
+    return Response.json(
+      { error: 'Could not process the import right now — try again shortly.' },
+      { status: 503 },
+    );
+  }
+
   if (!admitted) {
     return Response.json(
       { error: 'Too many imports in a short time — wait a few minutes and try again.' },
