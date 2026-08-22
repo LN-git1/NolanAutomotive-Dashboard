@@ -50,6 +50,13 @@
       "when": 1786994362763,
       "tag": "0006_shiny_silver_centurion",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787393698111,
+      "tag": "0007_ambitious_silver_fox",
+      "breakpoints": true
     }
   ]
 }

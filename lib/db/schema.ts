@@ -47,6 +47,28 @@ export const counters = pgTable('counters', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const importKindEnum = pgEnum('import_kind', ['screenshot', 'markdown', 'voice']);
+
+/**
+ * One row per attempted import parse (admitted attempts only — see
+ * `admitParseAttempt`, which never logs a rejected one). Backs a simple
+ * sliding-window rate limit on the OpenRouter-calling parse route: this app
+ * has session auth only (no public signup), so the abuse surface is narrow,
+ * but a client bug or a leaked session token shouldn't be able to run up
+ * unbounded API cost. `kind` is kept for observability, not separate buckets.
+ */
+export const importParseAttempts = pgTable(
+  'import_parse_attempts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    kind: importKindEnum('kind').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('import_parse_attempts_created_at_idx').on(table.createdAt)],
+);
+
+export type ImportParseAttempt = typeof importParseAttempts.$inferSelect;
+
 /** Singleton configuration row. `id` is pinned to 1 by convention and by seed. */
 export const settings = pgTable('settings', {
   id: integer('id').primaryKey().default(1),
@@ -347,6 +369,7 @@ export type NewJob = typeof jobs.$inferInsert;
 export type JobStatus = (typeof jobStatusEnum.enumValues)[number];
 export type Priority = (typeof priorityEnum.enumValues)[number];
 export type SentVia = (typeof sentViaEnum.enumValues)[number];
+export type ImportKind = (typeof importKindEnum.enumValues)[number];
 export type Invoice = typeof invoices.$inferSelect;
 export type NewInvoice = typeof invoices.$inferInsert;
 export type JobAttachment = typeof jobAttachments.$inferSelect;
