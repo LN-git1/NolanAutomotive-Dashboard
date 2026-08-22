@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
 
-import { Badge, Card, CardBody, CardHeader, Empty, Table, Td, Th } from '@/components/ui';
+import { Badge, Card, CardHeader, Empty, Table, Td, Th } from '@/components/ui';
 import { EarningsPanel } from '@/components/earnings/earnings-panel';
 import { SwipeNav } from '@/components/earnings/swipe-nav';
 import {
@@ -22,15 +22,27 @@ export const metadata: Metadata = { title: 'Overview' };
 // Always reflect the current state of the workshop; nothing here is cacheable.
 export const dynamic = 'force-dynamic';
 
-function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
+/** `href` makes the tile a real link into the section it summarises, rather than inert display. */
+function Kpi({
+  label,
+  value,
+  hint,
+  href,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  href: string;
+}) {
   return (
-    <Card>
-      <CardBody>
-        <p className="text-xs font-medium text-muted">{label}</p>
-        <p className="mt-1 text-2xl font-semibold text-ink tabular">{value}</p>
-        {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
-      </CardBody>
-    </Card>
+    <Link
+      href={href}
+      className="block rounded-lg border border-line bg-surface p-4 transition-colors hover:border-brand hover:bg-canvas focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+    >
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-ink tabular">{value}</p>
+      {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
+    </Link>
   );
 }
 
@@ -87,10 +99,20 @@ async function JobCounts() {
 
   return (
     <>
-      <Kpi label="Active jobs" value={String(counts.active)} />
-      <Kpi label="Completed jobs" value={String(counts.completed)} hint="Ready to invoice" />
-      <Kpi label="Invoiced" value={String(counts.invoiced)} hint="Awaiting payment" />
-      <Kpi label="Paid" value={String(counts.paid)} />
+      <Kpi label="Active jobs" value={String(counts.active)} href="/jobs?status=active" />
+      <Kpi
+        label="Completed jobs"
+        value={String(counts.completed)}
+        hint="Ready to invoice"
+        href="/jobs?status=completed"
+      />
+      <Kpi
+        label="Invoiced"
+        value={String(counts.invoiced)}
+        hint="Awaiting payment"
+        href="/awaiting-payments"
+      />
+      <Kpi label="Paid" value={String(counts.paid)} href="/jobs?status=paid" />
     </>
   );
 }
@@ -107,11 +129,13 @@ async function MoneyTotals() {
         label="Total outstanding"
         value={formatEur(outstandingCents)}
         hint="Invoiced but not yet paid"
+        href="/awaiting-payments"
       />
       <Kpi
         label="Total owed to suppliers"
         value={formatEur(owedCents)}
         hint="Unpaid supplier bills"
+        href="/suppliers"
       />
     </>
   );

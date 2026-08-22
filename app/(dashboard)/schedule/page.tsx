@@ -42,17 +42,62 @@ function workload(count: number): { label: string; className: string } {
   return { label: `${count} booked`, className: 'text-danger' };
 }
 
-function JobChip({ job }: { job: Job }) {
+/** Make + model, e.g. "Toyota Corolla" — empty when neither is on the job. */
+function vehicleDescription(job: Job): string {
+  return [job.vehicleMake, job.vehicleModel].filter(Boolean).join(' ');
+}
+
+function JobChip({ job, className }: { job: Job; className?: string }) {
   const time = formatTime(job.dueTime);
+  const vehicle = vehicleDescription(job);
   return (
     <Link
       href={`/jobs/${job.id}`}
-      className="block truncate rounded border border-line bg-canvas px-1.5 py-1 text-[11px] leading-tight hover:bg-info-soft"
-      title={`${time ? `${time} — ` : ''}${job.jobNumber} — ${job.customerName} (${job.vehicleRegistration})`}
+      className={cn(
+        'block truncate rounded border border-line bg-canvas px-1.5 py-1 text-[11px] leading-tight hover:bg-info-soft',
+        className,
+      )}
+      title={`${time ? `${time} — ` : ''}${job.jobNumber} — ${job.customerName} (${job.vehicleRegistration}${vehicle ? `, ${vehicle}` : ''})`}
     >
       {time ? <span className="text-muted">{time}</span> : null}{' '}
       <span className="font-medium text-ink">{job.jobNumber}</span>{' '}
       <span className="text-muted">{job.customerName}</span>
+    </Link>
+  );
+}
+
+/** Full detail for one job — make/model and the work list, not just a chip's job number. */
+function JobDetailCard({ job }: { job: Job }) {
+  const time = formatTime(job.dueTime);
+  const vehicle = vehicleDescription(job);
+  const work = job.labourLines.map((line) => line.description).filter(Boolean);
+  return (
+    <Link
+      href={`/jobs/${job.id}`}
+      className="flex flex-col gap-1 rounded-md border border-line px-3 py-2 hover:bg-canvas"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 truncate text-sm font-medium text-ink">
+          {time ? `${time} · ` : ''}
+          {job.jobNumber} — {job.customerName}
+        </span>
+        <Badge value={job.status} />
+      </div>
+      <span className="truncate text-xs text-muted">
+        {job.vehicleRegistration}
+        {vehicle ? ` · ${vehicle}` : ''}
+      </span>
+      {work.length > 0 ? (
+        <ul className="mt-0.5 list-disc pl-4 text-xs text-muted">
+          {work.map((description, i) => (
+            <li key={i} className="truncate">
+              {description}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <span className="text-xs italic text-muted">No work items added yet.</span>
+      )}
     </Link>
   );
 }
@@ -87,10 +132,24 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
   const next = shiftMonth(year, month, 1);
   const today = todayIso();
 
-  // Agenda view (mobile): only days that actually have work, from today on.
-  const agenda = cells
-    .filter((cell) => cell.jobs.length > 0 && cell.date >= today)
-    .slice(0, 30);
+  // Selected day, driving the detail panel below the grid — a tap target for
+  // mobile (the grid cells are too narrow to show a job's full detail inline)
+  // that also gives desktop a single place to read make/model + work items
+  // without cramming them into a chip. Only trusted when it actually falls
+  // within the month currently on screen.
+  const dayParam = typeof params.day === 'string' ? params.day : undefined;
+  const selectedDate = dayParam && cells.some((c) => c.date === dayParam) ? dayParam : undefined;
+  const selectedCell = selectedDate ? cells.find((c) => c.date === selectedDate) : undefined;
+
+  // With no day picked, the panel falls back to an agenda of what's coming up
+  // rather than going blank — this is the view that used to be mobile's only
+  // way to see the schedule, and losing it would be a real regression for the
+  // ~90% of use that happens on a phone. Capped the same way it always was.
+  const agenda = cells.filter((cell) => cell.jobs.length > 0 && cell.date >= today).slice(0, 30);
+
+  const dayHref = (date: string) => `/schedule?year=${year}&month=${month}&day=${date}`;
+  const now = new Date();
+  const todayHref = `/schedule?year=${now.getFullYear()}&month=${now.getMonth()}&day=${today}`;
 
   const bookedThisMonth = cells.filter((c) => c.inCurrentMonth).reduce((n, c) => n + c.jobs.length, 0);
 
@@ -145,7 +204,7 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
             <p className="text-sm font-semibold text-ink">
               {MONTH_NAMES[month]} {year}
             </p>
-            <Link href="/schedule" className="text-xs text-brand-dark hover:underline">
+            <Link href={todayHref} className="text-xs text-brand-dark hover:underline">
               Today
             </Link>
           </div>
@@ -159,11 +218,14 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
           </Link>
         </div>
 
-        {/* Month grid — from md up, where seven columns are actually readable. */}
-        <div className="hidden md:block">
+        {/* Month grid — every screen size now, phones included. Cells stay
+            narrow on mobile (a chip's full text won't fit seven-across), so
+            each one is a tap target for the day-detail panel below rather
+            than trying to cram job text into ~45px of width. */}
+        <div>
           <div className="grid grid-cols-7 border-b border-line">
             {WEEKDAYS.map((day) => (
-              <div key={day} className="px-2 py-2 text-center text-xs font-semibold text-muted">
+              <div key={day} className="px-1 py-2 text-center text-xs font-semibold text-muted sm:px-2">
                 {day}
               </div>
             ))}
@@ -173,48 +235,64 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
             {cells.map((cell) => {
               const load = workload(cell.jobs.length);
               const timeOff = cell.isTimeOff && cell.inCurrentMonth;
+              const isSelected = cell.date === selectedDate;
               return (
                 <div
                   key={cell.date}
                   className={cn(
-                    'min-h-28 border-r border-b border-line p-1.5 last:border-r-0',
+                    'relative min-h-16 border-r border-b border-line p-1.5 last:border-r-0 sm:min-h-20 md:min-h-28',
                     !cell.inCurrentMonth && 'bg-canvas/60',
-                    cell.isWeekend && cell.inCurrentMonth && !timeOff && 'bg-canvas/40',
+                    cell.isWeekend && cell.inCurrentMonth && !timeOff && !isSelected && 'bg-canvas/40',
                     timeOff && 'bg-warn-soft',
+                    isSelected && !timeOff && 'bg-info-soft',
+                    isSelected && 'ring-1 ring-inset ring-brand',
                   )}
                 >
-                  <div className="mb-1 flex items-center justify-between gap-1">
-                    <span
-                      className={cn(
-                        'inline-flex size-6 items-center justify-center rounded-full text-xs',
-                        cell.isToday && 'bg-brand font-semibold text-white',
-                        !cell.isToday && cell.inCurrentMonth && 'text-ink',
-                        !cell.inCurrentMonth && 'text-muted',
-                        timeOff && !cell.isToday && 'text-warn line-through',
-                      )}
-                    >
-                      {cell.dayOfMonth}
-                    </span>
-                    {cell.inCurrentMonth && cell.jobs.length > 0 ? (
-                      <span className={cn('text-[10px]', load.className)}>{cell.jobs.length}</span>
-                    ) : null}
-                  </div>
+                  {/* Whole-cell tap target selecting the day, sitting behind the
+                      content below — job chips opt back into pointer events so a
+                      tap on one still goes straight to the job, not the day. */}
+                  <Link
+                    href={dayHref(cell.date)}
+                    aria-label={`${formatDate(cell.date)}${cell.jobs.length > 0 ? `, ${cell.jobs.length} booked` : ''}`}
+                    className="absolute inset-0 hover:bg-ink/[0.03] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand"
+                  />
 
-                  {timeOff ? (
-                    <p className="truncate text-[10px] font-medium text-warn">
-                      Off{cell.timeOffLabel ? ` · ${cell.timeOffLabel}` : ''}
-                    </p>
-                  ) : null}
-
-                  <div className="flex flex-col gap-1">
-                    {cell.jobs.slice(0, 3).map((job) => (
-                      <JobChip key={job.id} job={job} />
-                    ))}
-                    {cell.jobs.length > 3 ? (
-                      <span className="px-1 text-[10px] text-muted">
-                        +{cell.jobs.length - 3} more
+                  <div className="relative flex flex-col gap-1 pointer-events-none">
+                    <div className="mb-1 flex items-center justify-between gap-1">
+                      <span
+                        className={cn(
+                          'inline-flex size-6 items-center justify-center rounded-full text-xs',
+                          cell.isToday && 'bg-brand font-semibold text-white',
+                          !cell.isToday && cell.inCurrentMonth && 'text-ink',
+                          !cell.inCurrentMonth && 'text-muted',
+                          timeOff && !cell.isToday && 'text-warn line-through',
+                        )}
+                      >
+                        {cell.dayOfMonth}
                       </span>
+                      {cell.inCurrentMonth && cell.jobs.length > 0 ? (
+                        <span className={cn('text-[10px]', load.className)}>{cell.jobs.length}</span>
+                      ) : null}
+                    </div>
+
+                    {timeOff ? (
+                      <p className="truncate text-[10px] font-medium text-warn">
+                        Off{cell.timeOffLabel ? ` · ${cell.timeOffLabel}` : ''}
+                      </p>
                     ) : null}
+
+                    {/* Chips: from md up only — a phone-width column only has
+                        room for the day number and the count badge above. */}
+                    <div className="hidden flex-col gap-1 md:flex">
+                      {cell.jobs.slice(0, 3).map((job) => (
+                        <JobChip key={job.id} job={job} className="pointer-events-auto" />
+                      ))}
+                      {cell.jobs.length > 3 ? (
+                        <span className="px-1 text-[10px] text-muted">
+                          +{cell.jobs.length - 3} more
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               );
@@ -222,55 +300,79 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
           </div>
         </div>
 
-        {/* Agenda — phones. A seven-column grid is unusable at that width. */}
-        <div className="md:hidden">
-          {agenda.length === 0 ? (
-            <Empty>Nothing booked from today onwards this month.</Empty>
+        {/* Day detail — the full picture for whichever day is selected above:
+            vehicle make/model and the work list, not just a chip's job number.
+            Shown at every width, not just mobile, since a grid cell never had
+            room for this even on desktop. With no day tapped this falls back
+            to an agenda of what's coming up, rather than going blank — that
+            agenda used to be mobile's only view of the schedule, and losing it
+            outright when adding the grid would cost more than the grid gains. */}
+        <div className="border-t border-line p-4">
+          {selectedCell ? (
+            <>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <Link
+                  href={`/schedule?year=${year}&month=${month}`}
+                  className="text-xs text-brand-dark hover:underline"
+                >
+                  ← What&rsquo;s coming up
+                </Link>
+              </div>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <span className={cn('text-sm font-semibold', selectedCell.isToday ? 'text-brand-dark' : 'text-ink')}>
+                  {selectedCell.isToday ? 'Today · ' : ''}
+                  {formatDate(selectedCell.date)}
+                </span>
+                {selectedCell.isTimeOff ? (
+                  <span className="text-xs font-medium text-warn">
+                    Off{selectedCell.timeOffLabel ? ` · ${selectedCell.timeOffLabel}` : ''}
+                  </span>
+                ) : (
+                  <span className={cn('text-xs', workload(selectedCell.jobs.length).className)}>
+                    {workload(selectedCell.jobs.length).label}
+                  </span>
+                )}
+              </div>
+
+              {selectedCell.jobs.length === 0 ? (
+                <Empty>Nothing booked in on this day.</Empty>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {selectedCell.jobs.map((job) => (
+                    <JobDetailCard key={job.id} job={job} />
+                  ))}
+                </div>
+              )}
+            </>
+          ) : agenda.length === 0 ? (
+            <Empty>Nothing booked from today onwards this month. Tap a date to look elsewhere.</Empty>
           ) : (
-            <ul className="divide-y divide-line">
+            <div className="flex flex-col gap-4">
               {agenda.map((cell) => (
-                <li key={cell.date} className="px-4 py-3">
+                <div key={cell.date}>
                   <div className="mb-2 flex items-center justify-between">
-                    <span className={cn('text-sm font-semibold', cell.isToday ? 'text-brand-dark' : 'text-ink')}>
+                    <Link
+                      href={dayHref(cell.date)}
+                      className={cn(
+                        'text-sm font-semibold hover:underline',
+                        cell.isToday ? 'text-brand-dark' : 'text-ink',
+                      )}
+                    >
                       {cell.isToday ? 'Today · ' : ''}
                       {formatDate(cell.date)}
+                    </Link>
+                    <span className={cn('text-xs', workload(cell.jobs.length).className)}>
+                      {workload(cell.jobs.length).label}
                     </span>
-                    {cell.isTimeOff ? (
-                      <span className="text-xs font-medium text-warn">
-                        Off{cell.timeOffLabel ? ` · ${cell.timeOffLabel}` : ''}
-                      </span>
-                    ) : (
-                      <span className={cn('text-xs', workload(cell.jobs.length).className)}>
-                        {workload(cell.jobs.length).label}
-                      </span>
-                    )}
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    {cell.jobs.map((job) => {
-                      const time = formatTime(job.dueTime);
-                      return (
-                        <Link
-                          key={job.id}
-                          href={`/jobs/${job.id}`}
-                          className="flex items-center justify-between gap-2 rounded-md border border-line px-3 py-2"
-                        >
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-medium text-ink">
-                              {time ? `${time} · ` : ''}
-                              {job.jobNumber} — {job.customerName}
-                            </span>
-                            <span className="block truncate text-xs text-muted">
-                              {job.vehicleRegistration}
-                            </span>
-                          </span>
-                          <Badge value={job.status} />
-                        </Link>
-                      );
-                    })}
+                  <div className="flex flex-col gap-2">
+                    {cell.jobs.map((job) => (
+                      <JobDetailCard key={job.id} job={job} />
+                    ))}
                   </div>
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </div>
       </Card>

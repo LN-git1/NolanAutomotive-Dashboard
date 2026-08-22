@@ -1,5 +1,71 @@
 # Changelog
 
+## 22/08/2026 @ 01:31:25 IST — "claude-sonnet-5"
+
+**Project completion: 100.00%**
+
+Basis: 2 of 2 requested changes shipped — Overview's stat tiles as real links, and the Schedule
+calendar's mobile grid with per-job vehicle/work detail. Both verified end-to-end in a real browser
+(login, live grid interaction, mobile viewport, chip-click target confirmed via computed styles and
+`elementFromPoint`), not just by reading the diff. Typecheck, lint, and the 158-test suite are clean.
+
+### Added — Overview's stat tiles are now links into the section they summarise
+
+The six tiles at the top of Overview (Active jobs, Completed jobs, Invoiced, Paid, Total
+outstanding, Total owed to suppliers) were plain `<Card>`s — inert, despite each one being a filtered
+view that already exists elsewhere in the app. A user glancing at "12 completed jobs" had no way to
+get to that list except navigating to Jobs and setting the filter by hand.
+
+**Fix.** `Kpi` (`app/(dashboard)/page.tsx`) now renders as a `<Link>` styled identically to the old
+card, with a hover/focus affordance so it reads as interactive. Routes chosen to match existing
+semantics rather than inventing new ones: Active/Completed/Paid go to `/jobs?status=<status>` (a
+filter the Jobs page already supports); Invoiced and Total outstanding both go to
+`/awaiting-payments`, since that page's own "Total outstanding" figure is the same number by a
+different name; Total owed to suppliers goes to `/suppliers`, whose own total is likewise the same
+figure restated.
+
+### Added — Schedule's month grid now renders on mobile, with make/model and work items per job
+
+The calendar previously split into two unrelated views at the `md` breakpoint: a full seven-column
+grid on desktop, and a flat agenda list on mobile that only showed job number, customer, and
+registration — no vehicle make/model, no work items, and no grid at all. A user on a phone (~90% of
+this app's real usage, per `job-form.tsx`'s own comment) could never see the actual calendar shape of
+their month, only a flat list.
+
+**Fix.** The grid (`app/(dashboard)/schedule/page.tsx`) is now unconditional at every width — chips
+still render inline from `md` up, and below that each cell shows just the day number and a job-count
+badge, since a phone-width column has no room for chip text. Tapping any cell selects that day via a
+`?day=YYYY-MM-DD` query param and opens a detail panel below the grid, at every width, listing each
+job with its make/model (`vehicleMake`/`vehicleModel`) and its full work list (`labourLines[].description`)
+— detail that never fit in a grid cell on desktop either, so this is a strict improvement there too.
+With no day selected the panel falls back to an agenda of what's coming up (every day with a booking,
+today onward) rather than going blank, so the multi-day-at-a-glance view mobile used to have is not
+lost — only reachable one tap away from a specific day's detail.
+
+**How the whole-cell tap target coexists with per-job chip links.** Each cell has a background
+`<Link>` (`absolute inset-0`) selecting the day, and its content wrapper is `pointer-events-none` so
+clicks pass through to it — except each `JobChip` gets `pointer-events-auto` back, which keeps it
+individually clickable without nesting an `<a>` inside an `<a>` (invalid HTML). Verified directly
+rather than assumed: `elementFromPoint` at a chip's centre resolves to the chip's own text node, and
+an actual Playwright click on a rendered chip lands on `/jobs/<id>`, not the day-select overlay.
+
+### Fixed (local dev only) — the job-number counter had drifted behind two soft-deleted test jobs
+
+Not part of the request, found while seeding test data to verify the above. Two old jobs (J-0001,
+J-0002) were soft-deleted locally, but `counters.next_value` for `'job'` still pointed at `1` —
+`allocateNumber` returned 1 again, and the subsequent insert hit `jobs_job_number_key`'s unique
+constraint on the still-present (soft-deleted) row, since a soft delete never frees its job number.
+Reconciled `next_value` past the highest job number actually in the table. Local-environment data
+drift only — this table doesn't exist on the production path in a way this touches, and the app code
+that allocates numbers (`lib/counters.ts`) was not changed.
+
+### Files Touched
+
+- `app/(dashboard)/page.tsx` — `Kpi` takes an `href`, all six call sites link to their section.
+- `app/(dashboard)/schedule/page.tsx` — grid always renders; new `?day=` selection; `JobDetailCard`
+  and the agenda fallback; `JobChip` gained `className`/`vehicleDescription`; local-only counter
+  reconciliation via direct SQL (no code change).
+
 ## 21/08/2026 @ 23:03:04 IST — "claude-opus-5"
 
 **Project completion: 100.00%**
