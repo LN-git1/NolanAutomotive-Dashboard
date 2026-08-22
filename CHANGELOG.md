@@ -1,5 +1,47 @@
 # Changelog
 
+## 22/08/2026 @ 01:59:38 IST — "claude-sonnet-5"
+
+**Project completion: 100.00%**
+
+Basis: 1 of 1 follow-up request shipped — Schedule now opens straight onto today's readable detail
+instead of a scroll-past-the-grid agenda or unreadable chips. Verified against a live-viewport
+(non-scrolled) mobile screenshot showing the fix actually works, not just a full-page capture that
+would have hidden a below-the-fold regression. Typecheck, lint, and the 158-test suite are clean.
+
+### Changed — Schedule opens on today's full detail, above the grid, not below it
+
+Two rounds in, the mobile calendar still wasn't answering the actual question: "what am I doing
+today, right now, without tapping anything." The previous entry made grid cells show real (if tiny)
+chips instead of a bare count, but the readable detail panel sat *below* six weeks of grid — on a
+phone that grid alone fills the viewport, so the panel that actually answers the question required
+scrolling past it first. And with no day explicitly tapped, that panel defaulted to a generic
+"what's coming up" agenda rather than today specifically.
+
+**Fix.** Two changes, both in `app/(dashboard)/schedule/page.tsx`:
+
+1. **Default selection is today**, not "nothing." `selectedDate` now falls back to today whenever
+   today is actually in the month being viewed (`isViewingCurrentMonth`), so opening `/schedule`
+   plain lands on today's jobs — time, job number, customer, vehicle make/model, and the work list —
+   with zero taps. Browsing a different month, or explicitly asking via the new `?agenda=1` param
+   (what the "← What's coming up" link now sets), still falls back to the multi-day agenda; that
+   capability isn't gone, just no longer the default when there's an obvious better one.
+
+2. **The detail panel moved above the grid**, not below it. It's now the first thing inside the
+   Card, right under the month-nav header — visible in the initial viewport on a phone without any
+   scrolling. The grid moved below it, unchanged otherwise, still available for jumping to a
+   specific day or eyeballing the month's shape.
+
+Grid chips are unchanged from the last entry (still real text, still tiny on a phone — that
+limitation is inherent to seven columns at phone width, same as Google Calendar's own month view).
+The actual fix for "unreadable" was never going to be shrinking chip text further; it was making the
+thing that's genuinely readable — the detail panel — the first thing you see.
+
+### Files Touched
+
+- `app/(dashboard)/schedule/page.tsx` — default-to-today selection with `isViewingCurrentMonth`
+  and `forceAgenda`/`?agenda=1`; detail panel and grid swapped order within the Card.
+
 ## 22/08/2026 @ 01:53:08 IST — "claude-sonnet-5"
 
 **Project completion: 100.00%**
