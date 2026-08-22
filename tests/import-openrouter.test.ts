@@ -34,13 +34,15 @@ describe('callOpenRouter', () => {
     expect(init.headers.Authorization).toBe('Bearer test-key');
     const body = JSON.parse(init.body);
     expect(body.messages).toEqual([{ role: 'user', content: 'hello' }]);
+    expect(body.model).toBe('google/gemini-2.5-flash');
+    expect(body.temperature).toBe(0.1);
   });
 
   it('throws a clear error on a non-2xx response', async () => {
     vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
     mockFetchOnce({ ok: false, status: 429, body: { error: { message: 'rate limited upstream' } } });
 
-    await expect(callOpenRouter('markdown', [])).rejects.toThrow(/rate limited upstream|OpenRouter/);
+    await expect(callOpenRouter('markdown', [])).rejects.toThrow(/rate limited upstream/);
   });
 
   it('throws a clear error when the response has no message content', async () => {
@@ -51,6 +53,7 @@ describe('callOpenRouter', () => {
   });
 
   it('throws immediately, without calling fetch, if OPENROUTER_API_KEY is not set', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', '');
     const fetchMock = mockFetchOnce({ ok: true, body: {} });
 
     await expect(callOpenRouter('markdown', [])).rejects.toThrow(/OPENROUTER_API_KEY/);
