@@ -40,13 +40,20 @@ export interface ImportPrefill {
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-/** "2.5 hours" / 2.5 / "€45.00" / "1x" -> a plain decimal string, or undefined if nothing numeric is present. */
+/** "2.5 hours" / 2.5 / "€45.00" / "1x" / "€1,500.00" -> a plain decimal string, or undefined if nothing numeric is present. */
 function toDecimalString(value: string | number | undefined): string | undefined {
   if (value === undefined) return undefined;
   const raw = String(value);
-  const match = raw.match(/\d+(\.\d+)?/);
+  // Two alternatives, tried in order: a comma-grouped thousands number first
+  // (e.g. "1,500.00", "1,234" — each group after the first comma must be
+  // exactly 3 digits, real thousands-separator shape), falling back to a
+  // plain number with no separators (e.g. "2.5", "45.00", "1"). The comma
+  // alternative must come first — regex alternation is first-match, and
+  // trying the plain alternative first would stop at the comma exactly like
+  // the bug being fixed here.
+  const match = raw.match(/\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/);
   if (!match) return undefined;
-  return match[0];
+  return match[0].replace(/,/g, '');
 }
 
 function toOptionalString(value: string | undefined): string | undefined {

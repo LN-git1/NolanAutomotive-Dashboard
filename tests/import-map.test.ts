@@ -61,6 +61,20 @@ describe('mapExtractedToPrefill', () => {
     expect(prefill.parts[0]!.unitPrice).toBe('45.00');
   });
 
+  it('normalises comma-thousands numbers correctly', () => {
+    const prefill = mapExtractedToPrefill({
+      labourLines: [{ description: 'Install gearbox', hours: '1,500.50' }],
+      parts: [
+        { partName: 'Transmission', qty: '1', unitPrice: '€1,500.00' },
+        { partName: 'Bolt set', qty: '1,234', unitPrice: '15.50' },
+      ],
+    });
+
+    expect(prefill.labourLines[0]!.hours).toBe('1500.50');
+    expect(prefill.parts[0]!.unitPrice).toBe('1500.00');
+    expect(prefill.parts[1]!.qty).toBe('1234');
+  });
+
   it('drops an out-of-range or non-numeric year rather than passing it through', () => {
     expect(mapExtractedToPrefill({ vehicleYear: '1850', labourLines: [], parts: [] }).vehicleYear).toBeUndefined();
     expect(mapExtractedToPrefill({ vehicleYear: 'not a year', labourLines: [], parts: [] }).vehicleYear).toBeUndefined();
