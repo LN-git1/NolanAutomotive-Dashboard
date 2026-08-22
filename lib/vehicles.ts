@@ -138,3 +138,55 @@ export function vehicleYears(now: Date = new Date()): number[] {
   for (let year = newest; year >= oldest; year -= 1) years.push(year);
   return years;
 }
+
+/** Common misspellings/abbreviations an LLM produces for a make it clearly means. */
+const MAKE_ALIASES: Record<string, string> = {
+  vw: 'Volkswagen',
+  volkswagon: 'Volkswagen',
+  mercedes: 'Mercedes-Benz',
+  landrover: 'Land Rover',
+  citroen: 'Citroën',
+};
+
+/** Case/accent-insensitive key for matching against the alias table and MAKE_NAMES. */
+function foldKey(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Best-effort match against the known-makes list, for a value an LLM
+ * extracted rather than one the owner picked from the dropdown. Unmatched
+ * values pass through unchanged (trimmed) rather than being dropped — that's
+ * exactly what routes them into `VehicleFields`' existing free-text "Other…"
+ * fallback instead of silently discarding real data the owner can still see
+ * and correct.
+ */
+export function normaliseMake(raw: string | undefined | null): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (trimmed === '') return undefined;
+
+  const key = foldKey(trimmed);
+  if (MAKE_ALIASES[key]) return MAKE_ALIASES[key];
+
+  const known = MAKE_NAMES.find((name) => foldKey(name) === key);
+  return known ?? trimmed;
+}
+
+export function normaliseModel(
+  make: string | undefined,
+  raw: string | undefined | null,
+): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (trimmed === '') return undefined;
+  if (!make) return trimmed;
+
+  const key = foldKey(trimmed);
+  const known = modelsForMake(make).find((name) => foldKey(name) === key);
+  return known ?? trimmed;
+}

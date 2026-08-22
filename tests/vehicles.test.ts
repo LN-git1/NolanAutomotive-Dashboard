@@ -7,6 +7,8 @@ import {
   isKnownMake,
   isKnownModel,
   modelsForMake,
+  normaliseMake,
+  normaliseModel,
   vehicleYears,
 } from '@/lib/vehicles';
 
@@ -97,5 +99,60 @@ describe('vehicleYears', () => {
   it('has no gaps', () => {
     const years = vehicleYears(new Date(2026, 7, 13));
     expect(years.length).toBe(2027 - 1980 + 1);
+  });
+});
+
+describe('normaliseMake', () => {
+  it('passes through an exact match unchanged', () => {
+    expect(normaliseMake('Toyota')).toBe('Toyota');
+  });
+
+  it('matches case-insensitively', () => {
+    expect(normaliseMake('toyota')).toBe('Toyota');
+  });
+
+  it('applies the alias table for common LLM-produced spellings', () => {
+    expect(normaliseMake('VW')).toBe('Volkswagen');
+    expect(normaliseMake('Volkswagon')).toBe('Volkswagen');
+    expect(normaliseMake('Mercedes')).toBe('Mercedes-Benz');
+    expect(normaliseMake('Landrover')).toBe('Land Rover');
+  });
+
+  it('matches accent/case variants against an accented make name', () => {
+    expect(normaliseMake('citroen')).toBe('Citroën');
+    expect(normaliseMake('CITROEN')).toBe('Citroën');
+  });
+
+  it('passes through an unknown make unchanged, trimmed', () => {
+    expect(normaliseMake('  Griffon Motors  ')).toBe('Griffon Motors');
+  });
+
+  it('returns undefined for empty/missing input', () => {
+    expect(normaliseMake(undefined)).toBeUndefined();
+    expect(normaliseMake(null)).toBeUndefined();
+    expect(normaliseMake('   ')).toBeUndefined();
+  });
+});
+
+describe('normaliseModel', () => {
+  it('passes through an exact match for the given make unchanged', () => {
+    expect(normaliseModel('Toyota', 'Corolla')).toBe('Corolla');
+  });
+
+  it('matches case-insensitively within the given make', () => {
+    expect(normaliseModel('Toyota', 'corolla')).toBe('Corolla');
+  });
+
+  it('passes through unchanged when the make is unknown', () => {
+    expect(normaliseModel('Griffon Motors', 'Falcon')).toBe('Falcon');
+  });
+
+  it('passes through unchanged when the model is not in the known make\'s list', () => {
+    expect(normaliseModel('Toyota', 'Model S')).toBe('Model S');
+  });
+
+  it('returns undefined for empty/missing input', () => {
+    expect(normaliseModel('Toyota', undefined)).toBeUndefined();
+    expect(normaliseModel(undefined, 'Corolla')).toBe('Corolla');
   });
 });
