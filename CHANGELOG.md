@@ -1,5 +1,155 @@
 # Changelog
 
+## 25/08/2026 @ 02:00:58 IST — "claude-opus-5"
+
+**Project completion: 100.00%**
+
+Basis: 7 of 7 items Lee raised in this round are shipped and verified — (1) Jobs listing settled work,
+(2) no Paid jobs page, (3) settled jobs not moving there automatically, (4) Overview reporting "Paid: 0"
+falsely, (5) four contradictory job tiles instead of three, (6) J-0019 still badged as a completed job,
+and (7) J-0019 stuck in Awaiting payments at €0.00 owed. Verified against live production data before
+and after, against a real Postgres for the query layer (7 DB-backed tests), and in a browser at both
+1440px and 390px. Typecheck clean, 159 tests passing, eslint clean on every touched file.
+
+### Fixed — a job could be paid in full and the whole app would still say it wasn't
+
+Lee reported that J-0019 had been invoiced (NA-2026-0017, €450.00), paid in full, and yet still showed
+as a completed job, still sat in the jobs list, and still sat in Awaiting payments showing €0.00
+remaining without ever dropping off it. Meanwhile the Overview claimed zero paid jobs.
+
+**Cause — two separate defects that compounded.**
+
+*The write.* `updateJob` parsed the job form with the full `jobInputSchema` and spread the result
+straight into the UPDATE, so the form's own status `<select>` was written on **every save**. That select
+was uncontrolled (`defaultValue`), so it held whatever value the page had been *rendered* with, not the
+job's current one. Recording a payment flipped the job to `paid`; the next save on that page silently
+put it back. `changeJobStatus` has guarded `paid` since it was written — but `updateJob` was a second,
+unguarded door into the same column, exactly the "third path that writes the status directly" that
+`lib/db/queries/earnings.ts` warns against in its own docstring. Confirmed against production: J-0019
+sat at `completed` with €450.00 of €450.00 paid, and J-0020 at `completed` with €700.00 of €1,095.00.
+
+*The read.* Every money question was then answered from that column. `listAwaitingPayment` and
+`getOutstandingInvoiceTotalCents` filtered `status <> 'paid'`, and the Overview counts grouped by
+status. So a settled job whose status had drifted stayed on the owed list **forever**, showing €0.00 —
+which is precisely what Lee saw. The list was rendering a corrupted column faithfully.
+
+**Fix — derive the money from the money.** New `lib/db/queries/invoice-state.ts` holds one definition
+each of "still owed", "settled" and "not billed yet", all computed from a live (non-voided) invoice and
+the payments recorded against it. Awaiting payments, the outstanding total, the Overview counts, both
+Overview lists, the jobs list and the new Paid jobs page all import those same predicates instead of
+rolling their own SQL — this codebase has already been bitten once by the Awaiting payments header and
+its rows computing "owed" separately, and six hand-rolled copies would have been that bug waiting to
+come back in a new shape.
+
+This makes the behaviour **self-healing**: however `jobs.status` drifts, a fully paid job leaves
+Awaiting payments and appears under Paid jobs, because the payments say so. `jobs.status` is now the
+workflow badge and nothing more.
+
+**And the door is closed.** `jobUpdateSchema` (`jobInputSchema.omit({ status: true })`) means editing a
+job structurally cannot rewrite its status. Omitting the key is the fix rather than just deleting the
+form field: `jobInputSchema.status` defaults to `'active'`, so removing the input alone would have made
+every save stamp `active` over whatever stage the job had reached — strictly worse than the original
+bug. The duplicate Status control is gone from the job form (`JobActions`, a live control on the same
+screen, already owned it); a new job is `active`, which is what the schema has always said it should be.
+
+**Data corrected.** Migration `0007_reconcile_job_status_with_payments.sql` moves a job forward to the
+stage its own invoice has already reached — never backward, so a status set deliberately for work still
+in hand is untouched. Applied to production after a read-only dry run confirmed it would touch exactly
+two rows and no others: J-0019 `completed` → `paid`, J-0020 `completed` → `invoiced`. Idempotent.
+Note this repo has **no automatic migration step on deploy** (`vercel.json` carries only the health
+cron), so `pnpm db:migrate:prod` was run by hand — a future data migration needs the same.
+
+### Added — a Paid jobs page, so Jobs is the work still in front of you
+
+Lee's actual complaint underneath the bug: `/jobs` listed every job ever created, so the cars in the
+workshop and the invoices still owed were buried under work settled months ago.
+
+`/jobs` now lists **open work only** — not billed yet, or billed and still owed. `/paid-jobs` is the
+other half: invoiced and settled in full, with the invoice number, the date of the final payment, a
+total collected banner, and its own search. Membership is decided by the payments, so a job lands there
+the moment its invoice is settled and cannot be argued out of it by a status label.
+
+It sits in the sidebar and the mobile drawer, deliberately **not** in the phone bottom bar — it is a
+lookup ("what did we charge them in March?"), not somewhere the owner works from, and there is no sixth
+slot that wouldn't crush the other five.
+
+Searching `/jobs` for a customer who paid last month would now come back empty and read as "we lost the
+job", so settled matches are counted rather than hidden: the page shows "N paid jobs are filed under
+Paid jobs" with a link that carries the search term across. Shown with no search too, so the new page is
+discoverable from the list it was carved out of.
+
+### Changed — three Overview tiles that agree with each other, and with the pages they link to
+
+There were four, split by `jobs.status`, and they contradicted each other: "Completed jobs: 2 — ready to
+invoice" sat beside "Paid: 0" while both of those jobs had in fact been invoiced and one had been paid
+in full. Now **Active / Invoiced / Paid**, counted from the same predicates as the lists behind them,
+partitioning every live job exactly once so they sum to the total. Each links where it belongs —
+`/jobs`, `/awaiting-payments`, `/paid-jobs` (the old "Paid" tile pointed at `/jobs?status=paid`, a
+filter that would now always be empty; `paid` is gone from that dropdown for the same reason).
+
+The second Overview list changed with them: "Completed jobs — ready to invoice" listed jobs by status
+and so showed work already invoiced and paid. It is now "Awaiting payment", mirroring the tile above it.
+And the Recently invoiced table's Status column now reflects the **invoice's** payment state rather than
+the job's workflow label, which is what a column in a table of invoices reads as.
+
+### Changed — `completed` no longer looks like `paid`
+
+Half of why "Completed jobs: 2" read as "two jobs are done and paid for" is that the badge wore the same
+green as `paid` while meaning something entirely different. `completed` now displays as **"Work done"**
+on a neutral badge; the enum value is untouched, because that is what the CSV export writes and that
+column is machine-readable. Labels live in one map (`JOB_STATUS_LABELS`) so the badge and the filter
+dropdown cannot drift apart.
+
+### Tests
+
+`tests/awaiting-payment.test.ts` was keyed on the old `status <> 'paid'` predicate and one of its cases
+asserted the exact behaviour that caused this bug — that flipping status to `paid` removes a job from
+the owed list. That case is **inverted**: a status label with no money behind it must not be able to
+write off a real debt. Added the J-0019 regression directly (paid in full with a stale `completed`
+status → leaves Awaiting payments, appears under Paid jobs, moves between the two job lists), a partial
+payment case, and a pipeline-count case. Seven DB-backed tests, run against real Postgres — a mock
+cannot show that a correlated subquery behaves this way. Plus a no-database assertion that
+`jobUpdateSchema` cannot carry a status, which is the fix stated as a test.
+
+### Changed — Schedule reads liveness the same way
+
+`listUnscheduledJobs` and `countJobsPerDay` were the last surfaces keying "is this job still live" off
+`jobs.status` (`<> 'paid'`, `<> 'invoiced'`). They now use the shared predicates too. Same intent, same
+result on current data — but leaving one surface reading the column that drifts is how the bug comes
+back wearing a different hat.
+
+### Changed — the Jobs list shows its own split
+
+The Overview's Active tile counts work not billed yet (4 in production) and links to `/jobs`, which
+lists open work — including invoiced-but-unpaid (6). Both correct, but a 4 → 6 jump on one click is a
+smaller version of the contradiction being fixed here. The unfiltered list header now reads "6 open
+jobs — 4 in the workshop, 2 awaiting payment", so the tile's figure is visible where it lands. Skipped
+once a search or status filter is on, where the breakdown would count jobs the list is not showing.
+
+### Files touched
+
+- `lib/db/queries/invoice-state.ts` — **new.** The single definition of owed / settled / not billed yet.
+- `lib/db/queries/jobs.ts` — awaiting payments keyed on the balance; `listSettledJobs`,
+  `countSettledJobs`, `countJobPipeline`, `listJobsInPipeline`, `scope` on `listJobs`.
+- `lib/db/queries/overview.ts` — outstanding total shares the predicate; recent invoices carry their own
+  remaining balance.
+- `lib/validation/job.ts` — `jobUpdateSchema`, `JOB_STATUS_LABELS`, `JOB_PRIORITY_LABELS`.
+- `lib/actions/jobs.ts` — `updateJob` can no longer write a status; `/paid-jobs` revalidation.
+- `lib/actions/payments.ts`, `app/api/invoices/generate/route.ts`,
+  `app/api/invoices/[id]/void/route.ts` — revalidate `/paid-jobs`.
+- `app/(dashboard)/paid-jobs/page.tsx`, `app/(dashboard)/paid-jobs/loading.tsx` — **new.**
+- `lib/db/queries/schedule.ts` — unscheduled/per-day counts off `jobs.status`.
+- `app/(dashboard)/jobs/page.tsx` — open scope, `paid` off the filter, the settled-matches hint, the
+  workshop/awaiting split in the header.
+- `app/(dashboard)/page.tsx`, `app/(dashboard)/loading.tsx` — three tiles, matching skeleton.
+- `components/jobs/job-form.tsx` — the duplicate Status control removed.
+- `components/ui/index.tsx` — badge labels; `completed` off the `paid` green.
+- `components/layout/sidebar.tsx` — Paid jobs nav item.
+- `drizzle/migrations/0007_reconcile_job_status_with_payments.sql` + journal — **new.**
+- `tests/awaiting-payment.test.ts`, `tests/job-status-guard.test.ts` — see above.
+- `ROADMAP.md` — item 3 re-worded for the new tile vocabulary.
+- `README.md` — `/paid-jobs` in the route inventory; `invoice-state.ts` added to the conventions.
+
 ## 22/08/2026 @ 01:59:38 IST — "claude-sonnet-5"
 
 **Project completion: 100.00%**

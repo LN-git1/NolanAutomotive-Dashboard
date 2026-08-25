@@ -687,9 +687,10 @@ app/
   (auth)/login/              Public. The only ungated page.
   (dashboard)/               Everything else — session required
     page.tsx                 Overview
-    jobs/                    List, new, detail
+    jobs/                    Open work — list, new, detail
     invoicer/                Invoice generation
-    awaiting-payments/       Invoiced-but-unpaid
+    awaiting-payments/       Invoiced, still owed
+    paid-jobs/               Invoiced and settled in full
     suppliers/               Suppliers and bills
     settings/                Business details, VAT, exports
     dev/template-mapper/     TEMPLATE_MAPPER only
@@ -722,4 +723,8 @@ tests/                       Vitest
   needs custom headers: PDF generate/finalize, CSV, signed URLs, auth cookies.
 - **All job reads go through `lib/db/queries/jobs.ts`**, which is the single place the
   `deletedAt IS NULL` filter is applied.
+- **"Owed", "paid" and "not billed yet" come from `lib/db/queries/invoice-state.ts`**, never from
+  `jobs.status`. That column is a workflow label the owner can move at any time; money is derived from
+  a live invoice and the payments against it, so a fully paid job cannot get stuck on the owed list.
+  Every list, total and count meaning one of those three things imports the shared predicate.
 - **All euro arithmetic goes through `lib/money.ts`.** Never inline VAT maths.

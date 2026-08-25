@@ -77,8 +77,13 @@ total column on the jobs list would let Lee see what is on the floor at a glance
 
 ## 3. "Ready to invoice" tile on the Overview
 
-A count and combined value of Completed jobs that have work entered but no invoice yet — money earned
-but not yet asked for. Probably the single most useful number for getting paid faster.
+A count and combined **value** of jobs that have work entered but no invoice yet — money earned but not
+yet asked for. Probably the single most useful number for getting paid faster.
+
+Note the vocabulary moved on 25/08/2026: the Overview's three tiles are now Active / Invoiced / Paid,
+counted from the invoices and payments rather than `jobs.status`, and the `completed` status displays as
+**"Work done"**. Those jobs are counted inside the Active tile — this item is about adding the *money*
+figure beside them, which is the part that is still missing.
 
 ---
 

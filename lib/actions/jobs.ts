@@ -10,7 +10,7 @@ import { findJobByRegistration } from '@/lib/db/queries/jobs';
 import { jobAttachments, jobs } from '@/lib/db/schema';
 import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
 import { removeObject } from '@/lib/storage/signedUrl';
-import { jobInputSchema, jobStatusChangeSchema } from '@/lib/validation/job';
+import { jobInputSchema, jobStatusChangeSchema, jobUpdateSchema } from '@/lib/validation/job';
 
 export interface ActionResult {
   ok: boolean;
@@ -54,10 +54,18 @@ export async function createJob(formData: FormData): Promise<ActionResult> {
   }
 }
 
+/**
+ * Save an edit to a job — everything except its status.
+ *
+ * `jobUpdateSchema` omits `status` on purpose; see the comment on it. Parsing
+ * with the full `jobInputSchema` here is what let a routine save revert a
+ * settled job, so the field must stay out of the parse rather than be stripped
+ * afterwards.
+ */
 export async function updateJob(jobId: string, formData: FormData): Promise<ActionResult> {
   await requireSession();
 
-  const parsed = jobInputSchema.safeParse(Object.fromEntries(formData));
+  const parsed = jobUpdateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid job details' };
   }
@@ -69,6 +77,8 @@ export async function updateJob(jobId: string, formData: FormData): Promise<Acti
 
   revalidatePath('/jobs');
   revalidatePath(`/jobs/${jobId}`);
+  revalidatePath('/paid-jobs');
+  revalidatePath('/awaiting-payments');
   revalidatePath('/');
   // dueDate is the Monthly breakdown's grouping key — editing it moves money
   // between months.
@@ -120,6 +130,7 @@ export async function changeJobStatus(jobId: string, status: string): Promise<Ac
 
   revalidatePath('/jobs');
   revalidatePath(`/jobs/${jobId}`);
+  revalidatePath('/paid-jobs');
   revalidatePath('/awaiting-payments');
   revalidatePath('/earnings');
   revalidatePath('/');
@@ -141,9 +152,10 @@ export async function softDeleteJob(jobId: string): Promise<ActionResult> {
   revalidatePath('/jobs');
   revalidatePath('/');
   // A deleted job's payments drop out of Earnings, and its invoice out of
-  // Awaiting Payments.
+  // Awaiting Payments or Paid jobs, whichever it was sitting in.
   revalidatePath('/earnings');
   revalidatePath('/awaiting-payments');
+  revalidatePath('/paid-jobs');
   return { ok: true };
 }
 

@@ -48,6 +48,8 @@ export async function recordPayment(
   revalidatePath('/jobs');
   if (result.jobId) revalidatePath(`/jobs/${result.jobId}`);
   revalidatePath('/awaiting-payments');
+  // A payment that settles the invoice moves the job from Jobs to Paid jobs.
+  revalidatePath('/paid-jobs');
   revalidatePath('/earnings');
   revalidatePath('/');
   return result;

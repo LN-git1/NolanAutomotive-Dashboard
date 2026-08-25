@@ -42,3 +42,37 @@ describe('changeJobStatus', () => {
     expect(result.ok).toBe(false);
   });
 });
+
+/**
+ * The other half of the same guard, and the one that actually failed in
+ * production: `updateJob` spread a full `jobInputSchema` parse into the UPDATE,
+ * so the job form's status `<select>` was written on every save. Because that
+ * select was uncontrolled, it still held the value the page had been rendered
+ * with — so saving an edit after recording a payment silently reverted the job.
+ * J-0019 was settled in full and reverted to `completed` exactly that way.
+ *
+ * A schema-shape assertion rather than a database round trip: the fix IS the
+ * absence of the key, and that is checkable without Postgres. `.default('active')`
+ * on the original field is why stripping the form input alone was not enough —
+ * an absent `status` would have parsed to `'active'` and stamped that over
+ * every job on every save.
+ */
+describe('jobUpdateSchema', () => {
+  it('cannot carry a status, so editing a job never rewrites one', async () => {
+    const { jobUpdateSchema, jobInputSchema } = await import('@/lib/validation/job');
+
+    const fields = {
+      customerName: 'Test Customer',
+      vehicleRegistration: '12-D-3456',
+      status: 'active',
+    };
+
+    const updated = jobUpdateSchema.parse(fields);
+    expect(updated).not.toHaveProperty('status');
+
+    // The create path still defaults one, which is what makes omission the fix
+    // rather than a tidy-up: reusing this schema for updates would write
+    // 'active' over a paid job.
+    expect(jobInputSchema.parse(fields)).toHaveProperty('status', 'active');
+  });
+});

@@ -1,9 +1,10 @@
 import 'server-only';
 
-import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '../index';
 import { invoices, jobAttachments, jobs, payments, supplierBills, suppliers } from '../schema';
+import { INVOICE_HAS_BALANCE, REMAINING_CENTS } from './invoice-state';
 
 /**
  * Aggregates for the Overview page.
@@ -13,31 +14,27 @@ import { invoices, jobAttachments, jobs, payments, supplierBills, suppliers } fr
  */
 
 /**
- * Sum of remaining balances for invoices whose job is still awaiting payment.
+ * Sum of remaining balances across every live invoice that still owes money.
  *
- * "Owed" is invoice truth, not job-status truth: a non-voided invoice on a job
- * that isn't `paid`. It is deliberately NOT keyed on `status = 'invoiced'` —
- * the owner can move a job's status to anything at any time (e.g. back to
- * `active` because more work is needed), and doing so must not make a real,
- * live invoice vanish from what the business is owed. The only two things that
- * ever remove money from this total are being marked (fully) paid or being
- * voided, both explicit actions with their own confirmation.
+ * "Owed" is invoice truth, not job-status truth — the same predicate
+ * `listAwaitingPayment` filters on, imported rather than rewritten, because
+ * this figure is the header above those exact rows and the two must never
+ * diverge. It is keyed on neither `status = 'invoiced'` nor `status <> 'paid'`:
+ * the owner can move a status at any time, and doing so must neither hide a
+ * real debt nor invent one that has already been settled.
  *
- * Each invoice contributes `grandTotal` minus whatever has already been paid
- * against it, not the full `grandTotal` — a partial payment shrinks what this
- * total reports, matching `listAwaitingPayment`'s per-row `remainingCents`
- * exactly (both must agree; see `awaiting-payments/page.tsx`).
+ * Each invoice contributes `grandTotal` minus whatever has been paid against
+ * it, so a partial payment shrinks the total and a full one removes the
+ * invoice from it entirely.
  */
 export async function getOutstandingInvoiceTotalCents(): Promise<number> {
   const rows = await db
     .select({
-      total: sql<string>`COALESCE(SUM(GREATEST(${invoices.grandTotal} * 100 - COALESCE((SELECT SUM(${payments.amount}) * 100 FROM ${payments} WHERE ${payments.invoiceId} = ${invoices.id}), 0), 0)), 0)::bigint`,
+      total: sql<string>`COALESCE(SUM(${REMAINING_CENTS}), 0)::bigint`,
     })
     .from(invoices)
     .innerJoin(jobs, eq(invoices.jobId, jobs.id))
-    .where(
-      and(ne(jobs.status, 'paid'), isNull(jobs.deletedAt), isNull(invoices.voidedAt)),
-    );
+    .where(and(INVOICE_HAS_BALANCE, isNull(jobs.deletedAt), isNull(invoices.voidedAt)));
 
   return Number(rows[0]?.total ?? 0);
 }
@@ -65,7 +62,13 @@ export async function listRecentInvoices(limit = 10) {
       jobId: invoices.jobId,
       jobNumber: jobs.jobNumber,
       customerName: jobs.customerName,
-      jobStatus: jobs.status,
+      /*
+        The invoice's own payment state, not `jobs.status`. This column is in a
+        table of invoices and reads as "has this been paid" — so it is answered
+        from the payments, which is the only source that cannot drift. The job's
+        workflow badge lives on the job.
+      */
+      remainingCents: REMAINING_CENTS,
     })
     .from(invoices)
     .innerJoin(jobs, eq(invoices.jobId, jobs.id))

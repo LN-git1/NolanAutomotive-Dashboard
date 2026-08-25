@@ -1,9 +1,10 @@
 import 'server-only';
 
-import { and, asc, gte, isNotNull, isNull, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, gte, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 
 import { db } from '../index';
 import { jobs, type Job } from '../schema';
+import { JOB_IS_PRE_INVOICE, JOB_IS_SETTLED } from './invoice-state';
 
 /**
  * Scheduling reads.
@@ -70,8 +71,12 @@ export async function listUnscheduledJobs(limit = 25) {
       and(
         isNull(jobs.deletedAt),
         isNull(jobs.dueDate),
-        ne(jobs.status, 'paid'),
-        ne(jobs.status, 'invoiced'),
+        // Work that has not been billed yet — the same test the Overview's
+        // Active tile uses, from the invoices rather than from `jobs.status`.
+        // That column is a workflow label the owner can move at any time, and
+        // keying scheduling off it is how J-0019 came to be wrong everywhere
+        // else; see `invoice-state.ts`.
+        JOB_IS_PRE_INVOICE,
       ),
     )
     .orderBy(asc(jobs.createdAt))
@@ -92,7 +97,8 @@ export async function countJobsPerDay(fromIso: string, toIso: string) {
         isNotNull(jobs.dueDate),
         gte(jobs.dueDate, fromIso),
         lte(jobs.dueDate, toIso),
-        ne(jobs.status, 'paid'),
+        // Settled work is history, not workload.
+        sql`NOT ${JOB_IS_SETTLED}`,
       ),
     )
     .groupBy(jobs.dueDate);

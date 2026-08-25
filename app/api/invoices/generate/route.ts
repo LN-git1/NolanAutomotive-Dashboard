@@ -67,6 +67,7 @@ function revalidateInvoicePaths(jobId: string) {
   revalidatePath('/jobs');
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath('/awaiting-payments');
+  revalidatePath('/paid-jobs');
   revalidatePath('/invoicer');
 }
 

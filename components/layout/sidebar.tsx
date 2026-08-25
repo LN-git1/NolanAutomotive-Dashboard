@@ -2,6 +2,7 @@
 
 import {
   BanknoteArrowDown,
+  BanknoteArrowUp,
   CalendarDays,
   FileText,
   LayoutDashboard,
@@ -35,8 +36,11 @@ interface NavItem {
 /**
  * Every page lives in the sidebar and the drawer. Only the five marked
  * `primary` also get a slot in the phone bottom bar — the things touched
- * between jobs. Awaiting payments and Owed to others are money reviews rather
- * than day-to-day actions, so they stay one tap away in the menu.
+ * between jobs. Awaiting payments, Paid jobs and Owed to others are money
+ * reviews rather than day-to-day actions, so they stay one tap away in the
+ * menu. Paid jobs in particular is a lookup ("what did we charge them in
+ * March?"), not somewhere the owner works from, and the bottom bar has no sixth
+ * slot that would not crush the other five.
  */
 const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Overview', shortLabel: 'Overview', icon: LayoutDashboard, exact: true, primary: true },
@@ -44,6 +48,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/schedule', label: 'Schedule', shortLabel: 'Schedule', icon: CalendarDays, primary: true },
   { href: '/invoicer', label: 'Invoicer', shortLabel: 'Invoicer', icon: FileText, primary: true },
   { href: '/awaiting-payments', label: 'Awaiting payments', shortLabel: 'Owed', icon: BanknoteArrowDown },
+  { href: '/paid-jobs', label: 'Paid jobs', shortLabel: 'Paid', icon: BanknoteArrowUp },
   { href: '/suppliers', label: 'Owed to others', shortLabel: 'Suppliers', icon: Truck },
   { href: '/settings', label: 'Settings', shortLabel: 'Settings', icon: Settings, primary: true },
 ];
@@ -195,7 +200,7 @@ export function SidebarToggle() {
 
 /**
  * The full menu, opened from the header below `lg`. This is where every page is
- * reachable, including the two the bottom bar has no room for. Closes on
+ * reachable, including the three the bottom bar has no room for. Closes on
  * selection, on the backdrop, and on Escape.
  *
  * No slide animation: the brief asks for a plain, non-flashy tool, and an

@@ -20,6 +20,31 @@ import {
 export const JOB_STATUSES = ['active', 'completed', 'invoiced', 'paid'] as const;
 export const JOB_PRIORITIES = ['low', 'medium', 'high'] as const;
 
+/**
+ * What the owner is shown, as distinct from what the column stores.
+ *
+ * `completed` earns a label because the bare word was actively misleading: it
+ * means "the work on the car is finished", but it was read as "this job is
+ * finished and paid for" — which is what `paid` means. Two green badges saying
+ * near-synonyms is how the Overview came to show "Completed jobs: 2" beside
+ * "Paid: 0" and have both look wrong. "Work done" cannot be confused with money.
+ *
+ * The enum values themselves are untouched: they are what the CSV export
+ * writes, and that column is machine-readable.
+ */
+export const JOB_STATUS_LABELS: Record<(typeof JOB_STATUSES)[number], string> = {
+  active: 'Active',
+  completed: 'Work done',
+  invoiced: 'Invoiced',
+  paid: 'Paid',
+};
+
+export const JOB_PRIORITY_LABELS: Record<(typeof JOB_PRIORITIES)[number], string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+};
+
 export const jobStatusSchema = z.enum(JOB_STATUSES);
 export const jobPrioritySchema = z.enum(JOB_PRIORITIES);
 
@@ -94,6 +119,28 @@ export const jobInputSchema = z.object({
 });
 
 export type JobInput = z.infer<typeof jobInputSchema>;
+
+/**
+ * Editing a job cannot touch its status. Status is owned by the two things that
+ * actually move a job along — issuing an invoice and recording a payment — plus
+ * the deliberate dropdown in `JobActions`, which routes through
+ * `changeJobStatus` and its `paid` guard.
+ *
+ * `updateJob` used to parse with `jobInputSchema` and spread the result, so the
+ * job form's own status `<select>` was written on every save. That select was
+ * uncontrolled (`defaultValue`), so it still held the value the page was
+ * rendered with: recording a payment flipped a job to `paid`, then the next
+ * save silently put it back. J-0019 was settled in full and reverted to
+ * `completed` exactly that way, which is what kept it in Awaiting Payments at
+ * EUR 0.00 owed and off the Paid count.
+ *
+ * Omitting the key is the fix, not merely a tidy-up: `jobInputSchema.status`
+ * defaults to `'active'`, so simply deleting the form field would have made
+ * every save stamp `active` over whatever the job had reached.
+ */
+export const jobUpdateSchema = jobInputSchema.omit({ status: true });
+
+export type JobUpdateInput = z.infer<typeof jobUpdateSchema>;
 
 export const jobStatusChangeSchema = z.object({
   jobId: uuidString,

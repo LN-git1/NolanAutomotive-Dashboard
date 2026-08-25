@@ -9,7 +9,7 @@ import { LABOUR_COLUMNS, LineEditor, PARTS_COLUMNS } from '@/components/jobs/lin
 import { VehicleFields } from '@/components/jobs/vehicle-fields';
 import { createJob, lookupJobByRegistration, updateJob } from '@/lib/actions/jobs';
 import { applyQuantity, formatEur, formatHours, sumLabourHours, toCents } from '@/lib/money';
-import { JOB_PRIORITIES, JOB_STATUSES } from '@/lib/validation/job';
+import { JOB_PRIORITIES } from '@/lib/validation/job';
 import type { Job } from '@/lib/db/schema';
 
 type Prefill = Awaited<ReturnType<typeof lookupJobByRegistration>>;
@@ -411,17 +411,16 @@ export function JobForm({
       </Section>
 
       <Section title="Scheduling and notes">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label="Status" htmlFor="status">
-            <Select id="status" name="status" defaultValue={job?.status ?? 'active'}>
-              {JOB_STATUSES.map((status) => (
-                <option key={status} value={status} className="capitalize">
-                  {status}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
+        {/*
+          No Status control here. It used to sit in this row, and because it was
+          uncontrolled (`defaultValue`) it kept whatever value the page was
+          rendered with — so recording a payment flipped the job to `paid` and
+          the next save on this form quietly put it back. Status now belongs to
+          the actions panel beside this form (`JobActions`), which is a live
+          control and routes through `changeJobStatus`; on a new job there is
+          nothing to choose, since a job that exists is active.
+        */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Priority" htmlFor="priority">
             <Select id="priority" name="priority" defaultValue={job?.priority ?? 'medium'}>
               {JOB_PRIORITIES.map((priority) => (

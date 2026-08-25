@@ -85,6 +85,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   revalidatePath('/jobs');
   revalidatePath(`/jobs/${invoice.jobId}`);
   revalidatePath('/awaiting-payments');
+  // Voiding takes a settled job back out of Paid jobs — the invoice behind it
+  // is gone, so it is uninvoiced work again.
+  revalidatePath('/paid-jobs');
   revalidatePath('/invoicer');
   revalidatePath('/earnings');
 

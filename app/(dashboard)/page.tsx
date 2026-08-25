@@ -11,7 +11,7 @@ import {
   listRecentInvoices,
 } from '@/lib/db/queries/overview';
 import { getEarningsSummary } from '@/lib/db/queries/earnings';
-import { countJobsByStatus, listJobsByStatus } from '@/lib/db/queries/jobs';
+import { countJobPipeline, listJobsInPipeline } from '@/lib/db/queries/jobs';
 import { formatDate, numericToEur } from '@/lib/format';
 import { formatEur } from '@/lib/money';
 import { SkeletonList, SkeletonStatGrid, SkeletonTable } from '@/components/ui/skeleton';
@@ -94,17 +94,27 @@ function JobList({ jobs, emptyText }: { jobs: Job[]; emptyText: string }) {
  * after the shell is up.
  */
 
+/**
+ * Three tiles, one per stage a job can be at: in the workshop, billed and owed,
+ * settled. They partition every live job exactly once, so they sum to the total
+ * and none of them can quietly go missing.
+ *
+ * There were four, split by `jobs.status`, and they contradicted each other:
+ * "Completed jobs: 2 — ready to invoice" sat next to "Paid: 0" while both of
+ * those jobs had in fact been invoiced and one had been paid in full. The
+ * counts were honest about the status column and the status column was wrong.
+ * Each tile is now counted the same way as the page it links to.
+ */
 async function JobCounts() {
-  const counts = await countJobsByStatus();
+  const counts = await countJobPipeline();
 
   return (
     <>
-      <Kpi label="Active jobs" value={String(counts.active)} href="/jobs?status=active" />
       <Kpi
-        label="Completed jobs"
-        value={String(counts.completed)}
-        hint="Ready to invoice"
-        href="/jobs?status=completed"
+        label="Active jobs"
+        value={String(counts.active)}
+        hint="Not billed yet"
+        href="/jobs"
       />
       <Kpi
         label="Invoiced"
@@ -112,7 +122,12 @@ async function JobCounts() {
         hint="Awaiting payment"
         href="/awaiting-payments"
       />
-      <Kpi label="Paid" value={String(counts.paid)} href="/jobs?status=paid" />
+      <Kpi
+        label="Paid"
+        value={String(counts.paid)}
+        hint="Settled in full"
+        href="/paid-jobs"
+      />
     </>
   );
 }
@@ -141,14 +156,14 @@ async function MoneyTotals() {
   );
 }
 
-async function JobsByStatus({
-  status,
+async function JobsInPipeline({
+  bucket,
   emptyText,
 }: {
-  status: 'active' | 'completed';
+  bucket: 'active' | 'invoiced';
   emptyText: string;
 }) {
-  const jobs = await listJobsByStatus(status, 10);
+  const jobs = await listJobsInPipeline(bucket, 10);
   return <JobList jobs={jobs} emptyText={emptyText} />;
 }
 
@@ -200,7 +215,7 @@ async function RecentInvoices() {
               {numericToEur(invoice.grandTotal)}
             </Td>
             <Td label="Status">
-              <Badge value={invoice.jobStatus} />
+              <Badge value={Number(invoice.remainingCents) > 0 ? 'invoiced' : 'paid'} />
             </Td>
           </tr>
         ))}
@@ -230,8 +245,8 @@ export default function OverviewPage() {
           </Link>
         </div>
 
-        <section aria-label="Job counts" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Suspense fallback={<SkeletonStatGrid count={4} className="contents" />}>
+        <section aria-label="Job counts" className="grid grid-cols-3 gap-3">
+          <Suspense fallback={<SkeletonStatGrid count={3} className="contents" />}>
             <JobCounts />
           </Suspense>
         </section>
@@ -244,16 +259,19 @@ export default function OverviewPage() {
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <Card>
-            <CardHeader title="Active jobs" description="Latest 10" />
+            <CardHeader title="Active jobs" description="Latest 10 — not billed yet" />
             <Suspense fallback={<SkeletonTable columns={4} rows={4} />}>
-              <JobsByStatus status="active" emptyText="No active jobs." />
+              <JobsInPipeline bucket="active" emptyText="No active jobs." />
             </Suspense>
           </Card>
 
+          {/* Was "Completed jobs — ready to invoice", which listed jobs by
+              status and so showed work that had already been invoiced and paid.
+              Mirrors the Invoiced tile above it instead. */}
           <Card>
-            <CardHeader title="Completed jobs" description="Latest 10 — ready to invoice" />
+            <CardHeader title="Awaiting payment" description="Latest 10 — invoiced, still owed" />
             <Suspense fallback={<SkeletonTable columns={4} rows={4} />}>
-              <JobsByStatus status="completed" emptyText="No completed jobs waiting." />
+              <JobsInPipeline bucket="invoiced" emptyText="Nothing outstanding." />
             </Suspense>
           </Card>
         </div>

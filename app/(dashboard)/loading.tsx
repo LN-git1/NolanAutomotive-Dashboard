@@ -25,7 +25,7 @@ export default function OverviewLoading() {
         <div className="skeleton h-3.5 w-56 max-w-[70vw] rounded-md" aria-hidden />
       </div>
 
-      <SkeletonStatGrid count={4} className="grid grid-cols-2 gap-3 lg:grid-cols-4" />
+      <SkeletonStatGrid count={3} className="grid grid-cols-3 gap-3" />
       <SkeletonStatGrid count={2} className="grid grid-cols-1 gap-3 sm:grid-cols-2" />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ComponentProps, ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
+import { JOB_PRIORITY_LABELS, JOB_STATUS_LABELS } from '@/lib/validation/job';
 
 /**
  * The complete UI primitive set for this app.
@@ -161,10 +162,23 @@ export function Select({ className, ...props }: ComponentProps<'select'>) {
 
 /* ----------------------------------------------------------------- badges */
 
+/**
+ * Display text for the enum values a badge can carry. See `JOB_STATUS_LABELS`
+ * for why `completed` needs one; the rest are here so a single map covers every
+ * value and the badge never has to guess at casing.
+ */
+const STATUS_LABELS: Record<string, string> = {
+  ...JOB_STATUS_LABELS,
+  ...JOB_PRIORITY_LABELS,
+};
+
 const STATUS_STYLES: Record<string, string> = {
   new: 'bg-canvas text-muted border-line',
   active: 'bg-info-soft text-brand-dark border-brand/30',
-  completed: 'bg-ok-soft text-ok border-ok/30',
+  // Deliberately NOT the green `paid` wears. Sharing it was half of why
+  // `completed` read as "finished and paid for" rather than "work done, not
+  // billed yet" — the label said one thing and the colour said another.
+  completed: 'bg-canvas text-ink border-line',
   invoiced: 'bg-warn-soft text-warn border-warn/30',
   paid: 'bg-ok-soft text-ok border-ok/40',
   low: 'bg-canvas text-muted border-line',
@@ -176,12 +190,12 @@ export function Badge({ value, className }: { value: string; className?: string 
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize',
+        'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium first-letter:uppercase',
         STATUS_STYLES[value] ?? 'bg-canvas text-muted border-line',
         className,
       )}
     >
-      {value}
+      {STATUS_LABELS[value] ?? value}
     </span>
   );
 }
