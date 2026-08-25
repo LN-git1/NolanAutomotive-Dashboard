@@ -6,7 +6,7 @@ import { useState, useTransition } from 'react';
 import { MarkPaidModal } from '@/components/payments/mark-paid-modal';
 import { Alert, Button, Select } from '@/components/ui';
 import { changeJobStatus, softDeleteJob } from '@/lib/actions/jobs';
-import { JOB_STATUSES } from '@/lib/validation/job';
+import { JOB_STATUSES, JOB_STATUS_LABELS } from '@/lib/validation/job';
 import type { JobStatus } from '@/lib/db/schema';
 
 /**
@@ -92,8 +92,8 @@ export function JobActions({
           onChange={(event) => handleStatusChange(event.target.value)}
         >
           {JOB_STATUSES.map((value) => (
-            <option key={value} value={value} className="capitalize">
-              {value}
+            <option key={value} value={value}>
+              {JOB_STATUS_LABELS[value]}
             </option>
           ))}
         </Select>

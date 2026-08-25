@@ -121,10 +121,10 @@ export const jobInputSchema = z.object({
 export type JobInput = z.infer<typeof jobInputSchema>;
 
 /**
- * Editing a job cannot touch its status. Status is owned by the two things that
- * actually move a job along — issuing an invoice and recording a payment — plus
- * the deliberate dropdown in `JobActions`, which routes through
- * `changeJobStatus` and its `paid` guard.
+ * Neither creating nor editing a job's CONTENT can touch its status. Status is
+ * owned by the things that actually move a job along — issuing an invoice,
+ * recording a payment — plus the deliberate dropdown in `JobActions`, which
+ * routes through `changeJobStatus` and its `paid` guard.
  *
  * `updateJob` used to parse with `jobInputSchema` and spread the result, so the
  * job form's own status `<select>` was written on every save. That select was
@@ -137,10 +137,17 @@ export type JobInput = z.infer<typeof jobInputSchema>;
  * Omitting the key is the fix, not merely a tidy-up: `jobInputSchema.status`
  * defaults to `'active'`, so simply deleting the form field would have made
  * every save stamp `active` over whatever the job had reached.
+ *
+ * `createJob` uses this too, even though a brand-new job has no history to
+ * protect: the job form's create path never renders a status control either,
+ * so parsing with the full schema left a `status` key in a raw POST to the
+ * Server Action reachable only by bypassing the browser UI — accepted and
+ * inserted verbatim. Omitting it here means the column's own `default('active')`
+ * decides, which is what a new job should be regardless.
  */
-export const jobUpdateSchema = jobInputSchema.omit({ status: true });
+export const jobContentSchema = jobInputSchema.omit({ status: true });
 
-export type JobUpdateInput = z.infer<typeof jobUpdateSchema>;
+export type JobContentInput = z.infer<typeof jobContentSchema>;
 
 export const jobStatusChangeSchema = z.object({
   jobId: uuidString,

@@ -57,9 +57,9 @@ describe('changeJobStatus', () => {
  * an absent `status` would have parsed to `'active'` and stamped that over
  * every job on every save.
  */
-describe('jobUpdateSchema', () => {
-  it('cannot carry a status, so editing a job never rewrites one', async () => {
-    const { jobUpdateSchema, jobInputSchema } = await import('@/lib/validation/job');
+describe('jobContentSchema', () => {
+  it('cannot carry a status, so neither creating nor editing a job can set one', async () => {
+    const { jobContentSchema, jobInputSchema } = await import('@/lib/validation/job');
 
     const fields = {
       customerName: 'Test Customer',
@@ -67,12 +67,13 @@ describe('jobUpdateSchema', () => {
       status: 'active',
     };
 
-    const updated = jobUpdateSchema.parse(fields);
-    expect(updated).not.toHaveProperty('status');
+    const content = jobContentSchema.parse(fields);
+    expect(content).not.toHaveProperty('status');
 
-    // The create path still defaults one, which is what makes omission the fix
-    // rather than a tidy-up: reusing this schema for updates would write
-    // 'active' over a paid job.
+    // jobInputSchema is the schema this one is derived FROM, not a second path
+    // any action still parses with. It still defaults `status` itself, which
+    // is what makes omission the fix rather than a tidy-up: reusing it for
+    // create or update would write 'active' straight over a paid job.
     expect(jobInputSchema.parse(fields)).toHaveProperty('status', 'active');
   });
 });

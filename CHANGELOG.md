@@ -1,5 +1,125 @@
 # Changelog
 
+## 25/08/2026 @ 18:40:48 IST — "claude-opus-5"
+
+**Project completion: 100.00%**
+
+Basis: an adversarial multi-lens review of the prior entry's derivation change (5 independent
+review passes over status-coupling, SQL correctness, UI correctness, write paths and test gaps,
+each finding cross-examined by a separate skeptical pass told to default to refuting it) surfaced
+one HIGH-severity data-correctness defect and four smaller real ones; all five are fixed and
+verified — the HIGH one caught by a failing regression test written from the claim, confirmed
+failing before the fix, confirmed passing after. Typecheck clean, eslint clean on every touched
+file, 192 tests passing (was 189), including 9 DB-backed against real Postgres (was 7).
+
+### Fixed — a EUR 0.00 invoice was classified as settled income
+
+The review's most serious finding, surfaced independently by two of the five lenses: `INVOICE_IS_
+SETTLED` in `lib/db/queries/invoice-state.ts` (see the 02:00:58 entry above) was defined as `NOT
+INVOICE_HAS_BALANCE`, which is true for an invoice totalling EUR 0.00 with zero payments against
+it — nobody owes anything on a blank invoice, so "not owed" was read as "paid in full". A job
+invoiced before any work, rate or parts were entered would be counted as settled, filed under Paid
+jobs, counted on the Overview's Paid tile, and vanish from Jobs — inventing income the business
+never actually earned.
+
+Reachable, not theoretical: `buildInvoice` (`lib/invoices/build.ts`) only guards that the job
+exists and that its line counts fit the template. The existing empty-invoice guard in
+`/api/invoices/generate` covered ONLY the regenerate branch (replacing a real invoice with a blank
+one) — a first-ever invoice on an empty job had no equivalent check and would issue at EUR 0.00
+without complaint.
+
+**Fixed two ways, deliberately overlapping:**
+1. `INVOICE_IS_SETTLED` now requires `grandTotal > 0 AND NOT INVOICE_HAS_BALANCE` — a zero-total
+   invoice can never read as settled, regardless of how it got created.
+2. `/api/invoices/generate` now refuses to ISSUE a EUR 0.00 invoice (the guard the regenerate
+   branch already had, extended to the new-invoice branch it was missing from) — the owner fills
+   in the job first, same as regenerate has always demanded.
+
+While fixing this, `JOB_IS_PRE_INVOICE` (used by the Overview's Active tile, `/jobs`'s open scope,
+and Schedule's liveness filters) was rewritten from "has no live invoice" to "neither settled nor
+awaiting payment" — a genuine complement of the other two buckets rather than a third, separately-
+derived condition that could disagree with them. Written the old way, a job whose invoice was
+neither settled nor owing (the exact zero-total shape above) would have appeared in NO Overview
+tile and NEITHER job list — lost outright, which is worse than being mislabelled.
+
+**Regression test** (`tests/awaiting-payment.test.ts`): inserts a job with a EUR 0.00 invoice and
+no payments, asserts it is never counted as settled and always appears in the open job list, and
+asserts the three pipeline buckets still sum to the live job count. Written from the review
+finding and confirmed failing against the pre-fix code before the fix was applied.
+
+### Fixed — `createJob` accepted a client-supplied `status`, bypassing every guard
+
+`createJob` parsed the create form with the full `jobInputSchema`, same shape as the `updateJob`
+bug the prior entry closed — except the create *form* never renders a status control at all, so
+this was reachable only by calling the Server Action directly with a crafted `status` key, not
+through the browser UI. Renamed `jobUpdateSchema` to `jobContentSchema` (`jobInputSchema.omit({
+status: true })`) and moved BOTH `createJob` and `updateJob` onto it, so status can never enter a
+job through either content path — the jobs table's own `default('active')` decides a new job's
+status, which is what it should be regardless.
+
+### Fixed — the status dropdown showed the raw word, contradicting the badge beside it
+
+`JobActions`' status `<select>` rendered `{value}` straight from `JOB_STATUSES` instead of routing
+through `JOB_STATUS_LABELS`, so a job's own actions panel showed the literal `completed` in its
+dropdown while the badge two lines above it (fixed in the prior entry) already read "Work done" —
+the exact inconsistency that entry existed to remove, reintroduced in the one control the owner
+actually uses to change status.
+
+### Fixed — recording a payment on an already-settled job was an unrecoverable-looking dead end
+
+`changeJobStatus` guards SETTING a job to `paid`, but not moving it AWAY from `paid` afterward — an
+owner can pick `active`/`completed`/`invoiced` on a job that has already been paid in full (perhaps
+by mistake, perhaps meaning "more work is needed"). Reopening the status dropdown and picking Paid
+again then opened `MarkPaidModal` against that same, already-settled invoice: `PaymentForm` offered
+a "Paid in full — EUR 0.00" button, and clicking it called `applyPayment` with an amount of zero,
+which is refused outright ("Enter an amount greater than zero.") — a confusing validation error for
+a job that in fact needed no action at all. `MarkPaidModal` now detects `remainingCents <= 0` and
+shows "already paid in full, nothing to record" instead of a broken payment form.
+
+### Test coverage added
+
+Two gaps the review named directly, both closed with DB-backed assertions in
+`tests/awaiting-payment.test.ts`:
+- `listJobsInPipeline`'s two Overview list cards now have their own test, asserting they agree in
+  both length and disjointness with the `countJobPipeline` counts driving the tiles above them —
+  the tiles and their lists could previously drift apart exactly as they did before the whole fix.
+- `listSettledJobs`'s ordering (`LAST_PAYMENT_AT DESC NULLS LAST`) is now asserted against two
+  jobs settled a year apart.
+
+### Findings reviewed and deliberately not acted on
+
+The same review raised several claims that did not survive independent adversarial verification —
+recorded here rather than silently dropped, per the review's own no-silent-truncation rule:
+- **`countJobsPerDay`'s status migration**: real code, but the function has no caller anywhere in
+  the app (confirmed by repo-wide grep) — it was already dead before the prior entry touched it.
+- **`listScheduledJobs` still counts settled work as calendar load**: true, but pre-dates this
+  change entirely (`git log` shows the function's date-range filter is unchanged since its
+  creation) — a legitimate future improvement, not a regression from anything shipped here.
+- **`/paid-jobs`'s uncapped-count-beside-capped-list shape**: the same shape already exists on
+  `/jobs` itself (its header count is real-time while its search-term hint is a separate query),
+  and the settled-invoice cap (500) is not reachable at this business's current scale (production
+  holds one settled job).
+- **No test exercises `updateJob`'s actual database write, only `jobContentSchema`'s shape**:
+  accurate, and worth doing, but out of scope for this pass — the schema-shape assertion is the
+  one that fails on the exact code change (reintroducing `status` into the parse or the `.set()`)
+  that caused the original production bug; a DB-backed behavioural test is a reasonable follow-up,
+  not a defect in what shipped today.
+
+### Files touched
+
+- `lib/db/queries/invoice-state.ts` — `INVOICE_IS_SETTLED` requires a nonzero total;
+  `JOB_IS_PRE_INVOICE` redefined as the complement of the other two buckets.
+- `app/api/invoices/generate/route.ts` — refuses to ISSUE a EUR 0.00 invoice.
+- `lib/validation/job.ts` — `jobUpdateSchema` renamed `jobContentSchema`; doc comment covers both
+  `createJob` and `updateJob`.
+- `lib/actions/jobs.ts` — `createJob` moved onto `jobContentSchema`.
+- `components/jobs/job-actions.tsx` — status `<select>` options render `JOB_STATUS_LABELS`.
+- `components/payments/mark-paid-modal.tsx` — an already-settled invoice shows a plain "nothing to
+  record" message instead of a EUR 0.00 payment button that could only fail.
+- `tests/awaiting-payment.test.ts` — zero-total regression test, pipeline-list agreement test,
+  settled-jobs ordering test.
+- `tests/job-status-guard.test.ts` — updated for the `jobContentSchema` rename.
+
 ## 25/08/2026 @ 02:00:58 IST — "claude-opus-5"
 
 **Project completion: 100.00%**

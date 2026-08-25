@@ -170,6 +170,30 @@ export async function POST(request: Request) {
     // on the counter row.
     const preflight = await buildInvoice(jobId, { invoiceNumber: 'PENDING', issueDate });
 
+    /**
+     * Refuse to issue a EUR 0.00 invoice.
+     *
+     * `buildInvoice` only checks that the job exists and that its line counts
+     * fit the template — nothing stops a job with no labour lines, no hourly
+     * rate and no parts from pricing at zero. Regenerate already refuses to
+     * replace a real invoice with a blank one; a first issue had no equivalent
+     * guard, so a job invoiced before any work was entered would allocate a
+     * real number for a document worth nothing.
+     *
+     * That matters beyond a wasted number: `invoice-state.ts`'s `INVOICE_IS_SETTLED`
+     * now also refuses a zero-total invoice on principle (nobody paid a cent for
+     * it), so an issued one would sit forever in neither Awaiting Payments nor
+     * Paid jobs — visible only back on Jobs, invoiced, owing nothing, which
+     * reads as broken rather than as the mistake it actually is. Refusing it
+     * here means the owner fills in the job first, same as regenerate demands.
+     */
+    if (preflight.totals.grandTotalCents === 0) {
+      throw new InvoiceBuildError(
+        `Job ${preflight.job.jobNumber} has no work lines or parts on it, so there is nothing to ` +
+          `invoice yet. Add the work to the job first.`,
+      );
+    }
+
     const result = await db.transaction(async (tx) => {
       // Lock the job first. Without this, two generate calls for the same job (a
       // double tap, a retry, a second tab) could both pass the check above and

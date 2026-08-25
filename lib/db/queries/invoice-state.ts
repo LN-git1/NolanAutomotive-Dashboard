@@ -49,8 +49,24 @@ export const LAST_PAYMENT_AT: SQL = sql`(SELECT MAX(${payments.paidAt}) FROM ${p
  */
 export const INVOICE_HAS_BALANCE: SQL = sql`${invoices.grandTotal} * 100 > ${INVOICE_PAID_CENTS}`;
 
-/** The invoice row in scope is settled: nothing left to pay. */
-export const INVOICE_IS_SETTLED: SQL = sql`NOT (${INVOICE_HAS_BALANCE})`;
+/**
+ * The invoice row in scope was settled BY MONEY: it asked for something, and
+ * that something has been paid.
+ *
+ * `grandTotal > 0` is load-bearing, not defensive noise. Without it this was
+ * simply `NOT INVOICE_HAS_BALANCE`, which is true for an invoice totalling
+ * EUR 0.00 against which nobody has paid a cent — so a blank invoice filed its
+ * job under Paid jobs, counted on the Overview's Paid tile, and vanished from
+ * Jobs, all on money that never moved. That is reachable: `buildInvoice` guards
+ * only that the job exists and that the line counts fit the template, and the
+ * empty-invoice guard in `/api/invoices/generate` covers the REGENERATE branch
+ * only, so a first invoice on a job with no work lines, no rate and no parts is
+ * issued at EUR 0.00 without complaint.
+ *
+ * The route now refuses to issue one, so this is the second of two locks on the
+ * same door — and the one that also covers any zero-total row already stored.
+ */
+export const INVOICE_IS_SETTLED: SQL = sql`${invoices.grandTotal} > 0 AND NOT (${INVOICE_HAS_BALANCE})`;
 
 /**
  * Correlates a live invoice back to the `jobs` row of the enclosing query.
@@ -70,11 +86,26 @@ function jobHasLiveInvoice(condition?: SQL): SQL {
   )`;
 }
 
-/** Work that has not been billed yet, whatever its status label says. */
-export const JOB_IS_PRE_INVOICE: SQL = sql`NOT ${jobHasLiveInvoice()}`;
-
 /** Billed, with money still outstanding. Drives Awaiting Payments. */
 export const JOB_IS_AWAITING_PAYMENT: SQL = jobHasLiveInvoice(INVOICE_HAS_BALANCE);
 
 /** Billed and settled in full. Drives the Paid jobs page. */
 export const JOB_IS_SETTLED: SQL = jobHasLiveInvoice(INVOICE_IS_SETTLED);
+
+/**
+ * Work in the workshop — and the catch-all.
+ *
+ * Deliberately defined as "neither settled nor owed" rather than the more
+ * obvious "has no live invoice". Written the obvious way, the three buckets
+ * stop partitioning the moment any invoice is neither (a zero-total one was
+ * exactly that): such a job would appear in NO Overview tile and in NEITHER
+ * job list — lost rather than merely mislabelled, which is worse than the bug
+ * this whole change exists to fix.
+ *
+ * As a complement it cannot leak. Anything the other two buckets do not claim
+ * lands here, where the owner can see it and act on it. That is the safe
+ * direction to fail in: a job wrongly shown as active is a nuisance, a job
+ * wrongly counted as paid is invented income, and a job in no list at all is
+ * gone.
+ */
+export const JOB_IS_PRE_INVOICE: SQL = sql`NOT ${JOB_IS_SETTLED} AND NOT ${JOB_IS_AWAITING_PAYMENT}`;

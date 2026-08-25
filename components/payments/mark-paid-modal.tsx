@@ -63,7 +63,30 @@ export function MarkPaidModal({
       >
         <h2 className="text-sm font-semibold text-ink">Record the payment</h2>
 
-        {invoice ? (
+        {invoice && invoice.remainingCents <= 0 ? (
+          /*
+            The invoice this job's status dropdown thinks it needs a payment
+            for has already been settled — `status` can drift away from `paid`
+            after the fact (`changeJobStatus` guards SETTING `paid`, not moving
+            off it once a later edit picks something else), so the owner can
+            land here on a job with nothing left owing. `PaymentForm`'s "Paid
+            in full" button would submit EUR 0.00, which `applyPayment` refuses
+            outright ("Enter an amount greater than zero.") — a confusing dead
+            end for a job that in fact needs no action at all.
+          */
+          <>
+            <p className="mt-1 text-xs text-muted">
+              {jobNumber}&rsquo;s invoice is already paid in full — there is nothing left to
+              record. It will show as Paid on Jobs and Awaiting Payments regardless of what this
+              dropdown says.
+            </p>
+            <div className="mt-3">
+              <Button size="sm" variant="ghost" onClick={onClose} className="w-full">
+                Close
+              </Button>
+            </div>
+          </>
+        ) : invoice ? (
           <>
             <p className="mt-1 text-xs text-muted">
               {jobNumber} is marked paid by recording the money, so it shows up in Earnings. A

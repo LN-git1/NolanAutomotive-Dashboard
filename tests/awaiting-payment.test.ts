@@ -31,6 +31,7 @@ describe.skipIf(!TEST_DATABASE_URL)('awaiting payment / settled, keyed on paymen
   let listSettledJobs: (typeof import('@/lib/db/queries/jobs'))['listSettledJobs'];
   let listJobs: (typeof import('@/lib/db/queries/jobs'))['listJobs'];
   let countJobPipeline: (typeof import('@/lib/db/queries/jobs'))['countJobPipeline'];
+  let listJobsInPipeline: (typeof import('@/lib/db/queries/jobs'))['listJobsInPipeline'];
 
   const jobId = randomUUID();
   const invoiceId = randomUUID();
@@ -41,9 +42,8 @@ describe.skipIf(!TEST_DATABASE_URL)('awaiting payment / settled, keyed on paymen
     ({ db } = await import('@/lib/db'));
     ({ jobs, invoices, payments } = await import('@/lib/db/schema'));
     ({ getOutstandingInvoiceTotalCents } = await import('@/lib/db/queries/overview'));
-    ({ listAwaitingPayment, listSettledJobs, listJobs, countJobPipeline } = await import(
-      '@/lib/db/queries/jobs'
-    ));
+    ({ listAwaitingPayment, listSettledJobs, listJobs, countJobPipeline, listJobsInPipeline } =
+      await import('@/lib/db/queries/jobs'));
 
     await db.insert(jobs).values({
       id: jobId,
@@ -157,6 +157,156 @@ describe.skipIf(!TEST_DATABASE_URL)('awaiting payment / settled, keyed on paymen
     expect(after.active).toBe(before.active);
 
     await db.insert(payments).values({ invoiceId, amount: '60.00' });
+  });
+
+  /**
+   * A EUR 0.00 invoice must never read as income.
+   *
+   * `INVOICE_HAS_BALANCE` is `grandTotal * 100 > paid`, which is false for a
+   * zero-total invoice with no payments — so "settled in full" was true for a
+   * job nobody had paid a cent for. It files under Paid jobs, counts on the
+   * Overview's Paid tile and disappears from Jobs, all on money that never
+   * moved. And it is reachable: `buildInvoice` guards only that the job exists
+   * and that the line counts fit the template, and the empty-invoice guard in
+   * `/api/invoices/generate` covers ONLY the regenerate branch — a brand new
+   * invoice on a job with no work lines, no rate and no parts is issued at
+   * EUR 0.00 without complaint.
+   *
+   * A zero-total invoice is always a mistake (the job was not filled in yet),
+   * so it belongs where the owner can see and void it, not filed away as
+   * settled business.
+   */
+  /**
+   * The Overview's tiles and its two list cards must agree, which is the same
+   * class of thing the whole fix is about: `countJobPipeline` was covered, but
+   * the lists rendered directly beneath those tiles (`listJobsInPipeline`) were
+   * not, so they could silently drift apart exactly as the tiles and the pages
+   * they linked to did before this change.
+   */
+  it('the Active/Invoiced job lists agree with the pipeline counts driving their tiles', async () => {
+    const counts = await countJobPipeline();
+    const [active, invoiced, paid] = await Promise.all([
+      listJobsInPipeline('active', 500),
+      listJobsInPipeline('invoiced', 500),
+      listJobsInPipeline('paid', 500),
+    ]);
+
+    expect(active.length).toBe(counts.active);
+    expect(invoiced.length).toBe(counts.invoiced);
+    expect(paid.length).toBe(counts.paid);
+
+    // Disjoint by construction — no job can double-count between the two
+    // lists the Overview's tiles link to.
+    const activeIds = new Set(active.map((j) => j.id));
+    expect(invoiced.some((j) => activeIds.has(j.id))).toBe(false);
+
+    // The fixture job is fully paid at this point in the suite (the prior
+    // test re-recorded its final EUR 60 payment), so it must appear in
+    // exactly the bucket that agrees with that, and nowhere else.
+    expect(paid.some((j) => j.id === jobId)).toBe(true);
+    expect(active.some((j) => j.id === jobId)).toBe(false);
+    expect(invoiced.some((j) => j.id === jobId)).toBe(false);
+  });
+
+  it("listSettledJobs orders by the invoice's last payment date, most recent first", async () => {
+    const olderJobId = randomUUID();
+    const olderInvoiceId = randomUUID();
+
+    await db.insert(jobs).values({
+      id: olderJobId,
+      jobNumber: `TEST-OLD-${olderJobId.slice(0, 8)}`,
+      status: 'invoiced',
+      customerName: 'Older Settled Test',
+      vehicleRegistration: 'TEST-OLD',
+    });
+    await db.insert(invoices).values({
+      id: olderInvoiceId,
+      invoiceNumber: `TEST-OLDINV-${olderInvoiceId.slice(0, 8)}`,
+      jobId: olderJobId,
+      issueDate: '2025-01-01',
+      labourSubtotal: '50.00',
+      partsSubtotal: '0.00',
+      vatRate: '0.00',
+      vatAmount: '0.00',
+      totalLabour: '50.00',
+      totalParts: '0.00',
+      grandTotal: '50.00',
+      parts: [],
+      pdfStoragePath: 'test/older.pdf',
+    });
+
+    try {
+      // Settled a year before the fixture invoice (`invoiceId`, paid moments
+      // ago in an earlier test in this file) — it must sort AFTER, not before.
+      await db.insert(payments).values({
+        invoiceId: olderInvoiceId,
+        amount: '50.00',
+        paidAt: new Date('2025-01-02T00:00:00Z'),
+      });
+
+      const rows = await listSettledJobs();
+      const olderIdx = rows.findIndex((r) => r.job.id === olderJobId);
+      const recentIdx = rows.findIndex((r) => r.job.id === jobId);
+
+      expect(olderIdx).toBeGreaterThanOrEqual(0);
+      expect(recentIdx).toBeGreaterThanOrEqual(0);
+      expect(recentIdx).toBeLessThan(olderIdx);
+    } finally {
+      await db.delete(payments).where(sql`${payments.invoiceId} = ${olderInvoiceId}`);
+      await db.delete(invoices).where(sql`${invoices.id} = ${olderInvoiceId}`);
+      await db.delete(jobs).where(sql`${jobs.id} = ${olderJobId}`);
+    }
+  });
+
+  it('never treats a zero-total invoice as settled income', async () => {
+    const zeroJobId = randomUUID();
+    const zeroInvoiceId = randomUUID();
+
+    await db.insert(jobs).values({
+      id: zeroJobId,
+      jobNumber: `TEST-Z-${zeroJobId.slice(0, 8)}`,
+      status: 'invoiced',
+      customerName: 'Zero Total Test',
+      vehicleRegistration: 'TEST-ZERO',
+    });
+    await db.insert(invoices).values({
+      id: zeroInvoiceId,
+      invoiceNumber: `TEST-ZINV-${zeroInvoiceId.slice(0, 8)}`,
+      jobId: zeroJobId,
+      issueDate: '2026-01-01',
+      labourSubtotal: '0.00',
+      partsSubtotal: '0.00',
+      vatRate: '0.00',
+      vatAmount: '0.00',
+      totalLabour: '0.00',
+      totalParts: '0.00',
+      grandTotal: '0.00',
+      parts: [],
+      pdfStoragePath: 'test/zero.pdf',
+    });
+
+    try {
+      const isZeroJob = (row: { job: { id: string } }) => row.job.id === zeroJobId;
+
+      // The assertion that matters: nothing may call this settled business.
+      expect((await listSettledJobs()).some(isZeroJob)).toBe(false);
+      expect((await listJobs({ scope: 'settled' })).some((job) => job.id === zeroJobId)).toBe(false);
+
+      // And it must stay somewhere the owner can actually see it.
+      expect((await listJobs({ scope: 'open' })).some((job) => job.id === zeroJobId)).toBe(true);
+
+      // The three buckets still partition every live job exactly once — a job
+      // that is in no bucket is just as lost as one in the wrong bucket.
+      const counts = await countJobPipeline();
+      const [{ live }] = await db
+        .select({ live: sql<number>`count(*)::int` })
+        .from(jobs)
+        .where(sql`${jobs.deletedAt} IS NULL`);
+      expect(counts.active + counts.invoiced + counts.paid).toBe(Number(live));
+    } finally {
+      await db.delete(invoices).where(sql`${invoices.id} = ${zeroInvoiceId}`);
+      await db.delete(jobs).where(sql`${jobs.id} = ${zeroJobId}`);
+    }
   });
 
   it('stops counting once the invoice is voided, regardless of job status', async () => {

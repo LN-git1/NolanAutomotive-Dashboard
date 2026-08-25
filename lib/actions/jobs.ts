@@ -10,7 +10,7 @@ import { findJobByRegistration } from '@/lib/db/queries/jobs';
 import { jobAttachments, jobs } from '@/lib/db/schema';
 import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
 import { removeObject } from '@/lib/storage/signedUrl';
-import { jobInputSchema, jobStatusChangeSchema, jobUpdateSchema } from '@/lib/validation/job';
+import { jobContentSchema, jobStatusChangeSchema } from '@/lib/validation/job';
 
 export interface ActionResult {
   ok: boolean;
@@ -26,7 +26,11 @@ export interface ActionResult {
 export async function createJob(formData: FormData): Promise<ActionResult> {
   await requireSession();
 
-  const parsed = jobInputSchema.safeParse(Object.fromEntries(formData));
+  // `jobContentSchema`, not `jobInputSchema`: the create form never renders a
+  // status control, so any `status` key in the FormData reaches here only by
+  // bypassing the browser UI. Omitting it means the jobs table's own
+  // `default('active')` decides, which is what a new job should be regardless.
+  const parsed = jobContentSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid job details' };
   }
@@ -57,7 +61,7 @@ export async function createJob(formData: FormData): Promise<ActionResult> {
 /**
  * Save an edit to a job — everything except its status.
  *
- * `jobUpdateSchema` omits `status` on purpose; see the comment on it. Parsing
+ * `jobContentSchema` omits `status` on purpose; see the comment on it. Parsing
  * with the full `jobInputSchema` here is what let a routine save revert a
  * settled job, so the field must stay out of the parse rather than be stripped
  * afterwards.
@@ -65,7 +69,7 @@ export async function createJob(formData: FormData): Promise<ActionResult> {
 export async function updateJob(jobId: string, formData: FormData): Promise<ActionResult> {
   await requireSession();
 
-  const parsed = jobUpdateSchema.safeParse(Object.fromEntries(formData));
+  const parsed = jobContentSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid job details' };
   }
