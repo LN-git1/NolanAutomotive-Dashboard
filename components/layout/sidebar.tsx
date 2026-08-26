@@ -34,25 +34,34 @@ interface NavItem {
 }
 
 /**
- * Every page lives in the sidebar and the drawer. Only the five marked
- * `primary` also get a slot in the phone bottom bar — the things touched
- * between jobs. Invoiced jobs, Paid jobs and Owed to others are money reviews
- * rather than day-to-day actions, so they stay one tap away in the menu. Paid
- * jobs in particular is a lookup ("what did we charge them in March?"), not
- * somewhere the owner works from, and the bottom bar has no sixth slot that
- * would not crush the other five.
+ * Ordered as the work actually moves, not by how often each page is opened.
  *
- * Jobs, Invoiced jobs and Paid jobs are deliberately adjacent and in that
- * order: they are one pipeline, and a job leaves each for the next as it is
- * billed and then paid.
+ * Jobs, Invoiced jobs and Paid jobs are the three stages of one pipeline — a
+ * job leaves each for the next as it is billed and then paid — so they sit
+ * together, in that order, directly under Overview. They were previously split
+ * by Schedule and Invoicer, which put two unrelated pages in the middle of a
+ * sequence and made the three lists read as three separate features rather
+ * than one journey. Schedule and Invoicer follow as the tools used against
+ * that pipeline, then the two standalone pages.
+ *
+ * Only the five marked `primary` also get a slot in the phone bottom bar — the
+ * things touched between jobs. Invoiced jobs, Paid jobs and Owed to others are
+ * money reviews rather than day-to-day actions, so they stay one tap away in
+ * the menu. Paid jobs in particular is a lookup ("what did we charge them in
+ * March?"), not somewhere the owner works from, and the bottom bar has no
+ * sixth slot that would not crush the other five.
+ *
+ * Note that this ordering leaves the bottom bar untouched: the two pages that
+ * moved up are both non-primary, so `PRIMARY_ITEMS` still resolves to the same
+ * five in the same order.
  */
 const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Overview', shortLabel: 'Overview', icon: LayoutDashboard, exact: true, primary: true },
   { href: '/jobs', label: 'Jobs', shortLabel: 'Jobs', icon: Wrench, primary: true },
-  { href: '/schedule', label: 'Schedule', shortLabel: 'Schedule', icon: CalendarDays, primary: true },
-  { href: '/invoicer', label: 'Invoicer', shortLabel: 'Invoicer', icon: FileText, primary: true },
   { href: '/awaiting-payments', label: 'Invoiced jobs', shortLabel: 'Invoiced', icon: BanknoteArrowDown },
   { href: '/paid-jobs', label: 'Paid jobs', shortLabel: 'Paid', icon: BanknoteArrowUp },
+  { href: '/schedule', label: 'Schedule', shortLabel: 'Schedule', icon: CalendarDays, primary: true },
+  { href: '/invoicer', label: 'Invoicer', shortLabel: 'Invoicer', icon: FileText, primary: true },
   { href: '/suppliers', label: 'Owed to others', shortLabel: 'Suppliers', icon: Truck },
   { href: '/settings', label: 'Settings', shortLabel: 'Settings', icon: Settings, primary: true },
 ];

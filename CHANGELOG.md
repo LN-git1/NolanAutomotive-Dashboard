@@ -1,5 +1,37 @@
 # Changelog
 
+## 26/08/2026 @ 12:54:35 IST — "claude-opus-5"
+
+**Project completion: 100.00%**
+
+Basis: 1 of 1 change requested — the sidebar order Lee specified, verified rendering in that exact
+order in all three places the nav appears (desktop rail, phone drawer, phone bottom bar). Typecheck
+clean, eslint clean on the touched file, 176 tests still passing.
+
+### Changed — the sidebar follows the pipeline instead of interleaving it
+
+Lee asked for: Overview, Jobs, Invoiced jobs, Paid jobs, Schedule, Invoicer, Owed to others,
+Settings. Previously Schedule and Invoicer sat between Jobs and Invoiced jobs, so the three stages
+of one pipeline — a job is worked on, then billed, then paid — were split by two unrelated pages
+and read as three separate features rather than one journey. They are now adjacent and in the order
+work actually moves through them, directly under Overview, with the tools used against that
+pipeline following and the two standalone pages last.
+
+This also corrects a comment added in the previous entry, which claimed Jobs / Invoiced jobs / Paid
+jobs were "deliberately adjacent and in that order". They were not — that was true of the intent,
+not of the array. The reorder makes the claim accurate rather than aspirational.
+
+**The phone bottom bar is deliberately unchanged.** Both pages that moved up are non-primary, so
+`PRIMARY_ITEMS` still resolves to the same five entries in the same order — Overview, Jobs,
+Schedule, Invoicer, Settings. Confirmed at a 390px viewport rather than assumed, because the bottom
+bar derives its contents from this same array and a reorder there is exactly the kind of change that
+silently moves a thumb target on the one surface used most.
+
+### Files Touched
+
+- `components/layout/sidebar.tsx` — `NAV_ITEMS` reordered; the ordering rationale rewritten to
+  explain the pipeline grouping and to record why the bottom bar is unaffected
+
 ## 26/08/2026 @ 12:34:05 IST — "claude-opus-5"
 
 **Project completion: 100.00%**
