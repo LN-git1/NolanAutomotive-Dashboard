@@ -168,6 +168,7 @@ export async function listInvoiceableJobs() {
       hourlyRate: jobs.hourlyRate,
       labourTotalOverride: jobs.labourTotalOverride,
       parts: jobs.parts,
+      partsTotalOverride: jobs.partsTotalOverride,
       otherComments: jobs.otherComments,
       liveInvoiceId: live.id,
       liveInvoiceNumber: live.number,

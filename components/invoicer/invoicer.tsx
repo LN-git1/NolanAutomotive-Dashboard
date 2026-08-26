@@ -52,6 +52,7 @@ export function Invoicer({
         hourlyRate: job?.hourlyRate,
         labourTotalOverride: job?.labourTotalOverride,
         parts: job?.parts ?? [],
+        partsTotalOverride: job?.partsTotalOverride,
         vatRate,
         vatEnabled,
       }),
@@ -238,7 +239,7 @@ export function Invoicer({
               <span className="tabular">{formatEur(totals.labourSubtotalCents)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted">Parts</span>
+              <span className="text-muted">Parts{totals.partsIsOverridden ? ' (custom)' : ''}</span>
               <span className="tabular">{formatEur(totals.partsSubtotalCents)}</span>
             </div>
             <div className="flex justify-between">

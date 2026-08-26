@@ -127,6 +127,66 @@ describe('custom labour total', () => {
   });
 });
 
+describe('custom parts total', () => {
+  const parts = [{ partName: 'Brake discs', partNumber: 'BD-100', qty: '2', unitPrice: '80.00' }];
+
+  it('replaces qty x unit price entirely when set', () => {
+    const totals = calcInvoiceTotals({
+      labourLines: [],
+      hourlyRate: '0',
+      parts, // would be EUR 160
+      partsTotalOverride: '120.00',
+      vatRate: '0',
+      vatEnabled: false,
+    });
+
+    expect(totals.partsIsOverridden).toBe(true);
+    expect(totals.partsSubtotalCents).toBe(12_000);
+  });
+
+  it('falls back to qty x unit price when blank', () => {
+    const totals = calcInvoiceTotals({
+      labourLines: [],
+      hourlyRate: '0',
+      parts,
+      partsTotalOverride: '',
+      vatRate: '0',
+      vatEnabled: false,
+    });
+
+    expect(totals.partsIsOverridden).toBe(false);
+    expect(totals.partsSubtotalCents).toBe(16_000);
+  });
+
+  it('is VATed like any other parts figure', () => {
+    const totals = calcInvoiceTotals({
+      labourLines: [],
+      hourlyRate: '0',
+      parts,
+      partsTotalOverride: '120.00',
+      vatRate: '23',
+      vatEnabled: true,
+    });
+
+    expect(totals.partsTaxCents).toBe(2_760); // 23% of 120
+    expect(totals.grandTotalCents).toBe(14_760);
+  });
+
+  it('treats a zero override as a real figure, not as "unset"', () => {
+    const totals = calcInvoiceTotals({
+      labourLines: [],
+      hourlyRate: '0',
+      parts,
+      partsTotalOverride: '0',
+      vatRate: '0',
+      vatEnabled: false,
+    });
+
+    expect(totals.partsIsOverridden).toBe(true);
+    expect(totals.partsSubtotalCents).toBe(0);
+  });
+});
+
 describe('buildInvoiceFileName', () => {
   it('carries the customer and registration so it is findable in a chat thread', () => {
     expect(buildInvoiceFileName('NA-2026-0004', 'Zach Boyd', '09MN6738')).toBe(

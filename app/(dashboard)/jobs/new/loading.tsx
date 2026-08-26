@@ -10,9 +10,9 @@ import {
 /**
  * New job.
  *
- * Only Registration, Customer and Vehicle are open on a new job; work, parts
- * and notes start collapsed. This mirrors that exactly — see the `defaultOpen`
- * props in `components/jobs/job-form.tsx`.
+ * Registration is its own always-open card; every other section — Customer,
+ * Vehicle, Work and labour, Parts, Scheduling and notes — starts collapsed.
+ * This mirrors that exactly — see `components/jobs/job-form.tsx`.
  */
 export default function NewJobLoading() {
   return (
@@ -31,34 +31,8 @@ export default function NewJobLoading() {
         </div>
       </Card>
 
-      <Card>
-        <div className="flex items-center gap-3 px-4 py-3.5">
-          <Skeleton className="size-4 rounded" />
-          <Skeleton className="h-3.5 w-24" />
-        </div>
-        <div className="grid grid-cols-1 gap-4 border-t border-line p-4 sm:grid-cols-2">
-          <SkeletonField className="sm:col-span-2" />
-          <SkeletonField />
-          <SkeletonField />
-        </div>
-      </Card>
-
-      <Card>
-        <div className="flex items-center gap-3 px-4 py-3.5">
-          <Skeleton className="size-4 rounded" />
-          <div className="flex flex-1 flex-col gap-1.5">
-            <Skeleton className="h-3.5 w-20" />
-            <Skeleton className="h-3 w-60 max-w-[55vw]" />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 gap-4 border-t border-line p-4 sm:grid-cols-2">
-          <SkeletonField />
-          <SkeletonField />
-          <SkeletonField />
-          <SkeletonField />
-        </div>
-      </Card>
-
+      <SkeletonCollapsedSection />
+      <SkeletonCollapsedSection />
       <SkeletonCollapsedSection />
       <SkeletonCollapsedSection />
       <SkeletonCollapsedSection />

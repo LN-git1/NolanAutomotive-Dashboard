@@ -18,6 +18,7 @@ export interface InvoiceableJob {
   hourlyRate: string | null;
   labourTotalOverride: string | null;
   parts: { partName: string; partNumber: string; qty: string; unitPrice: string }[];
+  partsTotalOverride: string | null;
   otherComments: string | null;
   /** Set when the job already has a NON-voided invoice — the re-send path. */
   liveInvoiceId: string | null;

@@ -149,6 +149,8 @@ export const jobs = pgTable(
     /** A flat labour figure. When set it wins over hours x rate entirely. */
     labourTotalOverride: numeric('labour_total_override', { precision: 12, scale: 2 }),
     parts: jsonb('parts').notNull().default([]).$type<JobPartLine[]>(),
+    /** A flat parts figure. When set it wins over the summed line amounts entirely. */
+    partsTotalOverride: numeric('parts_total_override', { precision: 12, scale: 2 }),
     otherComments: text('other_comments'),
 
     /** Private. Never printed on an invoice. */
@@ -243,6 +245,7 @@ export const invoices = pgTable(
     grandTotal: numeric('grand_total', { precision: 12, scale: 2 }).notNull(),
 
     parts: jsonb('parts').notNull().$type<InvoicePartLine[]>(),
+    partsTotalOverride: numeric('parts_total_override', { precision: 12, scale: 2 }),
     otherComments: text('other_comments'),
 
     pdfStoragePath: text('pdf_storage_path').notNull(),

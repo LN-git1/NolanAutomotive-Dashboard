@@ -108,6 +108,8 @@ export interface InvoiceTotalsInput {
   /** A flat labour figure. When set it replaces hours x rate entirely. */
   labourTotalOverride?: string | number | null;
   parts: PartLineInput[];
+  /** A flat parts figure. When set it replaces the summed line amounts entirely. */
+  partsTotalOverride?: string | number | null;
   /** Percentage, e.g. "23". Ignored entirely when vatEnabled is false. */
   vatRate: string | number | null | undefined;
   vatEnabled: boolean;
@@ -121,6 +123,8 @@ export interface InvoiceTotals {
   /** True when the flat override supplied the labour figure. */
   labourIsOverridden: boolean;
   labourSubtotalCents: number;
+  /** True when the flat override supplied the parts figure. */
+  partsIsOverridden: boolean;
   partsSubtotalCents: number;
   vatBasisPoints: number;
   labourTaxCents: number;
@@ -158,6 +162,12 @@ export function formatHours(centis: number): string {
  * hours are still carried through either way, because the template prints them
  * per line regardless of how the money was arrived at.
  *
+ * Parts follow the identical pattern: normally the sum of qty x unit price per
+ * line, UNLESS a flat override is set, in which case that figure is the parts
+ * total outright. The individual part lines are still carried through (name,
+ * part number, qty) — only their priced amount is superseded, and stops being
+ * printed, when the override is active (see `buildPartRows` in `lib/pdf/stamp`).
+ *
  * When VAT is not enabled the rate and every tax amount are forced to zero.
  */
 export function calcInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotals {
@@ -178,7 +188,14 @@ export function calcInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotals {
     amount: fromCents(applyQuantity(part.qty, part.unitPrice)),
   }));
 
-  const partsSubtotalCents = parts.reduce((sum, part) => sum + toCents(part.amount), 0);
+  const partsOverride = input.partsTotalOverride;
+  const partsIsOverridden =
+    partsOverride !== null && partsOverride !== undefined && String(partsOverride).trim() !== '';
+
+  const partsSubtotalCents = partsIsOverridden
+    ? toCents(partsOverride)
+    : parts.reduce((sum, part) => sum + toCents(part.amount), 0);
+
   const vatBasisPoints = input.vatEnabled ? rateToBasisPoints(input.vatRate) : 0;
 
   const labourTaxCents = applyRate(labourCents, vatBasisPoints);
@@ -190,6 +207,7 @@ export function calcInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotals {
     totalHoursCentis,
     labourIsOverridden,
     labourSubtotalCents: labourCents,
+    partsIsOverridden,
     partsSubtotalCents,
     vatBasisPoints,
     labourTaxCents,

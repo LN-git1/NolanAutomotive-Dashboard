@@ -57,6 +57,7 @@ export function LineEditor({
   addLabel,
   emptyLabel,
   rowDefaults = {},
+  disabledColumns,
   computeTotal,
   onTotalsChange,
 }: {
@@ -68,6 +69,13 @@ export function LineEditor({
   addLabel: string;
   emptyLabel: string;
   rowDefaults?: Record<string, string>;
+  /**
+   * Column keys to grey out on every row — used when a flat total elsewhere in
+   * the form (e.g. a custom parts total) makes the per-row figure moot. The
+   * row data itself is untouched, so switching the override off restores
+   * whatever was typed.
+   */
+  disabledColumns?: readonly string[];
   /** Reduces the current rows to whatever "total" means for this table. */
   computeTotal?: (rows: Record<string, string>[]) => number;
   /**
@@ -170,6 +178,7 @@ export function LineEditor({
                     // (partLineSchema requires a name) — catches it before
                     // submission instead of after a round trip.
                     required={column.required}
+                    disabled={disabledColumns?.includes(column.key)}
                     value={row.values[column.key] ?? ''}
                     onChange={(event) =>
                       update(

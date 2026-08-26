@@ -75,6 +75,13 @@ export interface StampInvoiceInput {
   vatNumber?: string | null;
 
   parts: StampPartLine[];
+  /**
+   * True when a flat parts total replaced the summed line amounts. The per-row
+   * unit price and amount are blanked when this is set, the same way an
+   * overridden labour total never contradicts the printed hours — otherwise
+   * the parts table would show line amounts that don't add up to TOTAL PARTS.
+   */
+  partsIsOverridden: boolean;
 
   labourSubtotalCents: number;
   partsSubtotalCents: number;
@@ -327,8 +334,10 @@ function buildPartRows(input: StampInvoiceInput): TableRow[] {
     partName: part.partName,
     partNumber: part.partNumber,
     qty: part.qty,
-    unitPrice: formatAmount(Math.round(Number(part.unitPrice) * 100)),
-    amount: formatAmount(Math.round(Number(part.amount) * 100)),
+    unitPrice: input.partsIsOverridden
+      ? ''
+      : formatAmount(Math.round(Number(part.unitPrice) * 100)),
+    amount: input.partsIsOverridden ? '' : formatAmount(Math.round(Number(part.amount) * 100)),
   }));
 }
 

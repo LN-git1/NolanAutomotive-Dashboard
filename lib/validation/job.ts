@@ -112,6 +112,8 @@ export const jobInputSchema = z.object({
   /** When set, this is the labour total outright — hours x rate is ignored. */
   labourTotalOverride: optionalDecimal({ label: 'Custom labour total' }),
   parts: jsonArray(partLineSchema, { label: 'Parts', max: 50 }),
+  /** When set, this is the parts total outright — the summed line amounts are ignored. */
+  partsTotalOverride: optionalDecimal({ label: 'Custom parts total' }),
   otherComments: optionalText,
 
   /** Private. Never printed on an invoice. */

@@ -17,8 +17,10 @@ import type { Job } from '@/lib/db/schema';
 
 /**
  * Sections fold, because this form now carries everything that ends up on an
- * invoice and roughly 90% of use is on a phone. Registration and customer are
- * open by default — the rest is a tap away rather than a screen of scrolling.
+ * invoice and roughly 90% of use is on a phone. Every section starts
+ * collapsed — Registration sits above them as its own always-open card — so
+ * opening the form always shows the same short, scannable list of headers
+ * rather than however much the previous job happened to have filled in.
  *
  * `<details>` is used rather than hand-rolled state so it works before hydration
  * and gets keyboard and screen-reader behaviour for free.
@@ -27,18 +29,16 @@ function Section({
   title,
   description,
   children,
-  defaultOpen = false,
   badge,
 }: {
   title: string;
   description?: string;
   children: ReactNode;
-  defaultOpen?: boolean;
   badge?: string;
 }) {
   return (
     <Card>
-      <details open={defaultOpen} className="group">
+      <details className="group">
         <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3.5 [&::-webkit-details-marker]:hidden">
           <ChevronRight
             aria-hidden
@@ -112,6 +112,7 @@ export function JobForm({
     count: job?.parts?.length ?? 0,
     total: (job?.parts ?? []).reduce((sum, part) => sum + applyQuantity(part.qty, part.unitPrice), 0),
   }));
+  const [partsOverride, setPartsOverride] = useState(job?.partsTotalOverride ?? '');
 
   const totalHoursCentis = labourSummary.total;
 
@@ -121,10 +122,12 @@ export function JobForm({
     ? toCents(labourOverride)
     : Math.round((totalHoursCentis * toCents(hourlyRate)) / 100);
 
+  const partsOverrideActive = partsOverride.trim() !== '';
   // applyQuantity, not a hand-rolled qty*price: it preserves qty to 4 decimal
   // places, matching the authoritative path (calcInvoiceTotals / the stamped
-  // PDF) exactly, so this live total can never disagree with the real one.
-  const partsCents = partsSummary.total;
+  // PDF) exactly, so this live total can never disagree with the real one —
+  // unless a flat override is set, which mirrors labour's own override above.
+  const partsCents = partsOverrideActive ? toCents(partsOverride) : partsSummary.total;
 
   /**
    * Picking a vehicle from the suggestions fills the form in immediately, with
@@ -201,7 +204,7 @@ export function JobForm({
       </Card>
 
       <div key={prefillApplied} className="flex flex-col gap-3">
-        <Section title="Customer" defaultOpen>
+        <Section title="Customer">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* No autoComplete="name"/"tel"/"email" below — this is the
                 customer's info, not the owner's; profile autofill would offer
@@ -244,11 +247,7 @@ export function JobForm({
           </div>
         </Section>
 
-        <Section
-          title="Vehicle"
-          description="Make and model print on separate lines of the invoice"
-          defaultOpen={isNew}
-        >
+        <Section title="Vehicle" description="Make and model print on separate lines of the invoice">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <VehicleFields
               defaultYear={applied?.vehicleYear ?? job?.vehicleYear}
@@ -288,7 +287,6 @@ export function JobForm({
       <Section
         title="Work and labour"
         description="Prints on the invoice — each line shows its hours"
-        defaultOpen={!isNew}
         badge={labourSummary.count > 0 ? `${labourSummary.count}` : undefined}
       >
         <div className="flex flex-col gap-4">
@@ -349,11 +347,7 @@ export function JobForm({
         </div>
       </Section>
 
-      <Section
-        title="Parts"
-        defaultOpen={!isNew && partsSummary.count > 0}
-        badge={partsSummary.count > 0 ? `${partsSummary.count}` : undefined}
-      >
+      <Section title="Parts" badge={partsSummary.count > 0 ? `${partsSummary.count}` : undefined}>
         <div className="flex flex-col gap-3">
           <LineEditor
             name="parts"
@@ -370,13 +364,34 @@ export function JobForm({
             addLabel="Add part"
             emptyLabel="No parts added."
             rowDefaults={{ qty: '1' }}
+            disabledColumns={partsOverrideActive ? ['unitPrice'] : undefined}
             computeTotal={(rows) =>
               rows.reduce((sum, row) => sum + applyQuantity(row.qty, row.unitPrice), 0)
             }
             onTotalsChange={setPartsSummary}
           />
+
+          <div className="grid grid-cols-2 gap-3 border-t border-line pt-4">
+            <Field
+              label="Custom total (€)"
+              htmlFor="partsTotalOverride"
+              hint="Overrides the parts lines when filled. Unit prices are ignored and don't print."
+              className="col-span-2"
+            >
+              <Input
+                id="partsTotalOverride"
+                name="partsTotalOverride"
+                inputMode="decimal"
+                value={partsOverride}
+                onChange={(event) => setPartsOverride(event.target.value)}
+                placeholder="Leave blank to use qty × unit price"
+              />
+            </Field>
+          </div>
+
           <p className="text-sm text-muted">
             Parts total: <span className="font-semibold text-ink tabular">{formatEur(partsCents)}</span>
+            {partsOverrideActive ? ' (custom)' : null}
           </p>
         </div>
       </Section>

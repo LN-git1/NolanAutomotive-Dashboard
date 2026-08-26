@@ -77,6 +77,7 @@ export async function buildInvoice(
     hourlyRate: job.hourlyRate,
     labourTotalOverride: job.labourTotalOverride,
     parts: jobParts,
+    partsTotalOverride: job.partsTotalOverride,
     vatRate: settings.defaultVatRate,
     vatEnabled,
   });
@@ -111,6 +112,7 @@ export async function buildInvoice(
     vatNumber: vatEnabled ? settings.vatNumber : null,
 
     parts,
+    partsIsOverridden: totals.partsIsOverridden,
 
     labourSubtotalCents: totals.labourSubtotalCents,
     partsSubtotalCents: totals.partsSubtotalCents,
@@ -154,6 +156,7 @@ export function invoiceSnapshot(built: BuiltInvoice) {
     totalParts: fromCents(totals.partsSubtotalCents),
     grandTotal: fromCents(totals.grandTotalCents),
     parts: built.parts,
+    partsTotalOverride: built.job.partsTotalOverride,
     otherComments: built.job.otherComments,
   };
 }

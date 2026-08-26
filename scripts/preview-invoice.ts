@@ -89,6 +89,7 @@ async function main() {
     vatNumber: 'IE1234567FA',
 
     parts: stampParts,
+    partsIsOverridden: totals.partsIsOverridden,
 
     labourSubtotalCents: totals.labourSubtotalCents,
     partsSubtotalCents: totals.partsSubtotalCents,

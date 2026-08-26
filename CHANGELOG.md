@@ -1,5 +1,91 @@
 # Changelog
 
+## 26/08/2026 @ 17:22:51 IST — "claude-sonnet-5"
+
+**Project completion: 100.00%**
+
+Basis: 2 of 2 requests made this session — a custom parts total box matching the existing labour
+one, and all five job-form sections starting collapsed on every visit. Typecheck clean, eslint
+clean on every touched file, 170 tests passing (was 166, +4 new for the parts override), migration
+applied and the new columns confirmed present by querying the local database directly rather than
+trusting drizzle-kit's exit message. Verified live in a browser: Parts opens with a disabled,
+value-preserved unit price once a custom total is entered, and a fresh New job page renders with
+Registration open and all five sections collapsed.
+
+### Added — a custom total for Parts, matching Work and labour's existing one
+
+Lee already had a "Custom total (€)" box under Work and labour that overrides hours × rate with a
+flat labour figure. He asked for the identical box and behaviour under Parts: fill it in and it
+replaces the summed qty × unit price lines outright, and since the whole point is one lump sum for
+every part, the individual unit price fields grey out (their typed values are kept, not wiped, so
+turning the override back off restores them).
+
+This went all the way through the stack, not just the form, because the number has to survive to
+the printed invoice correctly:
+
+- `jobs.parts_total_override` and `invoices.parts_total_override` — new nullable numeric columns,
+  mirroring `labour_total_override` exactly, including the fact that the `invoices` copy is
+  write-only archival (nothing reads it back — only the job's own value is ever read at build time).
+- `calcInvoiceTotals` (`lib/money.ts`) — a `partsTotalOverride` input and `partsIsOverridden` output,
+  wired in at the exact same point `labourTotalOverride` is (before VAT is applied), so a
+  VAT-registered invoice taxes the override correctly instead of taxing the (now irrelevant) summed
+  lines.
+- `stampInvoice` (`lib/pdf/stamp.ts`) — when overridden, the printed PARTS table blanks the unit
+  price and amount cells per row (same trick the labour table already uses: it never prints money
+  per line, only hours, so an override can never contradict itself on paper). The archival snapshot
+  written to `invoices.parts` stays truthful — the blanking happens only in what gets drawn on the
+  PDF, never in what gets stored.
+- `LineEditor` (`components/jobs/line-editor.tsx`) gained a `disabledColumns` prop for this: it
+  greys out a column across every row without touching the row data, so the display goes blank/grey
+  while the override is active and un-greys with whatever was typed the moment it's cleared.
+- Server-side zero-invoice guards in `app/api/invoices/generate/route.ts` needed no change — they
+  already gate on `grandTotalCents === 0`, not on line counts, so a parts override with zero
+  itemised lines already prices correctly and was never at risk of being blocked.
+
+### Changed — every job-form section now starts collapsed, always
+
+Lee's second ask: whichever job page opens, on phone or desktop, all five sections (Customer,
+Vehicle, Work and labour, Parts, Scheduling and notes) should start closed — only the Registration
+card above them stays permanently open. Previously the defaults were mixed and depended on whether
+the job was new or existing and how much it already contained (Customer always open; Vehicle open
+only on a new job; Work and labour and Parts open on an existing job with content; Scheduling and
+notes always closed) — a returning job with several work lines and parts could open with three or
+four sections already expanded, which is exactly the "harder to read, less handy" page he flagged.
+
+The fix removes the conditional entirely rather than special-casing it further: `Section`'s
+`defaultOpen` prop is gone, `<details>` renders with no `open` attribute, and every one of the five
+sections is identical in this respect regardless of `job`, screen size, or prior content. The two
+loading skeletons (`app/(dashboard)/jobs/new/loading.tsx`, `app/(dashboard)/jobs/[jobId]/loading.tsx`)
+were showing two or three sections pre-rendered "open" to match the old defaults; both now render
+five collapsed header bars under the always-open Registration card, so the skeleton no longer
+promises a layout the real page won't deliver.
+
+### Files Touched
+
+- `lib/db/schema.ts` — `partsTotalOverride` numeric column added to `jobs` and `invoices`
+- `drizzle/migrations/0009_lumpy_gambit.sql` — the two `ALTER TABLE ... ADD COLUMN` statements,
+  generated and applied to the local database, columns confirmed present via `psql`
+- `lib/validation/job.ts` — `partsTotalOverride` added to `jobInputSchema`
+- `lib/money.ts` — `partsTotalOverride`/`partsIsOverridden` added to `calcInvoiceTotals`'s input and
+  output, computed the same way and at the same point as the labour override
+- `lib/pdf/stamp.ts` — `partsIsOverridden` added to `StampInvoiceInput`; `buildPartRows` blanks the
+  unit price and amount cells when it's set
+- `lib/invoices/build.ts` — passes the override through to `calcInvoiceTotals` and `stampInvoice`,
+  keeps the archival `parts` snapshot truthful, and writes the override into `invoiceSnapshot`
+- `lib/db/queries/jobs.ts` — `partsTotalOverride` added to `listInvoiceableJobs`'s selected columns
+- `components/jobs/line-editor.tsx` — new `disabledColumns` prop
+- `components/jobs/job-form.tsx` — the Parts custom-total field and disabled unit-price wiring; the
+  `Section` component's `defaultOpen` prop removed entirely; all five `<Section>` call sites updated
+- `components/invoicer/job-picker.tsx`, `components/invoicer/invoicer.tsx` — `partsTotalOverride`
+  carried through the Invoicer's type and its live totals preview, with a "(custom)" tag matching
+  labour's
+- `app/(dashboard)/jobs/new/loading.tsx`, `app/(dashboard)/jobs/[jobId]/loading.tsx` — skeletons
+  updated to five collapsed sections
+- `scripts/preview-invoice.ts` — updated for the new required `partsIsOverridden` field
+- `tests/labour.test.ts` — four new tests under "custom parts total", mirroring the existing
+  "custom labour total" suite (override wins, blank falls back, VAT applies to the override, zero is
+  a real value not "unset")
+
 ## 26/08/2026 @ 12:54:35 IST — "claude-opus-5"
 
 **Project completion: 100.00%**
