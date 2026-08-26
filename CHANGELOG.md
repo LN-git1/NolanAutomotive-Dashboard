@@ -1,5 +1,164 @@
 # Changelog
 
+## 26/08/2026 @ 12:34:05 IST — "claude-opus-5"
+
+**Project completion: 100.00%**
+
+Basis: 13 of 13 behaviours Lee asked for in this request. The enumeration is mine, derived from
+his message rather than a pre-existing checklist, and each item was verified — 3 for the job pipeline split (workshop-only Jobs list, a sidebar page holding every
+invoiced job, settled work moving on to Paid jobs) and 10 for the vehicle lookup (typeahead on the
+reg box, partial-plate search, prefill on select, and per-vehicle job count / job numbers / job
+totals / total spent / dates / one customer's several cars / self-updating with no second copy of
+the data). Typecheck clean, eslint clean on every file outside the pre-existing `.claude/worktrees`
+build output, 176 tests passing (was 162), 14 of them new and all 14 run against real Postgres.
+Verified in a real browser end to end: a job invoiced leaves Jobs and appears under Invoiced jobs,
+and typing a partial plate finds the car and fills the form in.
+
+Nothing here closes a ROADMAP item — all four parked items (arrival/due-back dates, job value on
+the list, a "ready to invoice" tile, private repo) are untouched and still open.
+
+### Changed — Jobs is now the workshop only, and invoiced work has its own page
+
+**The problem Lee reported:** he adds a job, invoices it, and it is still sitting in the Jobs
+section. So the list he opens twenty times a day to decide what to do next kept every job he had
+already billed, and only ever grew.
+
+**Cause:** `/jobs` queried `scope: 'open'`, which is defined as "not settled" — deliberately
+covering both work in the workshop AND work invoiced and still owed. That was right when `/jobs`
+and `/paid-jobs` were the only two lists, because between them they had to account for every job.
+It stopped being right the moment "invoiced" became a stage Lee thinks of as separate.
+
+**Fix:** a new `pre-invoice` scope on `listJobs`, returning the existing `JOB_IS_PRE_INVOICE`
+predicate. `open` is deliberately left alone rather than narrowed: it is one half of a partition
+that `tests/awaiting-payment.test.ts` pins down, and redefining it would break the guarantee that
+every job appears in some list. Using the predicate rather than filtering `status <> 'invoiced'`
+matters for the same reason — `jobs.status` is a label that drifts, and `JOB_IS_PRE_INVOICE` is
+written as the complement of the other two buckets so a job whose invoice is neither settled nor
+owing (a voided one, a EUR 0.00 one) still lands somewhere visible instead of vanishing.
+
+**The invoiced page is the existing `/awaiting-payments`, renamed, not a seventh page.** Lee listed
+the sidebar he sees and asked for an invoiced page; that page already existed under a name that
+described the money rather than the work, which is why it did not read as the answer. The set is
+identical — `JOB_IS_AWAITING_PAYMENT` is exactly "has a live invoice with a balance" — so building
+a second one would have put two nav entries in front of the same rows. It is now titled **Invoiced
+jobs**, carries the same Vehicle column as the other two job lists, and has the same URL-backed
+search. The route stays `/awaiting-payments`: six `revalidatePath` calls across the actions and the
+invoice routes point at it, and renaming the directory would mean touching all of them to move a
+page already in the right place.
+
+**The part that would have bitten:** `/jobs` already counted settled matches and pointed at
+`/paid-jobs`, precisely so searching for a customer who paid last month did not come back empty and
+read as "we lost the job". Hiding invoiced work re-opened that same hole one bucket over, so
+`countAwaitingPaymentJobs` was added alongside `countSettledJobs` and both hints now render, each
+carrying the search term into the link. Verified: searching Jobs for "Sarah" shows no rows, the
+hint "1 invoiced job also matches under Invoiced jobs", and following it lands on
+`/awaiting-payments?q=Sarah` with the row.
+
+The Overview's "Active jobs" tile (hint: "Not billed yet") now agrees exactly with the page it
+links to, which it did not before — so the long comment on `/jobs` explaining away that
+contradiction was deleted rather than left as a stale account of a fixed bug.
+
+### Added — the registration box searches every car the garage has ever had in
+
+**What Lee asked for:** type `98D` into the reg field and see every 1998 Dublin car already in the
+system, pick one, and have the customer's details fill themselves in — plus, for any car, how many
+jobs it has had, their numbers, their totals, what has been spent on it overall, and when.
+
+**What was there before:** a plain text box that looked up an EXACT registration when it lost
+focus. That answers the wrong question — nobody remembers a full plate for a car they saw eight
+months ago — and it had a latent bug: plates are stored as typed, so the car entered as
+`142-KY-9821` was invisible to a search for `142KY9821`. The same car, and the lookup said "never
+seen before".
+
+**No `customers` or `vehicles` table was added, deliberately.** Every field a returning customer
+needs is already on the job that brought the car in last time, and the job is the record that stays
+editable forever. A second copy would need syncing on every job edit, and the first time the two
+disagreed there would be no way to tell which was right. Deriving instead is correct by
+construction: fix a typo in a phone number on the job and the next lookup offers the corrected one.
+Nothing to backfill, nothing to drift. `lib/db/queries/vehicles.ts` carries the reasoning in full.
+
+**Registrations are matched normalised and stored raw.** `142-KY-9821` is how an Irish plate is
+written and how it has to print on the invoice, so the stored value is left exactly as typed;
+comparison happens on an upper-cased, separator-stripped expression instead. That is also why the
+fix is an expression and not an `UPDATE` — rewriting stored plates would destroy the formatting the
+invoice depends on, to solve a problem that only exists at comparison time. Migration
+`0008_typical_sunset_bain.sql` adds `jobs_vehicle_registration_norm_idx` on that exact expression,
+confirmed present in the database rather than trusted from drizzle-kit's success message (it prints
+success while silently skipping). `findJobByRegistration` was moved onto the same normalisation,
+fixing the latent bug above.
+
+**New files:**
+- `lib/db/queries/vehicles.ts` — `searchVehicles` (grouped per car, matching partial plates, customer
+  names and job numbers) and `getVehicleHistory`. A LATERAL join takes the most recent live invoice
+  per job: `invoices` has no unique constraint on `job_id`, so a plain join would count a job twice
+  and double what the car appears to have cost. Voided invoices are excluded — a void is precisely
+  the case where the customer does not owe the money.
+- `components/jobs/registration-field.tsx` — the combobox. Free-text input first and picker second:
+  `vehicleRegistration` is required and every car has a first visit, so a selector-only field would
+  make a new customer impossible to book in. Debounced at 200ms with a 2-character floor; every
+  result carries the term it answered and is dropped unless still current, because Server Action
+  responses are not ordered and a slow `98` landing after a fast `98D1` would otherwise repopulate
+  the list with matches for text already typed past. Options commit on `pointerdown`, not `click` —
+  on a phone the input blurs first and a click handler fires after the list is already gone.
+- `components/jobs/vehicle-history.tsx` — jobs / total billed / still-owed, the span of visits, and
+  a disclosure listing every previous job with its number, date and total. The three headline
+  figures come from the search result already in hand; only the breakdown costs a round trip, and
+  only for the car actually chosen. Keyed on the vehicle by the caller so picking a different car
+  remounts it — a stale list here would be one car's repair history under another car's plate.
+
+Selecting a car applies the prefill immediately, with no second "use these details" tap: choosing a
+specific plate out of a list of near-identical ones IS the confirmation, and everything stays
+editable afterwards. The blur lookup is gone — a blur lookup and a typeahead both firing would
+prompt twice for the same thing.
+
+### Tests
+
+`tests/vehicle-lookup.test.ts`, 14 new tests. Three are pure (`normalizeRegistration`); the other
+eleven need real Postgres, because the whole point of these queries is a correlated subquery, a
+LATERAL join and an indexed expression, none of which a mock demonstrates anything about. They
+cover: the punctuations of one plate collapsing to a single vehicle, fragment and lower-case
+searching, billed/paid totals across a car's jobs, a voided invoice staying out of the total, one
+customer's several cars, prefill fields, history under any spelling, the two-character floor, the
+exact-lookup normalisation fix, invoiced work leaving the workshop list while staying inside the
+open half, and the invoiced-match count that keeps the hidden bucket reachable.
+
+Run against the local Postgres with the counters checked before and after — the full DB-gated suite
+resets them via `counters.test.ts`, so only the relevant files were run. Counters unchanged
+(invoice=30, job=9), no fixture rows left behind.
+
+### Checked and deliberately not changed — one job, two live invoices
+
+`listAwaitingPayment` and `listSettledJobs` `innerJoin` `invoices` without deduping, so a job
+carrying two non-voided invoices would render twice and be counted twice in the page's total —
+measured directly (two live invoices at EUR 100 and EUR 200 produced two rows and a EUR 300
+header). It is left alone because it is unreachable through the app and unchanged by this work:
+`/api/invoices/generate` looks up the live invoice first and, when one exists, UPDATEs it in place
+rather than inserting, so a job can hold at most one. Voiding does not create a second live row
+either. The new `searchVehicles` aggregate does defend against it — a LATERAL taking the most
+recent live invoice per job — because there the failure would be a silently wrong "total spent"
+rather than a visibly duplicated row.
+
+Also confirmed rather than assumed: every mutation path that moves a job between the three lists
+(`/api/invoices/generate`, `/api/invoices/[id]/void`, `lib/actions/payments.ts`) already calls
+`revalidatePath('/jobs')` alongside the destination pages, so the new "N invoiced jobs also match"
+hint on `/jobs` cannot go stale after an invoice is issued.
+
+### Files Touched
+
+- `lib/db/schema.ts` — functional index on the normalised registration
+- `drizzle/migrations/0008_typical_sunset_bain.sql`, `meta/0008_snapshot.json`, `meta/_journal.json`
+- `lib/db/queries/vehicles.ts` (new) — vehicle search and history, derived from jobs
+- `lib/db/queries/jobs.ts` — `pre-invoice` scope, `countAwaitingPaymentJobs`, search on
+  `listAwaitingPayment`, normalised `findJobByRegistration`
+- `lib/actions/jobs.ts` — `searchVehicleRegistrations`, `loadVehicleHistory`
+- `components/jobs/registration-field.tsx` (new), `components/jobs/vehicle-history.tsx` (new)
+- `components/jobs/job-form.tsx` — combobox replaces the blur lookup; history panel
+- `app/(dashboard)/jobs/page.tsx` — workshop scope, two search hints, header and empty states
+- `app/(dashboard)/awaiting-payments/page.tsx` + `loading.tsx` — Invoiced jobs, search, Vehicle column
+- `app/(dashboard)/page.tsx` — Overview card title follows the rename
+- `components/layout/sidebar.tsx` — "Invoiced jobs" label and short label
+- `tests/vehicle-lookup.test.ts` (new)
+
 ## 25/08/2026 @ 18:40:48 IST — "claude-opus-5"
 
 **Project completion: 100.00%**

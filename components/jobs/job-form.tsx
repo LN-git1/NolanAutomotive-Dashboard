@@ -1,18 +1,19 @@
 'use client';
 
-import { ChevronRight, Wand2 } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition, type FormEvent, type ReactNode } from 'react';
 
 import { Alert, Button, Card, CardBody, CardHeader, Field, Input, Select, Textarea } from '@/components/ui';
 import { LABOUR_COLUMNS, LineEditor, PARTS_COLUMNS } from '@/components/jobs/line-editor';
+import { RegistrationField } from '@/components/jobs/registration-field';
 import { VehicleFields } from '@/components/jobs/vehicle-fields';
-import { createJob, lookupJobByRegistration, updateJob } from '@/lib/actions/jobs';
+import { VehicleHistory } from '@/components/jobs/vehicle-history';
+import { createJob, updateJob } from '@/lib/actions/jobs';
 import { applyQuantity, formatEur, formatHours, sumLabourHours, toCents } from '@/lib/money';
 import { JOB_PRIORITIES } from '@/lib/validation/job';
+import type { VehicleMatch } from '@/lib/db/queries/vehicles';
 import type { Job } from '@/lib/db/schema';
-
-type Prefill = Awaited<ReturnType<typeof lookupJobByRegistration>>;
 
 /**
  * Sections fold, because this form now carries everything that ends up on an
@@ -84,9 +85,8 @@ export function JobForm({
   const isNew = !job;
 
   const [registration, setRegistration] = useState(job?.vehicleRegistration ?? '');
-  const [prefill, setPrefill] = useState<Prefill>(null);
+  const [prefill, setPrefill] = useState<VehicleMatch | null>(null);
   const [prefillApplied, setPrefillApplied] = useState(0);
-  const [lookingUp, setLookingUp] = useState(false);
 
   /**
    * The row data itself lives entirely inside each `LineEditor` — this form
@@ -127,26 +127,14 @@ export function JobForm({
   const partsCents = partsSummary.total;
 
   /**
-   * Look up the registration when the field loses focus. Only on a new job:
-   * silently rewriting an existing job's customer would be destructive, and the
-   * owner is editing it precisely because they know what it should say.
+   * Picking a vehicle from the suggestions fills the form in immediately, with
+   * no second "use these details" tap. Choosing a specific car out of a list of
+   * near-identical plates IS the confirmation — asking again would be asking
+   * the same question twice, and the details are all editable afterwards
+   * anyway.
    */
-  async function handleRegistrationBlur() {
-    if (!isNew || registration.trim() === '') return;
-
-    setLookingUp(true);
-    try {
-      const found = await lookupJobByRegistration(registration);
-      setPrefill(found);
-    } catch {
-      // A failed lookup is a missing convenience, not an error worth showing.
-      setPrefill(null);
-    } finally {
-      setLookingUp(false);
-    }
-  }
-
-  function applyPrefill() {
+  function handleVehicleSelected(vehicle: VehicleMatch) {
+    setPrefill(vehicle);
     // Bumping the key remounts the customer and vehicle fields so their
     // defaultValues are picked up, without turning every input into controlled state.
     setPrefillApplied((n) => n + 1);
@@ -186,45 +174,28 @@ export function JobForm({
       {/* Registration leads: it is the one thing the owner always knows when a
           car arrives, and it is what identifies a returning customer. */}
       <Card>
-        <CardHeader title="Registration" description="Start here — a car you've seen before fills itself in" />
+        <CardHeader
+          title="Registration"
+          description="Start here — type any part of a plate to find a car you've seen before"
+        />
         <CardBody className="flex flex-col gap-3">
-          <Field label="Vehicle registration" htmlFor="vehicleRegistration" required>
-            <Input
-              id="vehicleRegistration"
-              name="vehicleRegistration"
-              value={registration}
-              onChange={(event) => setRegistration(event.target.value)}
-              onBlur={handleRegistrationBlur}
-              autoCapitalize="characters"
-              placeholder="09MN6738"
-              required
-            />
-          </Field>
+          <RegistrationField
+            value={registration}
+            onChange={setRegistration}
+            onSelect={handleVehicleSelected}
+            enabled={isNew}
+          />
 
-          {lookingUp ? <p className="text-xs text-muted">Checking previous jobs…</p> : null}
-
-          {isNew && prefill && prefillApplied === 0 ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-info-soft px-3 py-2.5">
-              <div className="min-w-0 text-sm">
-                <p className="font-medium text-ink">Seen before — {prefill.jobNumber}</p>
-                <p className="truncate text-muted">
-                  {prefill.customerName}
-                  {prefill.vehicleMake || prefill.vehicleModel
-                    ? ` · ${[prefill.vehicleMake, prefill.vehicleModel].filter(Boolean).join(' ')}`
-                    : ''}
-                </p>
-              </div>
-              <Button type="button" size="sm" variant="secondary" onClick={applyPrefill}>
-                <Wand2 aria-hidden className="size-4" />
-                Use these details
-              </Button>
-            </div>
-          ) : null}
-
-          {prefillApplied > 0 ? (
-            <p className="text-xs text-muted">
-              Filled in from {prefill?.jobNumber}. Edit anything that has changed.
-            </p>
+          {applied ? (
+            <>
+              <p className="text-xs text-muted">
+                Filled in from {applied.lastJobNumber}. Edit anything that has changed.
+              </p>
+              {/* Keyed on the vehicle: choosing a different car remounts this,
+                  so one car's jobs can never be left on screen under another
+                  car's plate. */}
+              <VehicleHistory key={applied.normalizedRegistration} vehicle={applied} />
+            </>
           ) : null}
         </CardBody>
       </Card>

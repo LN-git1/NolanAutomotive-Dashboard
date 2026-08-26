@@ -1,4 +1,4 @@
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
   date,
@@ -163,6 +163,17 @@ export const jobs = pgTable(
     uniqueIndex('jobs_job_number_key').on(table.jobNumber),
     index('jobs_status_idx').on(table.status),
     index('jobs_vehicle_registration_idx').on(table.vehicleRegistration),
+    /*
+      Registrations are stored exactly as typed — `142-KY-9821` is how an Irish
+      plate is written and how it has to print on the invoice. But the same car
+      gets searched for as `142KY9821` or `142 ky 9821`, so the reg lookup
+      compares a normalised form instead (see `lib/db/queries/vehicles.ts`).
+      Without this index that expression cannot use the plain column index above
+      and every lookup degrades to a sequential scan.
+    */
+    index('jobs_vehicle_registration_norm_idx').on(
+      sql`upper(regexp_replace("vehicle_registration", '[^A-Za-z0-9]', '', 'g'))`,
+    ),
     index('jobs_customer_name_idx').on(table.customerName),
     index('jobs_deleted_at_idx').on(table.deletedAt),
   ],

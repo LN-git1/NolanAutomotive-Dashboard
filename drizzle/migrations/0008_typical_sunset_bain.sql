@@ -1,0 +1,1 @@
+CREATE INDEX "jobs_vehicle_registration_norm_idx" ON "jobs" USING btree (upper(regexp_replace("vehicle_registration", '[^A-Za-z0-9]', '', 'g')));

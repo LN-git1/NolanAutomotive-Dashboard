@@ -7,6 +7,12 @@ import { requireSession } from '@/lib/auth/require-session';
 import { allocateNumber, formatJobNumber } from '@/lib/counters';
 import { db } from '@/lib/db';
 import { findJobByRegistration } from '@/lib/db/queries/jobs';
+import {
+  getVehicleHistory,
+  searchVehicles,
+  type VehicleHistoryEntry,
+  type VehicleMatch,
+} from '@/lib/db/queries/vehicles';
 import { jobAttachments, jobs } from '@/lib/db/schema';
 import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
 import { removeObject } from '@/lib/storage/signedUrl';
@@ -91,13 +97,50 @@ export async function updateJob(jobId: string, formData: FormData): Promise<Acti
 }
 
 /**
- * Look up the last job for a registration so the create form can offer to fill
- * in a returning customer. Returns only the fields the form prefills — there is
- * no reason to ship a whole job row to the browser for this.
+ * Look up the last job for an EXACT registration.
+ *
+ * The job form no longer calls this — it uses `searchVehicleRegistrations`
+ * below, which matches partial registrations and returns the vehicle's history
+ * with it. Kept because it is still the right shape for a caller that already
+ * holds a full registration and wants one answer, and because the in-flight
+ * job-import branch imports it.
  */
 export async function lookupJobByRegistration(registration: string) {
   await requireSession();
   return findJobByRegistration(registration);
+}
+
+/**
+ * Registration typeahead for the job form.
+ *
+ * Lee's actual question when a car comes in is "have we had this one before?",
+ * and he asks it with a fragment — `98D` means "one of the 1998 Dublin cars",
+ * not a registration. An exact-match lookup could only ever answer that with
+ * silence, so this returns every vehicle the fragment could mean and lets him
+ * pick. Customer names match too, which is the same question from the other
+ * end: one customer with three cars gets three rows.
+ *
+ * Returns the whole `VehicleMatch` — the customer and vehicle details to
+ * prefill, plus the history figures the dropdown shows. Those come from one
+ * grouped query, so offering the choice costs no more round trips than the
+ * single-answer lookup it replaces.
+ */
+export async function searchVehicleRegistrations(term: string): Promise<VehicleMatch[]> {
+  await requireSession();
+  return searchVehicles(term);
+}
+
+/**
+ * Every job ever done on one vehicle — the breakdown behind the summary line.
+ *
+ * Kept out of `searchVehicleRegistrations` on purpose: that returns up to eight
+ * vehicles and this returns up to a hundred jobs each, so folding it in would
+ * ship several hundred rows to the browser on every keystroke to render three
+ * numbers. It is fetched once, for the one vehicle actually chosen.
+ */
+export async function loadVehicleHistory(registration: string): Promise<VehicleHistoryEntry[]> {
+  await requireSession();
+  return getVehicleHistory(registration);
 }
 
 /**

@@ -36,18 +36,22 @@ interface NavItem {
 /**
  * Every page lives in the sidebar and the drawer. Only the five marked
  * `primary` also get a slot in the phone bottom bar — the things touched
- * between jobs. Awaiting payments, Paid jobs and Owed to others are money
- * reviews rather than day-to-day actions, so they stay one tap away in the
- * menu. Paid jobs in particular is a lookup ("what did we charge them in
- * March?"), not somewhere the owner works from, and the bottom bar has no sixth
- * slot that would not crush the other five.
+ * between jobs. Invoiced jobs, Paid jobs and Owed to others are money reviews
+ * rather than day-to-day actions, so they stay one tap away in the menu. Paid
+ * jobs in particular is a lookup ("what did we charge them in March?"), not
+ * somewhere the owner works from, and the bottom bar has no sixth slot that
+ * would not crush the other five.
+ *
+ * Jobs, Invoiced jobs and Paid jobs are deliberately adjacent and in that
+ * order: they are one pipeline, and a job leaves each for the next as it is
+ * billed and then paid.
  */
 const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Overview', shortLabel: 'Overview', icon: LayoutDashboard, exact: true, primary: true },
   { href: '/jobs', label: 'Jobs', shortLabel: 'Jobs', icon: Wrench, primary: true },
   { href: '/schedule', label: 'Schedule', shortLabel: 'Schedule', icon: CalendarDays, primary: true },
   { href: '/invoicer', label: 'Invoicer', shortLabel: 'Invoicer', icon: FileText, primary: true },
-  { href: '/awaiting-payments', label: 'Awaiting payments', shortLabel: 'Owed', icon: BanknoteArrowDown },
+  { href: '/awaiting-payments', label: 'Invoiced jobs', shortLabel: 'Invoiced', icon: BanknoteArrowDown },
   { href: '/paid-jobs', label: 'Paid jobs', shortLabel: 'Paid', icon: BanknoteArrowUp },
   { href: '/suppliers', label: 'Owed to others', shortLabel: 'Suppliers', icon: Truck },
   { href: '/settings', label: 'Settings', shortLabel: 'Settings', icon: Settings, primary: true },

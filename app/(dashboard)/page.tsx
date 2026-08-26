@@ -269,7 +269,7 @@ export default function OverviewPage() {
               status and so showed work that had already been invoiced and paid.
               Mirrors the Invoiced tile above it instead. */}
           <Card>
-            <CardHeader title="Awaiting payment" description="Latest 10 — invoiced, still owed" />
+            <CardHeader title="Invoiced jobs" description="Latest 10 — invoiced, still owed" />
             <Suspense fallback={<SkeletonTable columns={4} rows={4} />}>
               <JobsInPipeline bucket="invoiced" emptyText="Nothing outstanding." />
             </Suspense>
