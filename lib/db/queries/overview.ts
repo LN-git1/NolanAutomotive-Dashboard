@@ -5,7 +5,24 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '../index';
 import { invoices, jobAttachments, jobs, payments, supplierLedger, suppliers } from '../schema';
 import { INVOICE_HAS_BALANCE, REMAINING_CENTS } from './invoice-state';
-import { SUPPLIER_BALANCE_CENTS } from './supplier-ledger';
+
+/**
+ * One supplier account's balance in cents, as an aggregate over the joined
+ * ledger rows. Charges add, payments take off.
+ *
+ * Written as an aggregate over a LEFT JOIN rather than as a correlated
+ * subquery, deliberately. Drizzle decides for itself whether to qualify a
+ * column with its table name, and in a single-table SELECT it drops the
+ * qualification — which silently turns `WHERE supplier_id = id` inside a
+ * subquery into a comparison of two columns of the SAME table, matching
+ * nothing and quietly returning NULL. A join puts both tables in scope, so
+ * every column is qualified and the link cannot be lost.
+ */
+const BALANCE_CENTS = sql<string>`COALESCE(SUM(
+  CASE WHEN ${supplierLedger.kind} = 'payment'
+       THEN -${supplierLedger.amount}
+       ELSE ${supplierLedger.amount} END
+) * 100, 0)::bigint`;
 
 /**
  * Aggregates for the Overview page.
@@ -51,11 +68,18 @@ export async function getOutstandingInvoiceTotalCents(): Promise<number> {
  * tile would then read low, and no screen would show why.
  */
 export async function getOwedToSuppliersCents(): Promise<number> {
+  const balances = db
+    .select({ balanceCents: BALANCE_CENTS.as('balance_cents') })
+    .from(suppliers)
+    .leftJoin(supplierLedger, eq(supplierLedger.supplierId, suppliers.id))
+    .groupBy(suppliers.id)
+    .as('supplier_balances');
+
   const rows = await db
     .select({
-      total: sql<string>`COALESCE(SUM(GREATEST(${SUPPLIER_BALANCE_CENTS}, 0)), 0)::bigint`,
+      total: sql<string>`COALESCE(SUM(GREATEST(${balances.balanceCents}, 0)), 0)::bigint`,
     })
-    .from(suppliers);
+    .from(balances);
 
   return Number(rows[0]?.total ?? 0);
 }
@@ -104,14 +128,12 @@ export async function listSuppliersWithTotals() {
       id: suppliers.id,
       name: suppliers.name,
       notes: suppliers.notes,
-      balanceCents: sql<string>`(${SUPPLIER_BALANCE_CENTS})::bigint`,
-      lastEntryDate: sql<string | null>`(
-        SELECT MAX(${supplierLedger.entryDate})
-        FROM ${supplierLedger}
-        WHERE ${supplierLedger.supplierId} = ${suppliers.id}
-      )`,
+      balanceCents: BALANCE_CENTS,
+      lastEntryDate: sql<string | null>`MAX(${supplierLedger.entryDate})`,
     })
     .from(suppliers)
+    .leftJoin(supplierLedger, eq(supplierLedger.supplierId, suppliers.id))
+    .groupBy(suppliers.id)
     .orderBy(suppliers.name);
 }
 

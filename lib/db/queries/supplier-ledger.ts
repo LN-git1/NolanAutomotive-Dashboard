@@ -1,34 +1,12 @@
 import 'server-only';
 
-import { eq, sql, type SQL } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 import type { DbOrTx } from '../../counters';
 import { todayIsoDate } from '../../format';
 import { fromCents } from '../../money';
 import { db } from '../index';
-import { supplierLedger, suppliers } from '../schema';
-
-/**
- * What a supplier account is owed, in cents, for the `suppliers` row in scope.
- *
- * Charges add, payments take off. Signed, and deliberately not floored: a
- * negative balance is a real state here — the owner can hand a supplier more
- * than has been entered on the account, and that credit has to stay visible
- * rather than round away to "nothing owed". This is the opposite call to
- * `REMAINING_CENTS` in `invoice-state.ts`, which floors at zero, because an
- * invoice is a fixed document that cannot be overpaid while a supplier
- * account is a running total that can.
- *
- * A correlated subquery, matching `INVOICE_PAID_CENTS`: callers select whole
- * supplier rows, and a JOIN + GROUP BY would have to group by every column.
- */
-export const SUPPLIER_BALANCE_CENTS: SQL = sql`COALESCE((
-  SELECT SUM(CASE WHEN ${supplierLedger.kind} = 'payment'
-                  THEN -${supplierLedger.amount}
-                  ELSE ${supplierLedger.amount} END) * 100
-  FROM ${supplierLedger}
-  WHERE ${supplierLedger.supplierId} = ${suppliers.id}
-), 0)`;
+import { supplierLedger } from '../schema';
 
 /**
  * The balance on one supplier account, in cents. Positive means money is

@@ -336,7 +336,7 @@ export const supplierLedger = pgTable(
       .notNull()
       .references(() => suppliers.id, { onDelete: 'cascade' }),
     kind: supplierEntryKindEnum('kind').notNull().default('charge'),
-    /** Always positive. `kind` carries the sign — see `SUPPLIER_BALANCE_CENTS`. */
+    /** Always positive. `kind` carries the sign when a balance is summed. */
     amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
     entryDate: date('bill_date').notNull(),
     reference: text('reference'),
