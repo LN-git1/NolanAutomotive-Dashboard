@@ -100,7 +100,7 @@ export function MarkPaidModal({
             <div className="mt-3">
               <PaymentForm
                 remainingCents={invoice.remainingCents}
-                jobNumber={jobNumber}
+                subject={jobNumber}
                 pending={pending}
                 onSubmit={submit}
                 onCancel={onClose}

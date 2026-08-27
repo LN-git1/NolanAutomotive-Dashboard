@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/lib/auth/require-session';
 import { db } from '@/lib/db';
-import { invoices, jobAttachments, jobs, payments, supplierBills, suppliers } from '@/lib/db/schema';
+import { invoices, jobAttachments, jobs, payments, supplierLedger, suppliers } from '@/lib/db/schema';
 import { removeObjects } from '@/lib/storage/signedUrl';
 import { ATTACHMENTS_BUCKET, INVOICES_BUCKET } from '@/lib/storage/r2';
 import { RESET_CONFIRMATION_PHRASE } from '@/lib/validation/danger';
@@ -37,7 +37,7 @@ export interface ResetResult {
     invoices: number;
     attachments: number;
     suppliers: number;
-    supplierBills: number;
+    supplierEntries: number;
     payments: number;
     filesRemoved: number;
   };
@@ -56,10 +56,10 @@ export async function factoryReset(confirmation: string): Promise<ResetResult> {
   try {
     // Collect the storage paths BEFORE the rows are deleted, otherwise the
     // files become unreachable orphans with nothing pointing at them.
-    const [attachmentRows, invoiceRows, billRows] = await Promise.all([
+    const [attachmentRows, invoiceRows, receiptRows] = await Promise.all([
       db.select({ path: jobAttachments.storagePath }).from(jobAttachments),
       db.select({ path: invoices.pdfStoragePath }).from(invoices),
-      db.select({ path: supplierBills.attachmentStoragePath }).from(supplierBills),
+      db.select({ path: supplierLedger.attachmentStoragePath }).from(supplierLedger),
     ]);
 
     const counts = await db.transaction(async (tx) => {
@@ -67,7 +67,7 @@ export async function factoryReset(confirmation: string): Promise<ResetResult> {
        * Order matters. `invoices` references `jobs` without ON DELETE CASCADE
        * — that is deliberate, so an issued invoice can never be silently
        * orphaned by deleting its job — which means invoices must go first.
-       * Attachments, bills, and payments would all cascade, but they are
+       * Attachments, supplier entries, and payments would all cascade, but they are
        * deleted explicitly so the reported counts are accurate — payments in
        * particular MUST go before invoices, since it cascades FROM invoices
        * and a plain cascade delete gives no row count to report.
@@ -76,7 +76,9 @@ export async function factoryReset(confirmation: string): Promise<ResetResult> {
       const deletedInvoices = await tx.delete(invoices).returning({ id: invoices.id });
       const deletedAttachments = await tx.delete(jobAttachments).returning({ id: jobAttachments.id });
       const deletedJobs = await tx.delete(jobs).returning({ id: jobs.id });
-      const deletedBills = await tx.delete(supplierBills).returning({ id: supplierBills.id });
+      const deletedEntries = await tx
+        .delete(supplierLedger)
+        .returning({ id: supplierLedger.id });
       const deletedSuppliers = await tx.delete(suppliers).returning({ id: suppliers.id });
 
       // Back to a fresh sequence: the next job is J-0001 and the next invoice
@@ -90,7 +92,7 @@ export async function factoryReset(confirmation: string): Promise<ResetResult> {
         invoices: deletedInvoices.length,
         attachments: deletedAttachments.length,
         suppliers: deletedSuppliers.length,
-        supplierBills: deletedBills.length,
+        supplierEntries: deletedEntries.length,
         payments: deletedPayments.length,
       };
     });
@@ -100,7 +102,9 @@ export async function factoryReset(confirmation: string): Promise<ResetResult> {
     let filesRemoved = 0;
     filesRemoved += await removeObjects(
       ATTACHMENTS_BUCKET,
-      [...attachmentRows, ...billRows].map((row) => row.path).filter((p): p is string => Boolean(p)),
+      [...attachmentRows, ...receiptRows]
+        .map((row) => row.path)
+        .filter((p): p is string => Boolean(p)),
     );
     filesRemoved += await removeObjects(
       INVOICES_BUCKET,

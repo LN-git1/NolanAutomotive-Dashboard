@@ -20,7 +20,7 @@ const EXPORTS = [
   {
     href: '/api/export/supplier-bills',
     label: 'Supplier bills',
-    description: 'All supplier bills and their paid status',
+    description: 'Every supplier account entry — purchases added and money paid off',
   },
 ] as const;
 

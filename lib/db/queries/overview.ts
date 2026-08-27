@@ -3,8 +3,9 @@ import 'server-only';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '../index';
-import { invoices, jobAttachments, jobs, payments, supplierBills, suppliers } from '../schema';
+import { invoices, jobAttachments, jobs, payments, supplierLedger, suppliers } from '../schema';
 import { INVOICE_HAS_BALANCE, REMAINING_CENTS } from './invoice-state';
+import { SUPPLIER_BALANCE_CENTS } from './supplier-ledger';
 
 /**
  * Aggregates for the Overview page.
@@ -39,14 +40,22 @@ export async function getOutstandingInvoiceTotalCents(): Promise<number> {
   return Number(rows[0]?.total ?? 0);
 }
 
-/** Sum of supplier bills that have not been marked paid. */
+/**
+ * What the garage still owes its suppliers, across every account.
+ *
+ * Each account's balance is floored at zero BEFORE the accounts are summed,
+ * which is the whole reason this is not one flat sum of charges minus
+ * payments. A supplier can be in credit (paying more than has been entered on
+ * the account is allowed — see `applySupplierPayment`), and a flat sum would
+ * quietly let that credit cancel out a real debt to a different supplier. The
+ * tile would then read low, and no screen would show why.
+ */
 export async function getOwedToSuppliersCents(): Promise<number> {
   const rows = await db
     .select({
-      total: sql<string>`COALESCE(SUM(${supplierBills.amount}) * 100, 0)::bigint`,
+      total: sql<string>`COALESCE(SUM(GREATEST(${SUPPLIER_BALANCE_CENTS}, 0)), 0)::bigint`,
     })
-    .from(supplierBills)
-    .where(isNull(supplierBills.paidAt));
+    .from(suppliers);
 
   return Number(rows[0]?.total ?? 0);
 }
@@ -82,18 +91,27 @@ export async function listRecentInvoices(limit = 10) {
     .limit(limit);
 }
 
+/**
+ * One row per supplier with the balance on their account.
+ *
+ * `balanceCents` is signed, unlike the Overview total above: this is the list
+ * you open to see who is owed what, so a supplier holding a credit has to say
+ * so on their own line rather than be flattened to zero.
+ */
 export async function listSuppliersWithTotals() {
   return db
     .select({
       id: suppliers.id,
       name: suppliers.name,
       notes: suppliers.notes,
-      outstandingCents: sql<string>`COALESCE(SUM(${supplierBills.amount}) FILTER (WHERE ${supplierBills.paidAt} IS NULL) * 100, 0)::bigint`,
-      billCount: sql<number>`COUNT(${supplierBills.id})::int`,
+      balanceCents: sql<string>`(${SUPPLIER_BALANCE_CENTS})::bigint`,
+      lastEntryDate: sql<string | null>`(
+        SELECT MAX(${supplierLedger.entryDate})
+        FROM ${supplierLedger}
+        WHERE ${supplierLedger.supplierId} = ${suppliers.id}
+      )`,
     })
     .from(suppliers)
-    .leftJoin(supplierBills, eq(supplierBills.supplierId, suppliers.id))
-    .groupBy(suppliers.id)
     .orderBy(suppliers.name);
 }
 
@@ -104,12 +122,12 @@ export async function listSuppliersWithTotals() {
  * so the number shown has to match what actually gets destroyed.
  */
 export async function getResetCounts() {
-  const [jobRows, invoiceRows, attachmentRows, supplierRows, billRows, paymentRows] = await Promise.all([
+  const [jobRows, invoiceRows, attachmentRows, supplierRows, entryRows, paymentRows] = await Promise.all([
     db.select({ n: sql<number>`count(*)::int` }).from(jobs),
     db.select({ n: sql<number>`count(*)::int` }).from(invoices),
     db.select({ n: sql<number>`count(*)::int` }).from(jobAttachments),
     db.select({ n: sql<number>`count(*)::int` }).from(suppliers),
-    db.select({ n: sql<number>`count(*)::int` }).from(supplierBills),
+    db.select({ n: sql<number>`count(*)::int` }).from(supplierLedger),
     db.select({ n: sql<number>`count(*)::int` }).from(payments),
   ]);
 
@@ -118,17 +136,26 @@ export async function getResetCounts() {
     invoices: Number(invoiceRows[0]?.n ?? 0),
     attachments: Number(attachmentRows[0]?.n ?? 0),
     suppliers: Number(supplierRows[0]?.n ?? 0),
-    supplierBills: Number(billRows[0]?.n ?? 0),
+    supplierEntries: Number(entryRows[0]?.n ?? 0),
     payments: Number(paymentRows[0]?.n ?? 0),
   };
 }
 
-export async function getSupplierWithBills(supplierId: string) {
+/**
+ * One supplier and their whole account history, newest first.
+ *
+ * Ordered by `createdAt` as well as the entry date, and not by date alone:
+ * `bill_date` is a bare DATE, so a purchase and the payment that settles it on
+ * the same afternoon tie, and the two would swap places between renders. The
+ * page shows these as a running account, where the order of same-day entries
+ * is the order they were keyed in.
+ */
+export async function getSupplierWithEntries(supplierId: string) {
   return db.query.suppliers.findFirst({
     where: eq(suppliers.id, supplierId),
     with: {
-      bills: {
-        orderBy: [desc(supplierBills.billDate)],
+      entries: {
+        orderBy: [desc(supplierLedger.entryDate), desc(supplierLedger.createdAt)],
       },
     },
   });

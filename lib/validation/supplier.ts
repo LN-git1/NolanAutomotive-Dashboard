@@ -9,18 +9,29 @@ export const supplierInputSchema = z.object({
 
 export type SupplierInput = z.infer<typeof supplierInputSchema>;
 
-export const supplierBillInputSchema = z.object({
+/**
+ * A purchase going onto a supplier's account. Payments coming off it are not
+ * validated here: they carry an amount and nothing else, so they reuse
+ * `supplierPaymentAmountSchema` below rather than a whole form schema.
+ */
+export const supplierChargeInputSchema = z.object({
   supplierId: uuidString,
-  // 8 integer digits is generous for a small garage's supplier bills (up to
-  // ~€100m) while staying safely under the amount column's numeric(12,2) cap.
+  // 8 integer digits is generous for a small garage's supplier purchases (up
+  // to ~€100m) while staying safely under the amount column's numeric(12,2) cap.
   amount: decimalString({ label: 'Amount', maxIntegerDigits: 8 }),
-  billDate: requiredDate,
+  entryDate: requiredDate,
   reference: optionalText,
   notes: optionalText,
   attachmentStoragePath: optionalText,
 });
 
-export type SupplierBillInput = z.infer<typeof supplierBillInputSchema>;
+export type SupplierChargeInput = z.infer<typeof supplierChargeInputSchema>;
 
-export const billIdSchema = z.object({ billId: uuidString });
+/** Same cap as a charge — the two sides of one account must agree on range. */
+export const supplierPaymentAmountSchema = decimalString({
+  label: 'Amount',
+  maxIntegerDigits: 8,
+});
+
+export const supplierEntryIdSchema = z.object({ entryId: uuidString });
 export const supplierIdSchema = z.object({ supplierId: uuidString });

@@ -149,7 +149,7 @@ async function MoneyTotals() {
       <Kpi
         label="Total owed to suppliers"
         value={formatEur(owedCents)}
-        hint="Unpaid supplier bills"
+        hint="Outstanding on supplier accounts"
         href="/suppliers"
       />
     </>

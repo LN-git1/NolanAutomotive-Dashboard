@@ -61,7 +61,7 @@ export function MarkPaidButton({
       {error ? <Alert>{error}</Alert> : null}
       <PaymentForm
         remainingCents={remainingCents}
-        jobNumber={jobNumber}
+        subject={jobNumber}
         pending={pending}
         onSubmit={submit}
         onCancel={reset}

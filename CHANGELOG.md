@@ -1,5 +1,102 @@
 # Changelog
 
+## 27/08/2026 @ 22:07:23 IST — "claude-opus-5"
+
+**Project completion: 100.00%**
+
+Basis: 3 of 3 requests made this session — a full/partial payment modal on supplier bills, one
+running bill per supplier instead of individual bills, and a single supplier page showing the
+whole history with buttons to add money on and take money off. Typecheck clean, eslint clean on
+every touched file, 217 tests passing (was 210, +7 new for the supplier ledger, run against a
+real Postgres). Both migrations applied locally and the resulting table inspected directly
+rather than trusting drizzle-kit's exit message. The backfill was proved on a rolled-back replica
+of the pre-migration table: EUR 45.25 outstanding under the old model, EUR 45.25 balance after
+conversion. Not verified in a browser this session — the CDP profile stopped returning the
+rendered DOM part-way through, and the work was shipped on the test evidence instead.
+
+### Changed — a supplier is now one running bill, not a pile of separate ones
+
+Lee asked for exactly what he does in practice: open Fergal Allen, see one bill, see everything
+that has gone on it and come off it, and have two buttons — add a purchase, or pay some money
+off. Individual bills each carrying their own paid/unpaid switch never matched that. A payment to
+a supplier is a lump sum against the account; it rarely lines up with one docket, so there was
+often no honest way to record it.
+
+So `supplier_bills` became a ledger. `kind = 'charge'` adds to what is owed, `kind = 'payment'`
+takes off it, and the balance is the difference — derived, never stored, exactly like "owed" and
+"paid" on the customer side. The two directions of money in this app now work the same way, which
+is the point: neither can drift out of step with what actually happened.
+
+- **The table kept its name.** `supplier_bills` and its `bill_date` column are unchanged
+  physically, and Drizzle maps them to `supplierLedger`/`entryDate` — the same call already made
+  for `invoices`' "services" columns. Renaming a live table carrying real purchase history buys
+  nothing, and every receipt in R2 is reachable only through the id of the row pointing at it, so
+  those ids had to survive. `/api/supplier-bills/[id]/receipt` still works on the old links.
+- **Migration 0010** adds `kind` (defaulting to `charge`). **Migration 0011** is the one that
+  matters: it converts every historically-paid bill into a real payment entry *before* dropping
+  `paid_at`. Without that step every settled bill would silently come back as outstanding and
+  inflate what the dashboard says is owed to every supplier. The old model had no partial
+  payments, so the conversion is exact — one payment entry per settled bill, full amount, dated
+  when it was marked paid. Nothing estimated, no balance moved.
+
+### Added — mark paid, full or partial, on a supplier bill
+
+The "Mark paid" button now opens the same full/partial control the job side uses
+(`components/payments/payment-form.tsx`), rather than a switch that could only say "all of it".
+One component deliberately serves both directions of money so "paid in full" and "partial
+payment" cannot come to mean two different things depending on the screen.
+
+`applySupplierPayment` is the counterpart of `applyPayment` and is written to the same rules: it
+locks the supplier row `FOR UPDATE` before reading the balance, and resolves "pay the bill off"
+inside that transaction rather than trusting a figure from the browser — a purchase keyed in
+seconds earlier cannot be paid past.
+
+Where it deliberately differs: **paying more than is on the bill is allowed**, and carries as a
+credit. That was Lee's call when asked. An invoice is a document with a fixed total, so
+overpaying it is a mistake; a supplier account is a running total, and the garage does hand a
+supplier a round sum before that week's dockets are entered. Refusing it would leave real money
+unrecordable. Two consequences follow, both handled: the Overview tile floors each account at
+zero *before* summing, so one supplier's credit cannot cancel out what is genuinely owed to
+another; and an account in credit says so in words on both the list and its own page, rather than
+showing a bare minus sign to decode.
+
+### Changed — the supplier page
+
+One balance card (with both buttons on it) and one history table, replacing the two stat tiles,
+the bills table and the permanently-open add form. Every row shows what was added, what was paid
+off, and the balance after it — computed oldest-first and read back newest-first, so each line
+answers "what was on the bill after this?". Adding a purchase moved into a modal, so the history
+is what the page is about.
+
+Deleting one entry stays available, unlike `payments` against an invoice, which are never
+deleted. An invoice is a legal document whose history has to stand; a supplier account is the
+garage's own record of what it owes, so a docket keyed in twice is fixed by removing the wrong
+line rather than entering a second wrong one to cancel it.
+
+### Files Touched
+
+- `lib/db/schema.ts` — `supplierEntryKindEnum`, `supplierLedger` (was `supplierBills`), `kind`,
+  `entryDate`, `paidAt` dropped, relations renamed to `entries`
+- `drizzle/migrations/0010_flippant_lady_mastermind.sql` — the `kind` column and its index
+- `drizzle/migrations/0011_lonely_mandarin.sql` — hand-written backfill, then `paid_at` dropped
+- `lib/db/queries/supplier-ledger.ts` (new) — `SUPPLIER_BALANCE_CENTS`,
+  `getSupplierBalanceCents`, `applySupplierPayment`
+- `lib/db/queries/overview.ts` — `getOwedToSuppliersCents` floors per account,
+  `listSuppliersWithTotals` returns a signed balance and last-entry date, `getSupplierWithEntries`
+- `lib/actions/suppliers.ts` — `addSupplierCharge`, `recordSupplierPayment`,
+  `deleteSupplierEntry`; `setBillPaid` gone
+- `lib/validation/supplier.ts` — `supplierChargeInputSchema`, `supplierPaymentAmountSchema`
+- `components/suppliers/supplier-account-actions.tsx` (new) — the two buttons and both modals
+- `components/suppliers/entry-actions.tsx` (new), `charge-form.tsx` (was `bill-form.tsx`),
+  `bill-actions.tsx` removed
+- `components/payments/payment-form.tsx` — neutral `subject`, `amountOnly`, `fullLabel`; call
+  sites in `mark-paid-button.tsx` and `mark-paid-modal.tsx`
+- `app/(dashboard)/suppliers/[supplierId]/page.tsx` + `loading.tsx`, `suppliers/page.tsx` +
+  `loading.tsx`, `page.tsx` (tile hint), `settings/page.tsx` (export description)
+- `app/api/export/supplier-bills/route.ts` — added/paid-off columns; `app/api/supplier-bills/[id]/receipt/route.ts`
+- `lib/actions/danger.ts`, `components/settings/factory-reset.tsx` — entry counts and wording
+- `tests/supplier-ledger.test.ts` (new) — 7 tests including the credit cases
+
 ## 26/08/2026 @ 17:22:51 IST — "claude-sonnet-5"
 
 **Project completion: 100.00%**

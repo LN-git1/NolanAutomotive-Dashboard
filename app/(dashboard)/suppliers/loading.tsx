@@ -31,7 +31,7 @@ export default function SuppliersLoading() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_22rem]">
         <Card>
           <SkeletonCardHeader />
-          <SkeletonTable columns={3} rows={5} lastColumnRight />
+          <SkeletonTable columns={4} rows={5} lastColumnRight />
         </Card>
 
         <Card>

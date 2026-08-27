@@ -3,7 +3,7 @@ import { desc, eq } from 'drizzle-orm';
 import { requireApiSession } from '@/lib/auth/require-session';
 import { csvResponse, toCsv } from '@/lib/csv';
 import { db } from '@/lib/db';
-import { supplierBills, suppliers } from '@/lib/db/schema';
+import { supplierLedger, suppliers } from '@/lib/db/schema';
 import { todayIsoDate } from '@/lib/format';
 
 export const runtime = 'nodejs';
@@ -15,26 +15,39 @@ export async function GET() {
   const rows = await db
     .select({
       supplier: suppliers.name,
-      billDate: supplierBills.billDate,
-      reference: supplierBills.reference,
-      amount: supplierBills.amount,
-      notes: supplierBills.notes,
-      paidAt: supplierBills.paidAt,
-      createdAt: supplierBills.createdAt,
+      entryDate: supplierLedger.entryDate,
+      kind: supplierLedger.kind,
+      reference: supplierLedger.reference,
+      amount: supplierLedger.amount,
+      notes: supplierLedger.notes,
+      createdAt: supplierLedger.createdAt,
     })
-    .from(supplierBills)
-    .innerJoin(suppliers, eq(supplierBills.supplierId, suppliers.id))
-    .orderBy(desc(supplierBills.billDate));
+    .from(supplierLedger)
+    .innerJoin(suppliers, eq(supplierLedger.supplierId, suppliers.id))
+    // Same tiebreak as the on-screen history: `bill_date` is a bare DATE, so
+    // a purchase and the payment settling it on one afternoon would otherwise
+    // export in an arbitrary order.
+    .orderBy(desc(supplierLedger.entryDate), desc(supplierLedger.createdAt));
 
+  /*
+    Two signed columns rather than one amount and a type flag: a spreadsheet
+    can then sum the account without the reader first having to work out which
+    rows to subtract, and the CSV says the same thing the account page does.
+  */
   const csv = toCsv(
-    rows.map((row) => ({ ...row, status: row.paidAt ? 'paid' : 'outstanding' })),
+    rows.map((row) => ({
+      ...row,
+      type: row.kind === 'payment' ? 'Paid off' : 'Added to bill',
+      added: row.kind === 'payment' ? '' : row.amount,
+      paidOff: row.kind === 'payment' ? row.amount : '',
+    })),
     [
       { key: 'supplier', header: 'Supplier' },
-      { key: 'billDate', header: 'Bill date' },
+      { key: 'entryDate', header: 'Date' },
+      { key: 'type', header: 'Type' },
       { key: 'reference', header: 'Reference' },
-      { key: 'amount', header: 'Amount' },
-      { key: 'status', header: 'Status' },
-      { key: 'paidAt', header: 'Paid at' },
+      { key: 'added', header: 'Added to bill' },
+      { key: 'paidOff', header: 'Paid off' },
       { key: 'notes', header: 'Notes' },
       { key: 'createdAt', header: 'Recorded' },
     ],

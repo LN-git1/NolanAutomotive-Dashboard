@@ -8,8 +8,8 @@ import { Button } from '@/components/ui';
 import { deleteSupplier } from '@/lib/actions/suppliers';
 
 /**
- * Unlike `BillActions`, this surfaces a failed delete rather than discarding
- * the result silently — a failed bill delete just leaves the row visible, but
+ * Unlike `EntryActions`, this surfaces a failed delete rather than discarding
+ * the result silently — a failed entry delete just leaves the row visible, but
  * a failed supplier delete (on the detail page) is followed by leaving the
  * page, so silence here would mean the owner never sees why the supplier is
  * still there.
@@ -28,7 +28,7 @@ export function SupplierActions({
   const [pending, startTransition] = useTransition();
 
   function remove() {
-    if (!window.confirm(`Delete ${name}? This also deletes all their bills and cannot be undone.`)) {
+    if (!window.confirm(`Delete ${name}? This also deletes their whole bill history and cannot be undone.`)) {
       return;
     }
 

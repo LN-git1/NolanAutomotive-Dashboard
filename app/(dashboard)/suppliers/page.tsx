@@ -5,6 +5,7 @@ import { SupplierActions } from '@/components/suppliers/supplier-actions';
 import { SupplierForm } from '@/components/suppliers/supplier-form';
 import { Card, CardBody, CardHeader, Empty, Table, Td, Th } from '@/components/ui';
 import { listSuppliersWithTotals } from '@/lib/db/queries/overview';
+import { formatDate } from '@/lib/format';
 import { formatEur } from '@/lib/money';
 
 export const metadata: Metadata = { title: 'Owed to others' };
@@ -12,13 +13,25 @@ export const dynamic = 'force-dynamic';
 
 export default async function SuppliersPage() {
   const suppliers = await listSuppliersWithTotals();
-  const totalOwed = suppliers.reduce((sum, supplier) => sum + Number(supplier.outstandingCents), 0);
+
+  /*
+    Each account is floored at zero before the accounts are added up, matching
+    `getOwedToSuppliersCents` behind the Overview tile — one supplier holding a
+    credit must not cancel out what is genuinely owed to another. The two
+    figures are the same number on two screens and cannot be allowed to differ.
+  */
+  const totalOwed = suppliers.reduce(
+    (sum, supplier) => sum + Math.max(Number(supplier.balanceCents), 0),
+    0,
+  );
 
   return (
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-lg font-semibold text-ink">Owed to others</h1>
-        <p className="text-sm text-muted">Suppliers and outstanding bills.</p>
+        <p className="text-sm text-muted">
+          One running bill per supplier. Open one to add purchases or pay money off it.
+        </p>
       </div>
 
       <Card>
@@ -32,14 +45,14 @@ export default async function SuppliersPage() {
         <Card>
           <CardHeader title="Suppliers" />
           {suppliers.length === 0 ? (
-            <Empty>No suppliers yet. Add one to start tracking bills.</Empty>
+            <Empty>No suppliers yet. Add one to start a bill.</Empty>
           ) : (
             <Table>
               <thead>
                 <tr>
                   <Th>Supplier</Th>
-                  <Th>Bills</Th>
-                  <Th className="text-right">Outstanding</Th>
+                  <Th>Last entry</Th>
+                  <Th className="text-right">On the bill</Th>
                   <Th className="text-right">Actions</Th>
                 </tr>
               </thead>
@@ -57,11 +70,20 @@ export default async function SuppliersPage() {
                         <div className="text-xs text-muted">{supplier.notes}</div>
                       ) : null}
                     </Td>
-                    <Td label="Bills" className="text-muted">
-                      {supplier.billCount}
+                    <Td label="Last entry" className="text-muted">
+                      {supplier.lastEntryDate ? formatDate(supplier.lastEntryDate) : '—'}
                     </Td>
-                    <Td label="Outstanding" className="text-right tabular">
-                      {formatEur(Number(supplier.outstandingCents))}
+                    <Td label="On the bill" className="text-right tabular">
+                      {/* A credit is a real state here, so it is named rather
+                          than shown as a bare minus sign the owner has to
+                          decode. */}
+                      {Number(supplier.balanceCents) < 0 ? (
+                        <span className="text-muted">
+                          {formatEur(Math.abs(Number(supplier.balanceCents)))} in credit
+                        </span>
+                      ) : (
+                        formatEur(Number(supplier.balanceCents))
+                      )}
                     </Td>
                     <Td label="Actions" className="text-right">
                       <div className="flex justify-end">

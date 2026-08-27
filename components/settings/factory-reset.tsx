@@ -13,7 +13,7 @@ export interface ResetCounts {
   invoices: number;
   attachments: number;
   suppliers: number;
-  supplierBills: number;
+  supplierEntries: number;
   payments: number;
 }
 
@@ -36,7 +36,7 @@ export function FactoryReset({ counts }: { counts: ResetCounts }) {
     counts.invoices +
     counts.attachments +
     counts.suppliers +
-    counts.supplierBills +
+    counts.supplierEntries +
     counts.payments;
   const isEmpty = total === 0;
   const phraseMatches = phrase.trim() === RESET_CONFIRMATION_PHRASE;
@@ -72,8 +72,8 @@ export function FactoryReset({ counts }: { counts: ResetCounts }) {
             Dashboard reset. Removed {done.jobs} {done.jobs === 1 ? 'job' : 'jobs'},{' '}
             {done.invoices} {done.invoices === 1 ? 'invoice' : 'invoices'}, {done.payments}{' '}
             {done.payments === 1 ? 'payment' : 'payments'}, {done.suppliers}{' '}
-            {done.suppliers === 1 ? 'supplier' : 'suppliers'}, {done.supplierBills}{' '}
-            {done.supplierBills === 1 ? 'bill' : 'bills'} and {done.filesRemoved}{' '}
+            {done.suppliers === 1 ? 'supplier' : 'suppliers'}, {done.supplierEntries}{' '}
+            {done.supplierEntries === 1 ? 'bill entry' : 'bill entries'} and {done.filesRemoved}{' '}
             {done.filesRemoved === 1 ? 'file' : 'files'}. Numbering restarts at J-0001 and
             NA-0001.
           </Alert>
@@ -102,7 +102,7 @@ export function FactoryReset({ counts }: { counts: ResetCounts }) {
             </li>
             <li className="flex justify-between gap-2">
               <span className="text-muted">Supplier bills</span>
-              <span className="font-medium tabular">{counts.supplierBills}</span>
+              <span className="font-medium tabular">{counts.supplierEntries}</span>
             </li>
             <li className="flex justify-between gap-2">
               <span className="text-muted">Payments recorded</span>
@@ -140,7 +140,7 @@ export function FactoryReset({ counts }: { counts: ResetCounts }) {
                   <li>Every job, including customer names, addresses and phone numbers.</li>
                   <li>Every invoice and its stored PDF.</li>
                   <li>Every payment recorded against an invoice.</li>
-                  <li>Every supplier and every bill.</li>
+                  <li>Every supplier and their whole bill history.</li>
                   <li>All uploaded photos and receipts.</li>
                   <li>
                     Job and invoice numbering restarts — the next invoice will be{' '}

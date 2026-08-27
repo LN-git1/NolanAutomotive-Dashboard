@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { BillActions } from '@/components/suppliers/bill-actions';
-import { BillForm } from '@/components/suppliers/bill-form';
+import { EntryActions } from '@/components/suppliers/entry-actions';
+import { SupplierAccountActions } from '@/components/suppliers/supplier-account-actions';
 import { SupplierActions } from '@/components/suppliers/supplier-actions';
-import { Badge, Card, CardBody, CardHeader, Empty, Table, Td, Th } from '@/components/ui';
-import { getSupplierWithBills } from '@/lib/db/queries/overview';
+import { Card, CardBody, CardHeader, Empty, Table, Td, Th } from '@/components/ui';
+import { getSupplierWithEntries } from '@/lib/db/queries/overview';
 import { formatDate, numericToEur } from '@/lib/format';
 import { formatEur, toCents } from '@/lib/money';
 
@@ -16,15 +16,37 @@ export default async function SupplierDetailPage({
   params,
 }: PageProps<'/suppliers/[supplierId]'>) {
   const { supplierId } = await params;
-  const supplier = await getSupplierWithBills(supplierId);
+  const supplier = await getSupplierWithEntries(supplierId);
 
   if (!supplier) notFound();
 
-  const outstandingCents = supplier.bills
-    .filter((bill) => bill.paidAt === null)
-    .reduce((sum, bill) => sum + toCents(bill.amount), 0);
+  /*
+    The account is one running total, so the three figures below come from one
+    pass over the same entries — charges on, payments off. Cents throughout
+    (`toCents`), never float euro, matching every other money total in the app.
+  */
+  const chargedCents = supplier.entries
+    .filter((entry) => entry.kind === 'charge')
+    .reduce((sum, entry) => sum + toCents(entry.amount), 0);
 
-  const totalCents = supplier.bills.reduce((sum, bill) => sum + toCents(bill.amount), 0);
+  const paidCents = supplier.entries
+    .filter((entry) => entry.kind === 'payment')
+    .reduce((sum, entry) => sum + toCents(entry.amount), 0);
+
+  const balanceCents = chargedCents - paidCents;
+
+  /*
+    Entries arrive newest-first, which is how the table reads, but a running
+    balance only makes sense computed oldest-first. So it is worked out in
+    chronological order and looked up by id on the way back down the list —
+    every row then answers "what was on the bill after this?".
+  */
+  const balanceAfter = new Map<string, number>();
+  let running = 0;
+  for (const entry of [...supplier.entries].reverse()) {
+    running += entry.kind === 'payment' ? -toCents(entry.amount) : toCents(entry.amount);
+    balanceAfter.set(entry.id, running);
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -36,51 +58,66 @@ export default async function SupplierDetailPage({
         <SupplierActions supplierId={supplier.id} name={supplier.name} redirectOnDelete />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Card>
-          <CardBody>
-            <p className="text-xs font-medium text-muted">Outstanding</p>
-            <p className="mt-1 text-2xl font-semibold text-ink tabular">
-              {formatEur(outstandingCents)}
+      <Card>
+        <CardBody className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-medium text-muted">
+              {balanceCents < 0 ? 'In credit' : 'On the bill'}
             </p>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody>
-            <p className="text-xs font-medium text-muted">All bills recorded</p>
-            <p className="mt-1 text-2xl font-semibold text-ink tabular">{formatEur(totalCents)}</p>
-          </CardBody>
-        </Card>
-      </div>
+            <p className="mt-1 text-3xl font-semibold text-ink tabular">
+              {formatEur(Math.abs(balanceCents))}
+            </p>
+            <p className="mt-1 text-xs text-muted tabular">
+              {formatEur(chargedCents)} added · {formatEur(paidCents)} paid off
+            </p>
+          </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_22rem]">
-        <Card>
-          <CardHeader title="Bills" />
-          {supplier.bills.length === 0 ? (
-            <Empty>No bills recorded for this supplier.</Empty>
-          ) : (
-            <Table>
-              <thead>
-                <tr>
-                  <Th>Date</Th>
-                  <Th>Reference</Th>
-                  <Th className="text-right">Amount</Th>
-                  <Th>Status</Th>
-                  <Th className="text-right">Actions</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {supplier.bills.map((bill) => (
-                  <tr key={bill.id}>
+          <SupplierAccountActions
+            supplierId={supplier.id}
+            supplierName={supplier.name}
+            balanceCents={balanceCents}
+          />
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title="History" />
+        {supplier.entries.length === 0 ? (
+          <Empty>
+            Nothing on this account yet. Add a purchase to start the bill.
+          </Empty>
+        ) : (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Date</Th>
+                <Th>Details</Th>
+                <Th className="text-right">Added</Th>
+                <Th className="text-right">Paid off</Th>
+                <Th className="text-right">Balance</Th>
+                <Th className="text-right">Actions</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {supplier.entries.map((entry) => {
+                const isPayment = entry.kind === 'payment';
+                const label = `${isPayment ? 'payment' : 'purchase'} of ${numericToEur(
+                  entry.amount,
+                )} on ${formatDate(entry.entryDate)}`;
+
+                return (
+                  <tr key={entry.id}>
                     <Td label="Date" className="text-muted">
-                      {formatDate(bill.billDate)}
+                      {formatDate(entry.entryDate)}
                     </Td>
-                    <Td label="Reference">
-                      <div>{bill.reference ?? '—'}</div>
-                      {bill.notes ? <div className="text-xs text-muted">{bill.notes}</div> : null}
-                      {bill.attachmentStoragePath ? (
+                    <Td label="Details">
+                      <div>{entry.reference ?? (isPayment ? 'Payment' : 'Purchase')}</div>
+                      {entry.notes ? (
+                        <div className="text-xs text-muted">{entry.notes}</div>
+                      ) : null}
+                      {entry.attachmentStoragePath ? (
                         <a
-                          href={`/api/supplier-bills/${bill.id}/receipt`}
+                          href={`/api/supplier-bills/${entry.id}/receipt`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-brand-dark hover:underline"
@@ -89,33 +126,25 @@ export default async function SupplierDetailPage({
                         </a>
                       ) : null}
                     </Td>
-                    <Td label="Amount" className="text-right tabular">
-                      {numericToEur(bill.amount)}
+                    <Td label="Added" className="text-right tabular">
+                      {isPayment ? '—' : numericToEur(entry.amount)}
                     </Td>
-                    <Td label="Status">
-                      <Badge value={bill.paidAt ? 'paid' : 'invoiced'} />
+                    <Td label="Paid off" className="text-right tabular text-brand-dark">
+                      {isPayment ? numericToEur(entry.amount) : '—'}
+                    </Td>
+                    <Td label="Balance" className="text-right tabular text-muted">
+                      {formatEur(balanceAfter.get(entry.id) ?? 0)}
                     </Td>
                     <Td label="Actions">
-                      <BillActions
-                        billId={bill.id}
-                        paid={bill.paidAt !== null}
-                        reference={bill.reference ?? formatDate(bill.billDate)}
-                      />
+                      <EntryActions entryId={entry.id} label={label} />
                     </Td>
                   </tr>
-                ))}
-              </tbody>
-            </Table>
-          )}
-        </Card>
-
-        {/* order-first on mobile, same reasoning as the supplier list page:
-            adding a bill shouldn't require scrolling past the whole list. */}
-        <Card className="order-first xl:order-none">
-          <CardHeader title="Add bill" />
-          <BillForm supplierId={supplier.id} />
-        </Card>
-      </div>
+                );
+              })}
+            </tbody>
+          </Table>
+        )}
+      </Card>
     </div>
   );
 }

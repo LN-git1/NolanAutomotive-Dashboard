@@ -308,25 +308,45 @@ export const suppliers = pgTable('suppliers', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const supplierBills = pgTable(
+export const supplierEntryKindEnum = pgEnum('supplier_entry_kind', ['charge', 'payment']);
+
+/**
+ * A supplier is one running account, not a pile of separate bills.
+ *
+ * That is how the garage actually deals with its suppliers: purchases go on
+ * the account through the month and money comes off it whenever it is paid,
+ * rarely one payment per docket. So this table is a ledger — a `charge` adds
+ * to what is owed, a `payment` takes off it — and the balance is the
+ * difference, derived and never stored. It is the same shape as `payments`
+ * against an invoice, which is deliberate: money owed to us and money we owe
+ * are both sums of movements, so neither can drift out of step with reality.
+ *
+ * The physical table is still called `supplier_bills`, and its date column
+ * `bill_date`, for the same reason `invoices` still says "services" where the
+ * code says "labour": renaming a live table carrying the garage's real
+ * purchase history buys nothing, and every receipt already in R2 is reachable
+ * only through the id of the row that points at it. Drizzle maps the names
+ * here so the code reads as the ledger it now is.
+ */
+export const supplierLedger = pgTable(
   'supplier_bills',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     supplierId: uuid('supplier_id')
       .notNull()
       .references(() => suppliers.id, { onDelete: 'cascade' }),
+    kind: supplierEntryKindEnum('kind').notNull().default('charge'),
+    /** Always positive. `kind` carries the sign — see `SUPPLIER_BALANCE_CENTS`. */
     amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
-    billDate: date('bill_date').notNull(),
+    entryDate: date('bill_date').notNull(),
     reference: text('reference'),
     notes: text('notes'),
     attachmentStoragePath: text('attachment_storage_path'),
-    /** NULL means still outstanding — this drives the "owed to others" totals. */
-    paidAt: timestamp('paid_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index('supplier_bills_supplier_id_idx').on(table.supplierId),
-    index('supplier_bills_paid_at_idx').on(table.paidAt),
+    index('supplier_bills_kind_idx').on(table.kind),
   ],
 );
 
@@ -349,11 +369,11 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
 }));
 
 export const suppliersRelations = relations(suppliers, ({ many }) => ({
-  bills: many(supplierBills),
+  entries: many(supplierLedger),
 }));
 
-export const supplierBillsRelations = relations(supplierBills, ({ one }) => ({
-  supplier: one(suppliers, { fields: [supplierBills.supplierId], references: [suppliers.id] }),
+export const supplierLedgerRelations = relations(supplierLedger, ({ one }) => ({
+  supplier: one(suppliers, { fields: [supplierLedger.supplierId], references: [suppliers.id] }),
 }));
 
 export type Job = typeof jobs.$inferSelect;
@@ -365,7 +385,8 @@ export type Invoice = typeof invoices.$inferSelect;
 export type NewInvoice = typeof invoices.$inferInsert;
 export type JobAttachment = typeof jobAttachments.$inferSelect;
 export type Supplier = typeof suppliers.$inferSelect;
-export type SupplierBill = typeof supplierBills.$inferSelect;
+export type SupplierEntry = typeof supplierLedger.$inferSelect;
+export type SupplierEntryKind = (typeof supplierEntryKindEnum.enumValues)[number];
 export type Payment = typeof payments.$inferSelect;
 export type Settings = typeof settings.$inferSelect;
 export type TimeOff = typeof timeOff.$inferSelect;

@@ -5,17 +5,26 @@ import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition, type FormEvent } from 'react';
 
 import { Alert, Button, Field, Input, Textarea } from '@/components/ui';
-import { addSupplierBill } from '@/lib/actions/suppliers';
+import { addSupplierCharge } from '@/lib/actions/suppliers';
 import { todayIsoDate } from '@/lib/format';
 
 /**
- * Add a bill, optionally with a receipt attached.
+ * Put a purchase onto a supplier's account, optionally with a receipt.
  *
  * The attachment follows the same direct-to-Storage route as job attachments:
  * signed URL from our server, bytes straight to Supabase, then the row is
  * written with the resulting path.
  */
-export function BillForm({ supplierId }: { supplierId: string }) {
+export function ChargeForm({
+  supplierId,
+  onSaved,
+  onCancel,
+}: {
+  supplierId: string;
+  /** Lets the modal that wraps this close itself once the entry is written. */
+  onSaved?: () => void;
+  onCancel?: () => void;
+}) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,17 +77,18 @@ export function BillForm({ supplierId }: { supplierId: string }) {
           if (storagePath) formData.set('attachmentStoragePath', storagePath);
         }
 
-        const result = await addSupplierBill(formData);
+        const result = await addSupplierCharge(formData);
         if (!result.ok) {
-          setError(result.error ?? 'Could not add the bill.');
+          setError(result.error ?? 'Could not add the purchase.');
           return;
         }
 
         formRef.current?.reset();
         setFileName(null);
+        onSaved?.();
         router.refresh();
       } catch (submitError) {
-        setError(submitError instanceof Error ? submitError.message : 'Could not add the bill.');
+        setError(submitError instanceof Error ? submitError.message : 'Could not add the purchase.');
       } finally {
         setUploading(false);
       }
@@ -96,10 +106,10 @@ export function BillForm({ supplierId }: { supplierId: string }) {
           <Input id="amount" name="amount" inputMode="decimal" placeholder="0.00" required />
         </Field>
 
-        <Field label="Bill date" htmlFor="billDate" required>
+        <Field label="Date" htmlFor="entryDate" required>
           <Input
-            id="billDate"
-            name="billDate"
+            id="entryDate"
+            name="entryDate"
             type="date"
             defaultValue={todayIsoDate()}
             required
@@ -129,9 +139,16 @@ export function BillForm({ supplierId }: { supplierId: string }) {
         </label>
       </Field>
 
-      <Button type="submit" disabled={busy}>
-        {uploading ? 'Uploading receipt…' : pending ? 'Saving…' : 'Add bill'}
-      </Button>
+      <div className="flex gap-1.5">
+        <Button type="submit" disabled={busy}>
+          {uploading ? 'Uploading receipt…' : pending ? 'Saving…' : 'Add to bill'}
+        </Button>
+        {onCancel ? (
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+        ) : null}
+      </div>
     </form>
   );
 }
