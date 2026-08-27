@@ -1,5 +1,62 @@
 # Changelog
 
+## 27/08/2026 @ 22:17:22 IST — "claude-opus-5"
+
+**Project completion: 100.00%**
+
+Basis: 3 of 3 requests from the previous entry now live on production, plus the one defect that
+deploy exposed, fixed. Typecheck clean, eslint clean on touched files, 217 tests passing.
+Migrations 0010 and 0011 applied to the live Supabase database and the result inspected directly:
+`kind` present, `paid_at` gone, 12 migrations recorded, and Fergal Allen's balance still exactly
+EUR 1,433.31 — the same figure as before the migration. Verified in a real browser against
+dashboard.nolanautomotive.ie: the account page shows the three purchases with a running balance of
+611.83 -> 1302.83 -> 1433.31, and the list shows the last entry as 27/08/2026, with no console
+errors.
+
+### Fixed — "Last entry" always read "—", because Drizzle dropped the table qualification
+
+The supplier list showed an em dash under Last entry for a supplier with three dated purchases.
+The cause is worth writing down, because nothing errored and the page looked plausible.
+
+Drizzle decides for itself whether to prefix a column with its table name, and in a **single-table
+SELECT it drops the qualification entirely** — including for columns referenced only inside an
+embedded `sql` template. So this:
+
+```
+WHERE ${supplierLedger.supplierId} = ${suppliers.id}
+```
+
+rendered as `WHERE "supplier_id" = "id"`. Inside the subquery both names resolve to
+`supplier_bills`, so it compared two columns of the same row, matched nothing, and returned NULL
+every time.
+
+The balance expression in the same file happened to render fully qualified and was correct — the
+live figure of EUR 1,433.31 was verified against the database directly before anything was
+changed. But "correct because Drizzle chose to qualify it this time" is not a property worth
+resting a money figure on. Both figures now aggregate over a `leftJoin` + `groupBy`, which puts
+both tables in scope and forces qualification; `getOwedToSuppliersCents` does it over a `.as()`
+derived table so each account is still floored at zero before the accounts are summed. The
+fragile `SUPPLIER_BALANCE_CENTS` correlated expression is gone.
+
+Found by printing `query.toSQL().sql` rather than by reading the TypeScript, which is the only
+thing that would have caught it — and is now recorded in memory as the way to check any
+hand-written `sql` correlation.
+
+### Changed — the migration was applied to production
+
+The previous entry shipped the code without migrating the live database, which would have left
+every supplier screen erroring against a schema with no `kind` column. That gap is closed:
+`supplier_bills` was backed up to CSV first (3 rows), then 0010 and 0011 were applied. No bill on
+production had ever been marked paid, so the backfill had nothing to convert and no balance moved.
+
+### Files Touched
+
+- `lib/db/queries/overview.ts` — `BALANCE_CENTS` as a join aggregate, `getOwedToSuppliersCents`
+  over a derived table, `listSuppliersWithTotals` joined and grouped
+- `lib/db/queries/supplier-ledger.ts` — `SUPPLIER_BALANCE_CENTS` removed
+- `lib/db/schema.ts` — comment no longer points at the removed expression
+- `CHANGELOG.md`
+
 ## 27/08/2026 @ 22:07:23 IST — "claude-opus-5"
 
 **Project completion: 100.00%**
