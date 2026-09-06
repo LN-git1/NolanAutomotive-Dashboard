@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
 
-import { Badge, Card, CardHeader, Empty, Table, Td, Th } from '@/components/ui';
+import { Badge, Card, CollapsibleCard, Empty, Table, Td, Th } from '@/components/ui';
 import { EarningsPanel } from '@/components/earnings/earnings-panel';
 import { SwipeNav } from '@/components/earnings/swipe-nav';
 import {
@@ -163,7 +163,7 @@ async function JobsInPipeline({
   bucket: 'active' | 'invoiced';
   emptyText: string;
 }) {
-  const jobs = await listJobsInPipeline(bucket, 10);
+  const jobs = await listJobsInPipeline(bucket, 5);
   return <JobList jobs={jobs} emptyText={emptyText} />;
 }
 
@@ -180,7 +180,7 @@ async function EarningsSection() {
 }
 
 async function RecentInvoices() {
-  const recentInvoices = await listRecentInvoices(10);
+  const recentInvoices = await listRecentInvoices(5);
 
   if (recentInvoices.length === 0) return <Empty>No invoices issued yet.</Empty>;
 
@@ -257,31 +257,33 @@ export default function OverviewPage() {
           </Suspense>
         </section>
 
+        {/* All three closed by default. The KPI tiles above already answer
+            "how much work is on" at a glance; these lists are the detail behind
+            them, and stacking three open tables pushed everything else off the
+            screen. Each stays a real section that streams its own query — the
+            fold is purely presentational. */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Card>
-            <CardHeader title="Active jobs" description="Latest 10 — not billed yet" />
+          <CollapsibleCard title="Active jobs" description="Latest 5 — not billed yet">
             <Suspense fallback={<SkeletonTable columns={4} rows={4} />}>
               <JobsInPipeline bucket="active" emptyText="No active jobs." />
             </Suspense>
-          </Card>
+          </CollapsibleCard>
 
           {/* Was "Completed jobs — ready to invoice", which listed jobs by
               status and so showed work that had already been invoiced and paid.
               Mirrors the Invoiced tile above it instead. */}
-          <Card>
-            <CardHeader title="Invoiced jobs" description="Latest 10 — invoiced, still owed" />
+          <CollapsibleCard title="Invoiced jobs" description="Latest 5 — invoiced, still owed">
             <Suspense fallback={<SkeletonTable columns={4} rows={4} />}>
               <JobsInPipeline bucket="invoiced" emptyText="Nothing outstanding." />
             </Suspense>
-          </Card>
+          </CollapsibleCard>
         </div>
 
-        <Card>
-          <CardHeader title="Recently invoiced" description="Latest 10" />
+        <CollapsibleCard title="Recently invoiced" description="Latest 5">
           <Suspense fallback={<SkeletonTable columns={6} rows={5} lastColumnRight />}>
             <RecentInvoices />
           </Suspense>
-        </Card>
+        </CollapsibleCard>
 
         <div className="hidden lg:block">
           <Suspense

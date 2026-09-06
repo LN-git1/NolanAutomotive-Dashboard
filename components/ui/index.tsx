@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import type { ComponentProps, ReactNode } from 'react';
 
@@ -102,6 +103,49 @@ export function CardHeader({
 
 export function CardBody({ className, ...props }: ComponentProps<'div'>) {
   return <div className={cn('p-4', className)} {...props} />;
+}
+
+/**
+ * A card whose body folds away behind its header, closed until opened.
+ *
+ * The overview is a stack of long tables, and on a phone that meant scrolling
+ * past three of them to reach anything. Starting every section closed means the
+ * page always opens as the same short list of headers plus the KPI tiles, and
+ * the owner opens only the one they came for.
+ *
+ * `<details>` rather than hand-rolled state, matching `Section` in
+ * `components/jobs/job-form.tsx`: it works before hydration, keeps this
+ * component server-safe (the barrel has no `'use client'` by design), and gets
+ * keyboard and screen-reader behaviour for free.
+ */
+export function CollapsibleCard({
+  title,
+  description,
+  children,
+  defaultOpen = false,
+}: {
+  title: ReactNode;
+  description?: ReactNode;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <Card>
+      <details className="group" open={defaultOpen}>
+        <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+          <ChevronRight
+            aria-hidden
+            className="size-4 shrink-0 text-muted transition-transform group-open:rotate-90"
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-ink">{title}</span>
+            {description ? <span className="block text-xs text-muted">{description}</span> : null}
+          </span>
+        </summary>
+        <div className="border-t border-line">{children}</div>
+      </details>
+    </Card>
+  );
 }
 
 /* ------------------------------------------------------------------ forms */

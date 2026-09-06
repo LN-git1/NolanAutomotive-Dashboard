@@ -154,6 +154,35 @@ export function SkeletonTableCard({
   );
 }
 
+/**
+ * Mirrors a closed `CollapsibleCard`: the whole card is just its summary row.
+ *
+ * The heights are derived, not eyeballed. The real summary is `px-4 py-3`
+ * (24px) around a chevron and a two-line stack whose height comes from the text
+ * itself — `text-sm` is a 20px line box, `text-xs` a 16px one. So each bar is
+ * centred inside a wrapper of that exact height rather than being that height,
+ * which keeps the bars thin while the card still lands on the same 60px the
+ * real one occupies. Without this the route skeleton drew full tables and the
+ * page snapped up by several hundred pixels once it loaded.
+ */
+export function SkeletonCollapsibleCard() {
+  return (
+    <Card>
+      <div className="flex items-center gap-3 px-4 py-3">
+        <Skeleton className="size-4 shrink-0 rounded" />
+        <div className="min-w-0 flex-1">
+          <div className="flex h-5 items-center">
+            <Skeleton className="h-3.5 w-32" />
+          </div>
+          <div className="flex h-4 items-center">
+            <Skeleton className="h-3 w-44 max-w-[60vw]" />
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 /** Mirrors `CardHeader`: same border, same `px-4 py-3`. */
 export function SkeletonCardHeader({
   description = false,

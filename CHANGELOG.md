@@ -1,5 +1,82 @@
 # Changelog
 
+## 06/09/2026 @ 22:58:40 IST — "claude-opus-5"
+
+**Project completion: 100.00%**
+
+Basis: 2 of 2 requested changes shipped and verified in a real browser, plus the one regression the
+first change would have introduced, caught and fixed before commit. Typecheck clean, eslint clean on
+every touched file, 166 tests passing (51 skipped — those are the DB-backed suites, and there is no
+local Postgres on this machine). The 4 items in `ROADMAP.md` remain deliberately parked; none of them
+is a defect.
+
+### Changed — Overview lists show 5, not 10, and each is a collapsible section that starts closed
+
+Two things were wrong with the Overview at once, and they compound each other.
+
+**The lists were twice as long as intended.** "Active jobs", "Invoiced jobs" and "Recently invoiced"
+each said "Latest 10" and each passed `10` to its query. They now pass `5`, and the descriptions say
+"Latest 5". The limit lives at the call site rather than in the query default, so `/jobs`,
+`/awaiting-payments` and the other full listings are untouched — this is a statement about how much
+the *summary* shows, not about the queries themselves.
+
+**Three long tables were open at once.** Roughly 90% of use is on a phone, and the Overview is the
+landing page. Stacking three expanded tables meant the Earnings panel and everything below it were
+several screens down, and the KPI tiles above — which already answer "how much work is on" at a glance
+— were competing with the detail behind them. All three sections are now collapsible and **start
+closed**, so the page always opens as the same short, scannable set of headers plus the tiles, and the
+owner opens only the one they came for.
+
+The fold is presentational only. Each section keeps its own Suspense boundary and still streams its
+own query independently, so the data is already there the moment a section is opened rather than
+starting to load on the click.
+
+New `CollapsibleCard` in `components/ui/index.tsx`. It uses `<details>` rather than hand-rolled
+state, matching `Section` in `components/jobs/job-form.tsx`: it works before hydration, gives keyboard
+and screen-reader behaviour for free, and — the reason it can live in the UI barrel at all — needs no
+JavaScript, so it stays a server component. The barrel has no `'use client'` by design and a real
+client-only component must never be added to it.
+
+### Fixed — the route skeleton still drew three full tables, so every navigation would have jumped
+
+Collapsing the sections silently broke `app/(dashboard)/loading.tsx`. That file draws the placeholder
+for the whole Overview route, and it still rendered three `SkeletonTable`s. The loaded page is now
+three ~62px headers, so every single navigation to the Overview would have painted several hundred
+pixels of skeleton tables and then snapped shut — a large layout jump, on the app's landing page, on
+every visit.
+
+This is invisible to a screenshot of the finished page, because by then `loading.tsx` is long gone. It
+was caught by reading the file rather than by looking at the result.
+
+New `SkeletonCollapsibleCard` in `components/ui/skeleton.tsx` mirrors a closed `CollapsibleCard`, and
+`loading.tsx` now draws three of those instead of three tables. The heights are derived rather than
+eyeballed: the real summary is `px-4 py-3` (24px) around a chevron and a two-line stack whose height
+comes from the text itself — `text-sm` is a 20px line box, `text-xs` a 16px one, so 60px of content
+plus the card's 1px borders. Each skeleton bar is centred inside a wrapper of that exact line height
+rather than being that height, which keeps the bars thin while the card still lands on the same
+footprint.
+
+**Verification.** Measured in a real browser over CDP, not estimated: the three loaded cards report
+`62px` each, and the three cards in `loading.tsx` — captured mid-navigation with 3s of emulated
+latency, with the "Loading the overview" announcement confirmed on screen — report `62px` each as
+well. The placeholder and the real thing occupy the same space, so there is no jump.
+
+Also confirmed in the browser: all three sections render `open: false` on first paint with the right
+titles and "Latest 5" descriptions, the `ChevronRight` icon renders (this is the first `lucide-react`
+import in the server-only barrel, which typecheck alone would not have proved), and there are **zero**
+console errors on load. An earlier run did report a hydration mismatch on the `open` attribute — that
+was the test script forcing `details.open` before React had hydrated, not the component; a run without
+it is clean.
+
+### Files Touched
+
+- `app/(dashboard)/page.tsx` — three `Card`/`CardHeader` pairs to `CollapsibleCard`; `10` to `5` in
+  `JobsInPipeline` and `RecentInvoices`; descriptions reworded.
+- `components/ui/index.tsx` — new `CollapsibleCard`; `ChevronRight` import.
+- `components/ui/skeleton.tsx` — new `SkeletonCollapsibleCard`.
+- `app/(dashboard)/loading.tsx` — three collapsed placeholders instead of three skeleton tables;
+  `Card`, `SkeletonCardHeader` and `SkeletonTable` imports dropped.
+
 ## 27/08/2026 @ 22:17:22 IST — "claude-opus-5"
 
 **Project completion: 100.00%**
