@@ -130,6 +130,37 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/**
+ * iOS paints its own grey box over any tapped link or button, ~100ms after the
+ * touch and with no control over the timing. Every tappable thing in this app
+ * now has its own `active:` state, which fires immediately; leaving the native
+ * highlight on as well means a tap flashes twice, out of sync. Suppressed here
+ * rather than per-component so nothing can be missed.
+ *
+ * This is only safe *because* those `active:` states exist — killing the
+ * highlight without replacing it leaves a phone with no tap feedback at all.
+ */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/**
+ * Pressed states are instant feedback, so they must not be animated in — a
+ * transition on the way *in* is the one thing that would defeat the purpose.
+ * Components pair `active:` with `transition-colors`, which only smooths the
+ * release. Anyone who has asked for less motion gets neither.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Numeric columns line up when figures share a width. */
 .tabular {
   font-variant-numeric: tabular-nums;
@@ -148,9 +179,16 @@ body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Height of the phone bottom bar, plus whatever the home indicator needs. */
+/*
+ * Height of the phone bottom bar, plus the home indicator, plus one more gap.
+ *
+ * The trailing 1.5rem is the same gap the page puts between its sections. It
+ * used to be absent, so the last card on a page ended exactly at the bar's top
+ * edge with no breathing room at all — visibly tighter than every other gap on
+ * the screen.
+ */
 .pb-navbar {
-  padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(4rem + 1.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 /**

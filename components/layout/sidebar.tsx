@@ -15,7 +15,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import Link from 'next/link';
+import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
@@ -123,6 +123,57 @@ function useIsActive() {
       : pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
+/**
+ * Shows that a tap registered, during the window where nothing else does.
+ *
+ * Measured on this app: tapping a nav item on a mid-range connection leaves the
+ * screen completely unchanged for ~390ms before the router commits and the
+ * destination's `loading.tsx` appears. `active:` states cover the moment of the
+ * press, but they end when the finger lifts — this covers the gap between the
+ * finger lifting and the next screen arriving, which is the part that reads as
+ * "nothing happened".
+ *
+ * `useLinkStatus` only works inside a descendant of the `<Link>` it reports on,
+ * which is why this is a component rather than a hook call in `NavLinks`.
+ */
+function PendingSpinner({ className }: { className?: string }) {
+  const { pending } = useLinkStatus();
+
+  if (!pending) return null;
+
+  return (
+    <span
+      role="status"
+      aria-label="Loading"
+      className={cn(
+        'size-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent',
+        className,
+      )}
+    />
+  );
+}
+
+/**
+ * The bottom bar's icon, replaced by a spinner while that tab's navigation is
+ * in flight. A swap rather than an overlay: the two are the same 20px box, so
+ * the tab never changes size, and there is no icon showing through behind it.
+ */
+function TabIcon({ Icon, active }: { Icon: LucideIcon; active: boolean }) {
+  const { pending } = useLinkStatus();
+
+  if (pending) {
+    return (
+      <span
+        role="status"
+        aria-label="Loading"
+        className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent"
+      />
+    );
+  }
+
+  return <Icon aria-hidden className={cn('size-5', active && 'stroke-[2.5]')} />;
+}
+
 function NavLinks({
   onNavigate,
   iconsOnly = false,
@@ -146,15 +197,16 @@ function NavLinks({
             aria-current={active ? 'page' : undefined}
             title={iconsOnly ? item.label : undefined}
             className={cn(
-              'flex shrink-0 items-center rounded-md text-sm whitespace-nowrap',
+              'flex shrink-0 items-center rounded-md text-sm whitespace-nowrap transition-colors',
               iconsOnly ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5',
               active
                 ? 'bg-info-soft font-medium text-brand-dark'
-                : 'text-muted hover:bg-canvas hover:text-ink',
+                : 'text-muted hover:bg-canvas hover:text-ink active:bg-canvas active:text-ink',
             )}
           >
             <Icon aria-hidden className="size-4 shrink-0" />
             {iconsOnly ? <span className="sr-only">{item.label}</span> : item.label}
+            {iconsOnly ? null : <PendingSpinner className="ml-auto" />}
           </Link>
         );
       })}
@@ -324,10 +376,11 @@ export function MobileTabBar() {
                 aria-current={active ? 'page' : undefined}
                 className={cn(
                   'flex h-16 flex-col items-center justify-center gap-1 px-1 text-[10px] leading-none',
+                  'transition-colors active:bg-canvas',
                   active ? 'font-semibold text-brand-dark' : 'text-muted',
                 )}
               >
-                <Icon aria-hidden className={cn('size-5', active && 'stroke-[2.5]')} />
+                <TabIcon Icon={Icon} active={active} />
                 <span className="w-full truncate text-center">{item.shortLabel}</span>
               </Link>
             </li>

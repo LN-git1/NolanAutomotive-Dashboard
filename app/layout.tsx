@@ -2,6 +2,8 @@ import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import type { Metadata, Viewport } from 'next';
 
+import { ServiceWorker } from '@/components/pwa/service-worker';
+
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -107,6 +109,10 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
         */}
         <Analytics />
         <SpeedInsights />
+
+        {/* Registers the app-shell service worker. Production only, and a no-op
+            if registration fails — see components/pwa/service-worker.tsx. */}
+        <ServiceWorker />
       </body>
     </html>
   );

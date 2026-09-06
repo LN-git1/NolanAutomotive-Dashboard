@@ -37,7 +37,7 @@ function Kpi({
   return (
     <Link
       href={href}
-      className="block rounded-lg border border-line bg-surface p-4 transition-colors hover:border-brand hover:bg-canvas focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      className="block rounded-lg border border-line bg-surface p-4 transition-colors hover:border-brand hover:bg-canvas active:border-brand active:bg-canvas active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
     >
       <p className="text-xs font-medium text-muted">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-ink tabular">{value}</p>
@@ -262,7 +262,7 @@ export default function OverviewPage() {
             them, and stacking three open tables pushed everything else off the
             screen. Each stays a real section that streams its own query — the
             fold is purely presentational. */}
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <CollapsibleCard title="Active jobs" description="Latest 5 — not billed yet">
             <Suspense fallback={<SkeletonTable columns={4} rows={4} />}>
               <JobsInPipeline bucket="active" emptyText="No active jobs." />

@@ -1,5 +1,151 @@
 # Changelog
 
+## 06/09/2026 @ 23:40:27 IST — "claude-opus-5"
+
+**Project completion: 100.00%**
+
+Basis: 4 of 4 requested items shipped — even section spacing, tap feedback, the "screens open
+empty" complaint, and offline support — plus two defects found while building them. Typecheck
+clean, eslint clean on all nine touched files, 166 tests passing (51 skipped: the DB-backed
+suites, and this machine has no Postgres). The 5 headings in `ROADMAP.md` remain deliberately
+parked. One item is explicitly scoped down and flagged below rather than silently dropped:
+authenticated page HTML is **not** cached, for security reasons given in full.
+
+### Changed — even spacing between the Overview's sections, and clearance above the tab bar
+
+Reported from a phone: the gap between "Active jobs" and "Invoiced jobs" was visibly tighter than
+the gap between "Invoiced jobs" and "Recently invoiced", and the last card ended flush against the
+bottom tab bar.
+
+Both were real and both were measured rather than eyeballed. The first two sections live in a
+`grid ... gap-4` (16px) that collapses to one column on a phone, while the third is a sibling in
+the page's `flex flex-col gap-6` (24px) — so the stack read 16px, then 24px. Measured in the
+browser at 390px before the change: **[16, 24]**. The grid is now `gap-6` and it measures
+**[24, 24]**.
+
+`.pb-navbar` was `calc(4rem + safe-area-inset-bottom)` — exactly the height of the bar it clears,
+so the last card stopped precisely at the bar's top edge with no gap at all. It now adds the same
+1.5rem the sections are spaced by; `main`'s computed padding-bottom goes 64px -> 88px. This applies
+to every page, not just the Overview.
+
+`loading.tsx` was updated in lockstep, or the placeholder and the real page would sit at different
+heights again.
+
+**Left alone deliberately:** the three KPI tiles keep their 12px horizontal gutters. Widening them
+to 24px on a 390px screen makes each tile ~8px narrower, and their labels ("Not billed yet",
+"Settled in full") already wrap onto two lines. Tightly-grouped controls reading as one cluster is
+also what makes them scan as a unit. Say the word and they change.
+
+### Fixed — "screens open empty": there was no feedback at all for ~390ms after a tap
+
+The report was that pages open empty with no preloading. Every route does have a `loading.tsx`, so
+the first job was finding out what was actually being seen. Measured by sampling the DOM every 60ms
+after tapping a nav item, on an emulated 300ms-RTT connection:
+
+```
+   12ms  /          the previous page, completely unchanged
+  387ms  /schedule  transition finally commits
+ 1005ms  /schedule  the destination's own skeleton appears
+```
+
+So the skeletons were never missing — but for the first ~390ms after the tap **nothing on screen
+changed at all**, and the tapped control gave no pressed state either. That is what reads as "I
+tapped it and nothing happened, then the screen changed".
+
+Two fixes, covering two different windows:
+
+1. **Pressed states** (`active:`) on every tap target — buttons, the KPI tiles, the collapsible
+   section headers, the sidebar links and the bottom tab bar. These fire on touch, so feedback is
+   immediate and completely independent of how slow the navigation is. Hover does not exist on a
+   phone, so these controls previously had no touch feedback of any kind.
+2. **A pending spinner** via `useLinkStatus` (Next 16), covering the gap between the finger lifting
+   and the next screen arriving. In the bottom bar the tapped tab's icon is *replaced* by the
+   spinner rather than overlaid, so the tab does not change size. In the sidebar it sits at the end
+   of the row.
+
+Re-measured after the change, same conditions: the spinner is on screen at the **first sample,
+39ms** after the tap, versus 387ms of nothing before.
+
+`-webkit-tap-highlight-color` is now `transparent` globally. iOS paints its own grey box ~100ms
+after a touch, and leaving it on top of these new states meant every tap flashed twice, out of
+sync. That is only safe *because* the `active:` states exist — suppressing it alone would leave a
+phone with no feedback whatsoever. A `prefers-reduced-motion` block was added at the same time.
+
+### Fixed — `disabled:active:scale-100` never actually disabled the press animation
+
+Caught by reading the generated CSS rather than the source. Tailwind v4 compiles the named
+`scale-100` to the `--tw-scale-*` custom properties, but the arbitrary `scale-[0.97]` to the plain
+`scale:` property. Two different declarations, so the disabled reset never overrode the press — a
+disabled button would still have shrunk when pressed. Now `disabled:active:scale-[1]`, which
+compiles to `scale: 1` and actually wins.
+
+### Added — service worker: app-shell caching and an offline screen
+
+There was no service worker at all (`/sw.js` returned a redirect on production), so a home-screen
+launch had to wait on the network for everything, and losing signal gave the browser's own error
+page.
+
+`public/sw.js` is hand-written — about forty lines of cache rules. `next-pwa`/Serwist would have
+added a build step and a dependency to generate something larger, and this app has no component
+library or build plugins by design.
+
+- **Cache-first** for `/_next/static/**` (content-hashed, so immutable and safe forever) plus the
+  icons and manifest. This is what removes the blank launch: JS and CSS come off disk instead of a
+  round trip.
+- **Network-first** for navigations, falling back to a precached `/offline` page.
+- Old cache versions are dropped on `activate`, and signing out posts a message that clears
+  everything.
+
+**Scoped down deliberately — read this.** The agreed scope included "read-only pages you have
+already visited can come back from cache". That is **not** implemented, and it should not be
+without a further decision. This dashboard holds customer names, addresses and phone numbers, and
+the only thing protecting them is the session cookie checked in `proxy.ts`. A cached page is served
+without ever reaching that check — so caching authenticated HTML would let anyone holding the
+unlocked phone read customer data back out of the cache after a logout or an expired session. The
+launch-speed win comes from the static assets and does not need it. If offline *reading* of
+recently-viewed jobs is wanted, it should be built deliberately, with an explicit decision about
+that trade-off.
+
+`/sw.js` and `/offline` are excluded from the auth gate in `proxy.ts`, for the same reason the
+manifest already is: the browser fetches the worker before any page runs, and the offline page must
+be servable at the one moment a redirect cannot happen. Verified locally — both return 200 with no
+session while `/jobs` still returns 307.
+
+### Verification
+
+- Section gaps at 390px: **[16, 24] -> [24, 24]**; `main` padding-bottom **64px -> 88px**.
+- Tap feedback: `active:` utilities confirmed present in the served stylesheet
+  (`.active\:scale-\[0.97\]:active{scale:.97}`, `.active\:bg-canvas:active`, and the rest), and
+  `* { -webkit-tap-highlight-color: transparent }` alongside them.
+- Pending spinner: on screen **39ms** after the tap, against a measured 387ms of nothing before.
+- `/offline` screenshotted at 390px in both themes; it renders correctly and follows the theme.
+- `node --check public/sw.js` passes; `/sw.js` and `/offline` return 200 unauthenticated, `/jobs`
+  returns 307.
+
+**Not verified locally, and why.** The service worker registers in production only, and
+`pnpm build` is barred on this machine (8GB RAM — it locks the laptop up). So the caching behaviour
+itself — cache hits on `_next/static`, the offline fallback firing on a dead network — has not been
+exercised end to end; only the worker's syntax, its reachability, and the page it falls back to.
+Worth confirming on the live site: install to the home screen, load once, then switch on aeroplane
+mode and reopen.
+
+### Files Touched
+
+- `app/(dashboard)/page.tsx` — grid `gap-4` -> `gap-6`; `active:` state on the KPI tiles.
+- `app/(dashboard)/loading.tsx` — the same gap change, to keep the placeholder aligned.
+- `app/globals.css` — `.pb-navbar` gains 1.5rem; global tap-highlight suppression;
+  `prefers-reduced-motion` block.
+- `components/ui/index.tsx` — pressed states on all button variants and the collapsible header;
+  `disabled:active:scale-[1]` fix.
+- `components/layout/sidebar.tsx` — `PendingSpinner` and `TabIcon` via `useLinkStatus`; pressed
+  states on both nav link sets.
+- `components/layout/logout-button.tsx` — clears the service worker caches on sign-out.
+- `components/pwa/service-worker.tsx` — new; registers the worker, production only.
+- `public/sw.js` — new; the worker itself.
+- `app/offline/page.tsx` — new; the offline fallback screen.
+- `app/layout.tsx` — mounts `<ServiceWorker />`.
+- `proxy.ts` — `/sw.js` and `/offline` excluded from the auth gate.
+
 ## 06/09/2026 @ 22:58:40 IST — "claude-opus-5"
 
 **Project completion: 100.00%**

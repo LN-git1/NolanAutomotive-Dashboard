@@ -13,6 +13,13 @@ export function LogoutButton() {
   async function handleLogout() {
     setPending(true);
     await fetch('/api/auth/logout', { method: 'POST' });
+
+    // Drop the service worker's caches on the way out. Nothing customer-facing
+    // is cached in the first place (see public/sw.js), but this makes the
+    // guarantee simple: after signing out, nothing from this session is left on
+    // the device. Best-effort — never block the sign-out on it.
+    navigator.serviceWorker?.controller?.postMessage('nolan-clear-caches');
+
     router.replace('/login');
     router.refresh();
   }

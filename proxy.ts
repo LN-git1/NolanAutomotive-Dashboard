@@ -44,8 +44,15 @@ export const config = {
    * `/api/health` is excluded because Vercel Cron calls it with no session. It
    * is not unprotected — it carries its own CRON_SECRET and answers 404 to
    * anything without it.
+   *
+   * `/sw.js` and `/offline` are excluded for the same reason as the manifest.
+   * The browser fetches the service worker before any page runs, and a redirect
+   * to /login would register the login page as the worker script and fail. The
+   * offline page has to be servable with no network at all, which is exactly
+   * when a redirect cannot happen. Neither contains anything sensitive — the
+   * offline page is a static "no connection" message with no data on it.
    */
   matcher: [
-    '/((?!login|api/auth/login|api/health|_next/static|_next/image|favicon.ico|favicon-32.png|manifest.webmanifest|icons/).*)',
+    '/((?!login|offline|sw.js|api/auth/login|api/health|_next/static|_next/image|favicon.ico|favicon-32.png|manifest.webmanifest|icons/).*)',
   ],
 };

@@ -31,7 +31,7 @@ export default function OverviewLoading() {
       {/* Three collapsed headers, not three tables: the sections on the real
           page start closed, so drawing full tables here meant every navigation
           painted several hundred pixels of skeleton and then snapped shut. */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <SkeletonCollapsibleCard />
         <SkeletonCollapsibleCard />
       </div>
