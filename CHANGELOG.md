@@ -1,5 +1,59 @@
 # Changelog
 
+## 07/09/2026 @ 03:40:25 IST — "claude-opus-5"
+
+**Project completion: 100.00%**
+
+Basis: 2 of 2 findings from an advisor review of the previous entry's tap-feedback work, both
+fixed and verified before commit. Typecheck clean, eslint clean on both touched files, 166 tests
+passing (51 skipped — no local Postgres). Nothing else changed; this is entirely a correction of
+the previous entry's own work.
+
+### Fixed — the collapsible section header's pressed state was practically invisible
+
+The previous entry added `active:bg-canvas` to `CollapsibleCard`'s `<summary>` row to give it the
+same tap feedback as everything else. It didn't work: `Card` already paints the row `bg-surface`,
+and `--canvas` is the *page* background the card sits on top of — so pressing shifted the row to
+the colour immediately behind it. Measured as a per-channel delta from `--surface`: light 10/255,
+dark 9/255. On a phone in a workshop, that is not a press someone would notice.
+
+Two changes, aimed at different themes. The fill is now `active:bg-info-soft` — the same "engaged"
+colour the sidebar already uses for the current page — which nearly doubles the light-mode delta
+(21/255) and adds a hue shift rather than pure luminance, so it reads even where the raw number is
+close. That still left dark mode weak (13/255), so the title text itself now carries
+`group-active:text-brand-dark`, swapping `--ink` for `--brand-text` on press — near-black to blue in
+light mode, near-white to light blue in dark. Unmistakable in both themes without inventing a new
+signal; it borrows the colour role the app already uses to mean "this is the current thing".
+
+No `active:scale` was added here, unlike the buttons and KPI tiles: the summary is a full-bleed row
+inside a bordered card, and scaling only the row would pull its edges away from the card's own
+border.
+
+**Verification.** Values read from `app/globals.css` directly rather than eyeballed: `--surface`,
+`--canvas` and `--info-soft` in both themes, and the per-channel deltas computed from them. The
+compiled rule was also confirmed present in the served stylesheet
+(`.group-active\:text-brand-dark:is(:where(.group):active *) { color: var(--brand-text); }`).
+
+### Fixed — the logout button's cache-clear message was silently a no-op
+
+`navigator.serviceWorker.controller` is `null` until a page has actually been loaded *under* the
+service worker's control — true for the very first authenticated session after the worker
+installs. `LogoutButton` sent its `nolan-clear-caches` message through `.controller`, so on that
+first session the message went nowhere and nothing was cleared, with no error to notice.
+
+This never mattered for the stated guarantee — no customer data is cached in the first place (see
+the previous entry), and `sw.js`'s own `activate` handler drops stale cache versions regardless —
+but the belt-and-braces clear-on-logout should actually fire when it can. Now goes through
+`getRegistration().then(r => r?.active?.postMessage(...))`, which reaches the worker via the
+registration rather than requiring an already-controlled page, with `.catch()` so a missing
+registration is silently harmless — sign-out never depends on this succeeding.
+
+### Files Touched
+
+- `components/ui/index.tsx` — `CollapsibleCard`'s summary fill and title colour on press.
+- `components/layout/logout-button.tsx` — cache-clear reached via `getRegistration()` instead of
+  `.controller`.
+
 ## 06/09/2026 @ 23:40:27 IST — "claude-opus-5"
 
 **Project completion: 100.00%**

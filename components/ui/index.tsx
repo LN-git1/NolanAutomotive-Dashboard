@@ -147,13 +147,15 @@ export function CollapsibleCard({
   return (
     <Card>
       <details className="group" open={defaultOpen}>
-        <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 transition-colors active:bg-canvas [&::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 transition-colors active:bg-info-soft [&::-webkit-details-marker]:hidden">
           <ChevronRight
             aria-hidden
             className="size-4 shrink-0 text-muted transition-transform group-open:rotate-90"
           />
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-ink">{title}</span>
+            <span className="block text-sm font-semibold text-ink transition-colors group-active:text-brand-dark">
+              {title}
+            </span>
             {description ? <span className="block text-xs text-muted">{description}</span> : null}
           </span>
         </summary>

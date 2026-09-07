@@ -18,7 +18,10 @@ export function LogoutButton() {
     // is cached in the first place (see public/sw.js), but this makes the
     // guarantee simple: after signing out, nothing from this session is left on
     // the device. Best-effort — never block the sign-out on it.
-    navigator.serviceWorker?.controller?.postMessage('nolan-clear-caches');
+    void navigator.serviceWorker
+      ?.getRegistration()
+      .then((registration) => registration?.active?.postMessage('nolan-clear-caches'))
+      .catch(() => undefined);
 
     router.replace('/login');
     router.refresh();
