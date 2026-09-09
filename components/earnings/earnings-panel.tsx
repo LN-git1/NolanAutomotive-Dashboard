@@ -298,8 +298,6 @@ export function EarningsPanel({ summary }: { summary: BooksSummary }) {
         </CardBody>
       </Card>
 
-      <ExpenseForm onSaved={handleSaved} />
-
       <Card>
         <CardHeader title="Monthly" description="Income by work month, costs by spent month" />
         {summary.months.length === 0 ? (
@@ -320,6 +318,8 @@ export function EarningsPanel({ summary }: { summary: BooksSummary }) {
           </div>
         )}
       </Card>
+
+      <ExpenseForm onSaved={handleSaved} />
 
       <div className="flex justify-start">
         <Button variant="ghost" onClick={handleSaved}>

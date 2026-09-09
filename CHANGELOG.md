@@ -1,5 +1,19 @@
 # Changelog
 
+## 09/09/2026 @ 04:30:05 IST — "muse-spark-1.3"
+
+**Goal:** Put Add expense where it doesn't compete with the numbers.
+
+### Changed — Add expense sits below the monthly breakdown
+
+The form rendered between the profit cards and the Monthly card, pushing the breakdown Lee opens the page to read below the fold. It now renders after the Monthly card (before Refresh), so the page reads top to bottom: totals, months, then entry.
+
+**Verification.** `pnpm typecheck` zero errors; eslint clean on the panel file.
+
+### Files Touched
+
+- `components/earnings/earnings-panel.tsx` — form moved below the Monthly card.
+
 ## 09/09/2026 @ 04:16:34 IST — "muse-spark-1.3"
 
 **Goal:** Give Books its own sidebar page and take it off the Overview.
