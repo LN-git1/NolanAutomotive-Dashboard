@@ -38,6 +38,10 @@ export function buildSupplierBillPath(supplierId: string, fileName: string): str
   return `suppliers/${supplierId}/${randomUUID()}-${sanitiseFileName(fileName)}`;
 }
 
+export function buildExpenseReceiptPath(expenseId: string, fileName: string): string {
+  return `expenses/${expenseId}/${randomUUID()}-${sanitiseFileName(fileName)}`;
+}
+
 export function buildInvoicePath(invoiceNumber: string): string {
   return `invoices/${sanitiseFileName(invoiceNumber)}.pdf`;
 }
