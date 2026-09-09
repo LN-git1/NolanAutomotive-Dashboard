@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { requireApiSession } from '@/lib/auth/require-session';
 import {
+  buildExpenseReceiptPath,
   buildJobAttachmentPath,
   buildSupplierBillPath,
   createSignedUploadUrl,
@@ -30,6 +31,12 @@ const requestSchema = z.discriminatedUnion('kind', [
     fileName: z.string().min(1),
     mimeType: z.string().min(1),
   }),
+  z.object({
+    kind: z.literal('expense-receipt'),
+    expenseId: z.string().uuid(),
+    fileName: z.string().min(1),
+    mimeType: z.string().min(1),
+  }),
 ]);
 
 /**
@@ -54,7 +61,9 @@ export async function POST(request: Request) {
   const storagePath =
     input.kind === 'job'
       ? buildJobAttachmentPath(input.jobId, input.fileName)
-      : buildSupplierBillPath(input.supplierId, input.fileName);
+      : input.kind === 'supplier-bill'
+        ? buildSupplierBillPath(input.supplierId, input.fileName)
+        : buildExpenseReceiptPath(input.expenseId, input.fileName);
 
   try {
     const signed = await createSignedUploadUrl(ATTACHMENTS_BUCKET, storagePath, input.mimeType);

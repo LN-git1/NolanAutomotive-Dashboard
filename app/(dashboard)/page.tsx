@@ -10,7 +10,7 @@ import {
   getOwedToSuppliersCents,
   listRecentInvoices,
 } from '@/lib/db/queries/overview';
-import { getEarningsSummary } from '@/lib/db/queries/earnings';
+import { getBooksSummary } from '@/lib/db/queries/books';
 import { countJobPipeline, listJobsInPipeline } from '@/lib/db/queries/jobs';
 import { formatDate, numericToEur } from '@/lib/format';
 import { formatEur } from '@/lib/money';
@@ -175,7 +175,7 @@ async function JobsInPipeline({
  * gets the desktop shell but not this section.
  */
 async function EarningsSection() {
-  const summary = await getEarningsSummary();
+  const summary = await getBooksSummary();
   return <EarningsPanel summary={summary} />;
 }
 

@@ -137,6 +137,8 @@ export interface BooksMonthLine {
   href: string;
   /** Set on correction rows so the UI can badge them. */
   reversesId: string | null;
+  /** True when a receipt photo is attached (expenses only). */
+  hasReceipt: boolean;
 }
 
 export interface BooksMonthDetail {
@@ -193,6 +195,7 @@ export async function getBooksMonthDetail(monthKey: string): Promise<BooksMonthD
         note: expenses.note,
         amount: expenses.amount,
         reversesId: expenses.reversesId,
+        receiptStoragePath: expenses.receiptStoragePath,
       })
       .from(expenses)
       .where(sql`to_char(date_trunc('month', ${EXPENSE_MONTH}), 'YYYY-MM') = ${monthKey}`)
@@ -206,6 +209,7 @@ export async function getBooksMonthDetail(monthKey: string): Promise<BooksMonthD
       cents: Number(row.receivedCents),
       href: `/jobs/${row.jobId}`,
       reversesId: null,
+      hasReceipt: false,
     })),
     supplier: supplier.map((row) => ({
       id: row.id,
@@ -213,6 +217,7 @@ export async function getBooksMonthDetail(monthKey: string): Promise<BooksMonthD
       cents: toCents(row.amount),
       href: `/suppliers/${row.supplierId}`,
       reversesId: null,
+      hasReceipt: false,
     })),
     expenses: expenseLines.map((row) => ({
       id: row.id,
@@ -220,6 +225,7 @@ export async function getBooksMonthDetail(monthKey: string): Promise<BooksMonthD
       cents: toCents(row.amount),
       href: `/earnings#expense-${row.id}`,
       reversesId: row.reversesId,
+      hasReceipt: row.receiptStoragePath !== null,
     })),
   };
 }
