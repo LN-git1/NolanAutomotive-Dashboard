@@ -1,5 +1,22 @@
 # Changelog
 
+## 09/09/2026 @ 04:16:34 IST — "muse-spark-1.3"
+
+**Goal:** Give Books its own sidebar page and take it off the Overview.
+
+### Changed — Earnings & Expenses moves to the sidebar, Overview goes workload-only
+
+The Add expense form rendered everywhere the earnings panel did — the full `/earnings` page and the desktop Overview embed — so the Overview carried bookkeeping it shouldn't. Now the full P&L lives in exactly one place: a new sidebar entry "Earnings & Expenses" (after Paid jobs, with the money reviews, non-primary so the phone bottom bar stays five). The Overview embed, the mobile "Earnings →" pill and the now-unused imports are gone; the invisible swipe gesture still works. The `/earnings` route is unchanged — only the title, heading and loading label now read "Earnings & Expenses".
+
+**Verification.** `pnpm typecheck` zero errors; eslint clean on all four touched files (the repo-wide `pnpm lint` failure is pre-existing noise from a stale `.claude/worktrees/new-job-import/.next` build output directory, untouched by this change).
+
+### Files Touched
+
+- `components/layout/sidebar.tsx` — nav item + ordering note.
+- `app/(dashboard)/page.tsx` — Overview embed, pill and unused imports removed.
+- `app/(dashboard)/earnings/page.tsx` — title/heading/comment rename.
+- `app/(dashboard)/earnings/loading.tsx` — loading label rename.
+
 ## 09/09/2026 @ 03:40:22 IST — "muse-spark-1.3"
 
 **Goal:** Prove Books month bucketing against real Postgres.

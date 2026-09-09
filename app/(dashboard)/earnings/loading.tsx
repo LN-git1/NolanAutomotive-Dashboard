@@ -4,7 +4,7 @@ import { LoadingAnnouncement, SkeletonPageHeader, SkeletonList, SkeletonStatGrid
 export default function EarningsLoading() {
   return (
     <div className="flex flex-col gap-4">
-      <LoadingAnnouncement label="Loading earnings" />
+      <LoadingAnnouncement label="Loading earnings and expenses" />
       <SkeletonPageHeader />
 
       <SkeletonStatGrid count={2} className="grid grid-cols-2 gap-3" />

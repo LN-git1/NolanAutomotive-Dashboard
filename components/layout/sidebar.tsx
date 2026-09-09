@@ -11,6 +11,7 @@ import {
   PanelLeftOpen,
   Settings,
   Truck,
+  Wallet,
   Wrench,
   X,
   type LucideIcon,
@@ -54,12 +55,18 @@ interface NavItem {
  * Note that this ordering leaves the bottom bar untouched: the two pages that
  * moved up are both non-primary, so `PRIMARY_ITEMS` still resolves to the same
  * five in the same order.
+ *
+ * Earnings & Expenses sits with the money reviews directly after Paid jobs —
+ * full P&L with expense entry lives there and nowhere else, so the Overview
+ * stays workload-only. Non-primary for the same reason as the other money
+ * reviews: the bottom bar has no sixth slot.
  */
 const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Overview', shortLabel: 'Overview', icon: LayoutDashboard, exact: true, primary: true },
   { href: '/jobs', label: 'Jobs', shortLabel: 'Jobs', icon: Wrench, primary: true },
   { href: '/awaiting-payments', label: 'Invoiced jobs', shortLabel: 'Invoiced', icon: BanknoteArrowDown },
   { href: '/paid-jobs', label: 'Paid jobs', shortLabel: 'Paid', icon: BanknoteArrowUp },
+  { href: '/earnings', label: 'Earnings & Expenses', shortLabel: 'Earnings', icon: Wallet },
   { href: '/schedule', label: 'Schedule', shortLabel: 'Schedule', icon: CalendarDays, primary: true },
   { href: '/invoicer', label: 'Invoicer', shortLabel: 'Invoicer', icon: FileText, primary: true },
   { href: '/suppliers', label: 'Owed to others', shortLabel: 'Suppliers', icon: Truck },

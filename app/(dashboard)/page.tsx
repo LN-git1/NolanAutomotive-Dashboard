@@ -2,19 +2,17 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
 
-import { Badge, Card, CollapsibleCard, Empty, Table, Td, Th } from '@/components/ui';
-import { EarningsPanel } from '@/components/earnings/earnings-panel';
+import { Badge, CollapsibleCard, Empty, Table, Td, Th } from '@/components/ui';
 import { SwipeNav } from '@/components/earnings/swipe-nav';
 import {
   getOutstandingInvoiceTotalCents,
   getOwedToSuppliersCents,
   listRecentInvoices,
 } from '@/lib/db/queries/overview';
-import { getBooksSummary } from '@/lib/db/queries/books';
 import { countJobPipeline, listJobsInPipeline } from '@/lib/db/queries/jobs';
 import { formatDate, numericToEur } from '@/lib/format';
 import { formatEur } from '@/lib/money';
-import { SkeletonList, SkeletonStatGrid, SkeletonTable } from '@/components/ui/skeleton';
+import { SkeletonStatGrid, SkeletonTable } from '@/components/ui/skeleton';
 import type { Job } from '@/lib/db/schema';
 
 export const metadata: Metadata = { title: 'Overview' };
@@ -167,18 +165,6 @@ async function JobsInPipeline({
   return <JobList jobs={jobs} emptyText={emptyText} />;
 }
 
-/**
- * Desktop-only — mobile reaches the same panel at `/earnings` (a swipe or the
- * tap pill below). `hidden lg:block`, not `xl`: the sidebar-vs-mobile-chrome
- * switch in `dashboard-shell.tsx`/`sidebar.tsx` happens at `lg` everywhere in
- * this app, so gating on `xl` would mean a real 1024-1279px desktop viewport
- * gets the desktop shell but not this section.
- */
-async function EarningsSection() {
-  const summary = await getBooksSummary();
-  return <EarningsPanel summary={summary} />;
-}
-
 async function RecentInvoices() {
   const recentInvoices = await listRecentInvoices(5);
 
@@ -228,21 +214,9 @@ export default function OverviewPage() {
   return (
     <SwipeNav to="/earnings" direction="left">
       <div className="flex flex-col gap-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-semibold text-ink">Overview</h1>
-            <p className="text-sm text-muted">Current workload and money owed.</p>
-          </div>
-          {/* Discoverability hint for the swipe gesture, and a working
-              tap-fallback for anyone who doesn't swipe — a gesture-only route
-              would otherwise be a dead end. Desktop already shows Earnings
-              inline below, so this is mobile-only. */}
-          <Link
-            href="/earnings"
-            className="shrink-0 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-medium text-brand-dark hover:bg-canvas lg:hidden"
-          >
-            Earnings →
-          </Link>
+        <div>
+          <h1 className="text-lg font-semibold text-ink">Overview</h1>
+          <p className="text-sm text-muted">Current workload and money owed.</p>
         </div>
 
         <section aria-label="Job counts" className="grid grid-cols-3 gap-3">
@@ -284,21 +258,6 @@ export default function OverviewPage() {
             <RecentInvoices />
           </Suspense>
         </CollapsibleCard>
-
-        <div className="hidden lg:block">
-          <Suspense
-            fallback={
-              <div className="flex flex-col gap-4">
-                <SkeletonStatGrid count={2} className="grid grid-cols-2 gap-3" />
-                <Card>
-                  <SkeletonList rows={4} />
-                </Card>
-              </div>
-            }
-          >
-            <EarningsSection />
-          </Suspense>
-        </div>
       </div>
     </SwipeNav>
   );
