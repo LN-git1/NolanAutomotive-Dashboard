@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# local git worktrees (isolated implementation checkouts)
+.worktrees/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
