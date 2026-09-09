@@ -1,5 +1,127 @@
 # Changelog
 
+## 09/09/2026 @ 03:40:22 IST — "muse-spark-1.3"
+
+**Goal:** Prove Books month bucketing against real Postgres.
+
+### Added — Books integration tests
+
+`tests/books.test.ts` follows the `earnings.test.ts` pattern (`describe.skipIf(!TEST_DATABASE_URL)`, own month keys only so serial-file runs stay race-free): one job + invoice + payment, one supplier charge, one expense land in the same month bucket (€150 in, €100 out, €50 profit); drill-down lines link to their sources; a supplier `payment` entry does not move Out (no double-count).
+
+**Verification.** `pnpm test:run tests/books.test.ts` skips cleanly here (3 skipped — no local Postgres in this environment); `pnpm typecheck` zero errors. Live-DB run recorded as a follow-up for a machine with `TEST_DATABASE_URL` set.
+
+### Files Touched
+
+- `tests/books.test.ts` — DB-gated integration tests.
+
+## 09/09/2026 @ 03:40:21 IST — "muse-spark-1.3"
+
+**Goal:** Show Lee In, Out and Profit per month with drill-down to every line.
+
+### Changed — Earnings grows into Books
+
+The `/earnings` route (kept — swipe targets and links depend on it) is now titled Books: year-to-date In / Out / Profit cards, an Add expense form, and monthly rows headed by profit that expand into Money in, Supplier costs and Expenses groups with drill-through links. Expense rows carry a Correction badge, a Correct button (confirm → reversal row → month reloads), and receipt View / Add-receipt actions using plain-anchor links to a new `/api/expenses/[id]/receipt` signed-redirect route (popup-block-proof in the installed PWA, same as supplier receipts). The upload-url route gains an `expense-receipt` kind. Three deliberate deviations from the plan, same intent: the form lives inside the panel so saves reload open months at once; the receipt button sits on the expanded row because a path needs the expense id; a manual Refresh button covers stale server data. No accounting jargon anywhere.
+
+**Verification.** `pnpm typecheck` and `pnpm lint` zero errors. Live 430px render check blocked in this environment (no local Postgres — dev DB connection refused); recorded as a follow-up for a machine with the dev database.
+
+### Files Touched
+
+- `components/earnings/earnings-panel.tsx` — P&L cards, grouped month detail, expense rows.
+- `components/expenses/expense-form.tsx` — add-expense form with submission-key dedupe.
+- `app/(dashboard)/earnings/page.tsx` — Books title, books summary.
+- `app/(dashboard)/page.tsx` — embedded panel reads the books summary.
+- `lib/actions/earnings.ts` — `getBooksMonthDetail` passthrough (session + month guard).
+- `lib/db/queries/books.ts` — `hasReceipt` on drill-down lines.
+- `app/api/attachments/upload-url/route.ts` — `expense-receipt` kind.
+- `app/api/expenses/[id]/receipt/route.ts` — signed-redirect receipt viewing.
+
+## 09/09/2026 @ 03:40:20 IST — "muse-spark-1.3"
+
+**Goal:** Give expense receipts a bucket path that cannot collide or escape.
+
+### Added — expense receipt R2 path builder
+
+`buildExpenseReceiptPath(expenseId, fileName)` in `lib/storage/signedUrl.ts`, mirroring `buildSupplierBillPath`: `expenses/<id>/<uuid>-<sanitised-name>`, private bucket, access via signed URLs only.
+
+**Verification.** `pnpm typecheck` zero errors.
+
+### Files Touched
+
+- `lib/storage/signedUrl.ts` — one builder function.
+
+## 09/09/2026 @ 03:40:19 IST — "muse-spark-1.3"
+
+**Goal:** Let Lee record and correct expenses without ever rewriting history.
+
+### Added — expense server actions
+
+`lib/actions/expenses.ts`, thin like `addSupplierCharge`: `addExpense` validates FormData and inserts with `onConflictDoNothing` on the submission key, so a double-tap or retried POST returns success without a duplicate row. `reverseExpense` corrects via a second row pointing back at the original (refuses unknown ids, reversal-of-reversal, and already-corrected rows — both rows render so the month still reconciles). `attachExpenseReceipt` records an R2 path after the browser PUTs bytes directly, rejecting paths outside `expenses/`. All three session-check and revalidate `/earnings` + `/`.
+
+**Verification.** `pnpm typecheck` zero errors (`ActionResult` shape confirmed against `lib/actions/jobs.ts`).
+
+### Files Touched
+
+- `lib/actions/expenses.ts` — `addExpense`, `reverseExpense`, `attachExpenseReceipt`.
+
+## 09/09/2026 @ 03:40:18 IST — "muse-spark-1.3"
+
+**Goal:** Derive monthly P&L from source rows without storing totals.
+
+### Added — Books P&L summary and month-detail queries
+
+`lib/db/queries/books.ts`: `getBooksSummary` runs three small aggregates — income from `payments` grouped by work month (`COALESCE(jobs.dueDate, invoices.issueDate)`, same basis as Earnings), supplier `charge` entries by bill date, expenses by expense date — and merges them by month in code with reversal netting and profit. Supplier `payment` entries are excluded from Out (they settle an already-counted charge; counting both would double-count). `getBooksMonthDetail` returns drill-down lines with source links (job, supplier, expense anchor) for lazy per-month expansion. Compute-never-store throughout, matching existing conventions.
+
+**Verification.** `pnpm typecheck` zero errors. Behavioural proof deferred to the DB-gated `tests/books.test.ts` (separate commit).
+
+### Files Touched
+
+- `lib/db/queries/books.ts` — summary + detail queries, `BooksMonth`/`BooksSummary`/`BooksMonthLine`/`BooksMonthDetail` types.
+
+## 09/09/2026 @ 03:40:17 IST — "muse-spark-1.3"
+
+**Goal:** Make P&L arithmetic unit-testable without a database.
+
+### Added — pure P&L math with reversal netting
+
+`lib/books.ts` holds the DB-free half of Books: `monthKeyOf` buckets ISO dates to `YYYY-MM`, `netExpenseCents` sums expense lines with reversal rows cancelling their originals (orphan reversals contribute nothing rather than going negative), `profitCents` subtracts out from in — all in integer cents. The DB queries fetch rows; everything here turns rows into numbers. Written test-first: 5 tests on fixed fixtures.
+
+**Verification.** `pnpm test:run tests/books-math.test.ts` — 5/5 pass (confirmed RED before implementation); `pnpm typecheck` zero errors.
+
+### Files Touched
+
+- `lib/books.ts` — pure math, no `server-only`, no DB imports.
+- `tests/books-math.test.ts` — fixture tests, no DB needed.
+
+## 09/09/2026 @ 03:40:16 IST — "muse-spark-1.3"
+
+**Goal:** Reject bad expense input at the boundary with user-facing messages.
+
+### Added — expense validation schemas
+
+Server actions must never trust the client, so the expense form's contract lives in zod: `expenseInputSchema` (ISO date not beyond tomorrow, known category, positive amount under the `numeric(12,2)` cap, optional note, uuid submission key) reusing `lib/validation/common.ts` helpers, plus `expenseReversalSchema` and UI labels (`parts` renders as "Parts (non-supplier)" so supplier stock is never misfiled). Written test-first: 7 pure tests covering valid input, zero/negative amounts, unknown categories, malformed and future dates, and reversal id shape.
+
+**Verification.** `pnpm test:run tests/expense-validation.test.ts` — 7/7 pass (confirmed RED before implementation); `pnpm typecheck` zero errors.
+
+### Files Touched
+
+- `lib/validation/expense.ts` — schemas, category list, labels.
+- `tests/expense-validation.test.ts` — pure zod tests, no DB needed.
+
+## 09/09/2026 @ 03:40:15 IST — "muse-spark-1.3"
+
+**Goal:** Store general running costs so Books profit is computable.
+
+### Added — expenses table with category enum and submission-key dedupe
+
+The app tracked money in (`payments`) and supplier balances but had nowhere to record rent, wages, ESB or fuel, so true profit was unknowable. Added `expense_category` enum and an `expenses` table (date, category, positive amount, note, optional R2 receipt path, `reverses_id` for append-only corrections, unique `submission_key` so retried form posts insert once). Migration generated via `db:generate` and inspected before commit — `CREATE TYPE`, `CREATE TABLE`, unique index all present.
+
+**Verification.** `pnpm typecheck` zero errors. (Migration file generated, not yet applied to any database.)
+
+### Files Touched
+
+- `lib/db/schema.ts` — `expenseCategoryEnum`, `expenses` table, `Expense`/`NewExpense`/`ExpenseCategory` types.
+- `drizzle/migrations/0012_petite_winter_soldier.sql` (+ meta snapshot/journal) — DDL for the above.
+
 ## 07/09/2026 @ 03:40:25 IST — "claude-opus-5"
 
 **Project completion: 100.00%**
