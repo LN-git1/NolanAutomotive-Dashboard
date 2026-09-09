@@ -350,6 +350,44 @@ export const supplierLedger = pgTable(
   ],
 );
 
+export const expenseCategoryEnum = pgEnum('expense_category', [
+  'rent',
+  'wages',
+  'utilities',
+  'fuel',
+  'parts',
+  'insurance',
+  'phone',
+  'other',
+]);
+
+/**
+ * General running costs: rent, wages, ESB, fuel, and anything that is not a
+ * supplier purchase (those live on the supplier ledger) and not a customer
+ * invoice. Amounts are always positive; a correction is a second row pointing
+ * back via `reversesId`, never an UPDATE — the trail must survive, same rule
+ * as voided invoices keeping their number consumed.
+ */
+export const expenses = pgTable(
+  'expenses',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    expenseDate: date('expense_date').notNull(),
+    category: expenseCategoryEnum('category').notNull(),
+    /** Always positive. A reversal row carries the same positive amount. */
+    amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+    note: text('note'),
+    /** Bucket-relative R2 path. Never a public URL — same rule as job attachments. */
+    receiptStoragePath: text('receipt_storage_path'),
+    /** Set only on a correction row; points at the original it cancels. */
+    reversesId: uuid('reverses_id'),
+    /** Client-generated per form mount; double-taps insert once (unique). */
+    submissionKey: text('submission_key'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('expenses_submission_key_key').on(table.submissionKey)],
+);
+
 export const jobsRelations = relations(jobs, ({ many }) => ({
   attachments: many(jobAttachments),
   invoices: many(invoices),
@@ -390,3 +428,6 @@ export type SupplierEntryKind = (typeof supplierEntryKindEnum.enumValues)[number
 export type Payment = typeof payments.$inferSelect;
 export type Settings = typeof settings.$inferSelect;
 export type TimeOff = typeof timeOff.$inferSelect;
+export type Expense = typeof expenses.$inferSelect;
+export type NewExpense = typeof expenses.$inferInsert;
+export type ExpenseCategory = (typeof expenseCategoryEnum.enumValues)[number];
