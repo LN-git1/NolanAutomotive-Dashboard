@@ -1,5 +1,51 @@
 # Changelog
 
+## 23/09/2026 @ 07:17:31 IST — "claude-opus-5-5"
+
+**Project completion: 100.00%**
+
+Basis: 2 of 2 tasks in this entry's scope done (ignore the macOS sidecar files, add a TODO.md).
+The 4 features parked in `ROADMAP.md` are not counted. They were deliberately put off, not left
+unfinished, and are now listed in `TODO.md`. No application code changed.
+
+**Goal:** Clear 287 junk "changes" from source control, and give the dashboard a short open-work
+checklist now that it is joining the `nolan-automotive` parent repo.
+
+### Fixed — 287 macOS `._*` sidecar files showed up as untracked changes
+
+**Cause.** The project was copied from a Mac to this Windows machine. macOS writes a hidden
+AppleDouble sidecar (`._<name>`) next to every file on non-Apple drives to hold its extended
+attributes. Every one of the 287 untracked entries was one of these: a 163-byte binary stub that
+starts with `Mac OS X`. They include `._.env.local`, `._.env.production.local` and `._.git`. None
+contain code or secrets, since they only hold Finder metadata. But committing them would have added
+287 unreadable binaries to a public repo and made every future diff noisy.
+
+**Fix.** Added `._*` to `.gitignore` under `# misc`, next to the existing `.DS_Store` rule. The files
+are left on disk rather than deleted. The ignore rule is enough, and deleting 287 files wasn't asked
+for. Before relying on the rule, I checked with `git ls-files` that no `._*` file was already tracked,
+because an ignore rule won't hide a tracked file. None were.
+`shop-stack/.gitignore` already uses the same rule, so the two repos now match.
+
+**Verification.** `git status --short -uall` went from 287 entries to just this commit's files.
+
+### Added — `TODO.md`
+
+A short checklist of real open work, taken only from `ROADMAP.md`: arrival and due-back dates, job
+value on the jobs list, the "Ready to invoice" tile, the private-repo blocker, and the recurring
+check of the keep-alive cron. `ROADMAP.md` still holds the design and reasoning; `TODO.md` just
+points to it. It is added now because the new `nolan-automotive` parent repo gives every top-level
+folder a README, CHANGELOG and TODO.md, and dashboard was the only one without a TODO.
+
+**Why this is in dashboard's own repo.** dashboard keeps its own history, its
+`LN-git1/NolanAutomotive-Dashboard` remote and its Vercel deploys. The parent repo includes it as a
+git submodule rather than copying its files, so this commit is what the parent's pointer refers to.
+
+### Files Touched
+
+- `.gitignore` — `._*` rule added.
+- `TODO.md` — new.
+- `CHANGELOG.md` — this entry.
+
 ## 09/09/2026 @ 04:30:05 IST — "muse-spark-1.3"
 
 **Goal:** Put Add expense where it doesn't compete with the numbers.

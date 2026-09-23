@@ -22,6 +22,8 @@
 
 # misc
 .DS_Store
+# macOS AppleDouble sidecars created when the repo is copied off a Mac
+._*
 *.pem
 
 # local git worktrees (isolated implementation checkouts)
