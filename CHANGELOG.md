@@ -1,5 +1,49 @@
 # Changelog
 
+## 23/09/2026 @ 07:28:11 IST — "claude-opus-5-5"
+
+**Project completion: 100.00%**
+
+Basis: 1 of 1 task in this entry's scope done (remove the macOS sidecar files, which the previous
+entry had left on disk). No application code changed.
+
+**Goal:** Remove the macOS `._*` sidecar files entirely, not just hide them from git.
+
+### Fixed — 623 `._*` stubs deleted from the working tree, 1,671 from `.git`
+
+**Why this follows the previous entry.** The entry below (07:17:31) added a `._*` ignore rule and
+deliberately left the files on disk, because deleting them hadn't been asked for. Zach then flagged
+them directly: `._.env.local` and the others looked like the Mac-to-Windows copy had gone wrong. So
+they are now deleted, and this entry replaces the "left on disk" statement below.
+
+**What they were.** macOS writes a hidden AppleDouble file (`._<name>`) beside every file it copies to
+a non-Apple drive, to hold Finder metadata. `._.env.local` is a 163-byte metadata stub, **not** a
+copy of the env file, so no secrets were exposed. Before deleting, I checked the first 4 bytes of every
+file against the AppleDouble signature `00 05 16 07`. All 623 working-tree files and all 1,671 inside
+`.git` matched, and none were real files.
+
+**Why `.git` was cleaned too.** The copy also placed a stub next to 1,671 git objects
+(`.git/objects/xx/._<hash>`). They didn't damage any data, but `git count-objects -v` reported every
+one as "garbage found", and git maintenance commands would keep warning about them.
+
+**Backups.** Both sets were archived to tar files in the Claude Code session scratchpad
+(`appledouble-worktree-backup.tar`, `appledouble-gitdir-backup.tar`) before deletion. That folder
+is temporary and not guaranteed to last. Since the files held only Finder metadata, nothing of
+value relies on those backups.
+
+**Verification.**
+- `find . -name '._*'` outside `node_modules` returns 0.
+- `git count-objects -v` shows `garbage: 0`.
+- `git fsck --no-dangling` passes with no errors.
+- `git status` is clean, and `HEAD` is unchanged at `dece652`, so history is untouched.
+
+The `._*` ignore rule from the previous entry stays. Copying the project from a Mac again will
+recreate these files, and the rule keeps them out of git when that happens.
+
+### Files Touched
+
+- `CHANGELOG.md` — this entry. The deleted `._*` files were never tracked, so they don't appear in the diff.
+
 ## 23/09/2026 @ 07:17:31 IST — "claude-opus-5-5"
 
 **Project completion: 100.00%**
