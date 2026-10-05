@@ -3,6 +3,7 @@ import 'server-only';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '../index';
+import { withDbRetry } from '../retry';
 import { invoices, jobAttachments, jobs, payments, supplierLedger, suppliers } from '../schema';
 import { INVOICE_HAS_BALANCE, REMAINING_CENTS } from './invoice-state';
 
@@ -46,13 +47,15 @@ const BALANCE_CENTS = sql<string>`COALESCE(SUM(
  * invoice from it entirely.
  */
 export async function getOutstandingInvoiceTotalCents(): Promise<number> {
-  const rows = await db
-    .select({
-      total: sql<string>`COALESCE(SUM(${REMAINING_CENTS}), 0)::bigint`,
-    })
-    .from(invoices)
-    .innerJoin(jobs, eq(invoices.jobId, jobs.id))
-    .where(and(INVOICE_HAS_BALANCE, isNull(jobs.deletedAt), isNull(invoices.voidedAt)));
+  const rows = await withDbRetry('overview:outstanding', () =>
+    db
+      .select({
+        total: sql<string>`COALESCE(SUM(${REMAINING_CENTS}), 0)::bigint`,
+      })
+      .from(invoices)
+      .innerJoin(jobs, eq(invoices.jobId, jobs.id))
+      .where(and(INVOICE_HAS_BALANCE, isNull(jobs.deletedAt), isNull(invoices.voidedAt))),
+  );
 
   return Number(rows[0]?.total ?? 0);
 }
@@ -75,44 +78,48 @@ export async function getOwedToSuppliersCents(): Promise<number> {
     .groupBy(suppliers.id)
     .as('supplier_balances');
 
-  const rows = await db
-    .select({
-      total: sql<string>`COALESCE(SUM(GREATEST(${balances.balanceCents}, 0)), 0)::bigint`,
-    })
-    .from(balances);
+  const rows = await withDbRetry('overview:owed-suppliers', () =>
+    db
+      .select({
+        total: sql<string>`COALESCE(SUM(GREATEST(${balances.balanceCents}, 0)), 0)::bigint`,
+      })
+      .from(balances),
+  );
 
   return Number(rows[0]?.total ?? 0);
 }
 
 export async function listRecentInvoices(limit = 10) {
-  return db
-    .select({
-      id: invoices.id,
-      invoiceNumber: invoices.invoiceNumber,
-      issueDate: invoices.issueDate,
-      grandTotal: invoices.grandTotal,
-      sentVia: invoices.sentVia,
-      jobId: invoices.jobId,
-      jobNumber: jobs.jobNumber,
-      customerName: jobs.customerName,
-      /*
-        The invoice's own payment state, not `jobs.status`. This column is in a
-        table of invoices and reads as "has this been paid" — so it is answered
-        from the payments, which is the only source that cannot drift. The job's
-        workflow badge lives on the job.
-      */
-      remainingCents: REMAINING_CENTS,
-    })
-    .from(invoices)
-    .innerJoin(jobs, eq(invoices.jobId, jobs.id))
-    // A voided invoice is not a recent piece of business — showing it here would
-    // read as money taken. It stays visible on its own job, marked VOID.
-    .where(and(isNull(jobs.deletedAt), isNull(invoices.voidedAt)))
-    // createdAt, not sentAt: sentAt is null until the invoice is actually
-    // sent, and Postgres sorts NULLS FIRST on DESC, which would float
-    // unsent invoices to the top of a list meaning "most recently issued".
-    .orderBy(desc(invoices.createdAt))
-    .limit(limit);
+  return withDbRetry('overview:recent-invoices', () =>
+    db
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+        issueDate: invoices.issueDate,
+        grandTotal: invoices.grandTotal,
+        sentVia: invoices.sentVia,
+        jobId: invoices.jobId,
+        jobNumber: jobs.jobNumber,
+        customerName: jobs.customerName,
+        /*
+          The invoice's own payment state, not `jobs.status`. This column is in a
+          table of invoices and reads as "has this been paid" — so it is answered
+          from the payments, which is the only source that cannot drift. The job's
+          workflow badge lives on the job.
+        */
+        remainingCents: REMAINING_CENTS,
+      })
+      .from(invoices)
+      .innerJoin(jobs, eq(invoices.jobId, jobs.id))
+      // A voided invoice is not a recent piece of business — showing it here would
+      // read as money taken. It stays visible on its own job, marked VOID.
+      .where(and(isNull(jobs.deletedAt), isNull(invoices.voidedAt)))
+      // createdAt, not sentAt: sentAt is null until the invoice is actually
+      // sent, and Postgres sorts NULLS FIRST on DESC, which would float
+      // unsent invoices to the top of a list meaning "most recently issued".
+      .orderBy(desc(invoices.createdAt))
+      .limit(limit),
+  );
 }
 
 /**
@@ -123,18 +130,20 @@ export async function listRecentInvoices(limit = 10) {
  * so on their own line rather than be flattened to zero.
  */
 export async function listSuppliersWithTotals() {
-  return db
-    .select({
-      id: suppliers.id,
-      name: suppliers.name,
-      notes: suppliers.notes,
-      balanceCents: BALANCE_CENTS,
-      lastEntryDate: sql<string | null>`MAX(${supplierLedger.entryDate})`,
-    })
-    .from(suppliers)
-    .leftJoin(supplierLedger, eq(supplierLedger.supplierId, suppliers.id))
-    .groupBy(suppliers.id)
-    .orderBy(suppliers.name);
+  return withDbRetry('overview:suppliers-totals', () =>
+    db
+      .select({
+        id: suppliers.id,
+        name: suppliers.name,
+        notes: suppliers.notes,
+        balanceCents: BALANCE_CENTS,
+        lastEntryDate: sql<string | null>`MAX(${supplierLedger.entryDate})`,
+      })
+      .from(suppliers)
+      .leftJoin(supplierLedger, eq(supplierLedger.supplierId, suppliers.id))
+      .groupBy(suppliers.id)
+      .orderBy(suppliers.name),
+  );
 }
 
 /**
@@ -144,14 +153,17 @@ export async function listSuppliersWithTotals() {
  * so the number shown has to match what actually gets destroyed.
  */
 export async function getResetCounts() {
-  const [jobRows, invoiceRows, attachmentRows, supplierRows, entryRows, paymentRows] = await Promise.all([
-    db.select({ n: sql<number>`count(*)::int` }).from(jobs),
-    db.select({ n: sql<number>`count(*)::int` }).from(invoices),
-    db.select({ n: sql<number>`count(*)::int` }).from(jobAttachments),
-    db.select({ n: sql<number>`count(*)::int` }).from(suppliers),
-    db.select({ n: sql<number>`count(*)::int` }).from(supplierLedger),
-    db.select({ n: sql<number>`count(*)::int` }).from(payments),
-  ]);
+  const [jobRows, invoiceRows, attachmentRows, supplierRows, entryRows, paymentRows] =
+    await withDbRetry('overview:reset-counts', () =>
+      Promise.all([
+        db.select({ n: sql<number>`count(*)::int` }).from(jobs),
+        db.select({ n: sql<number>`count(*)::int` }).from(invoices),
+        db.select({ n: sql<number>`count(*)::int` }).from(jobAttachments),
+        db.select({ n: sql<number>`count(*)::int` }).from(suppliers),
+        db.select({ n: sql<number>`count(*)::int` }).from(supplierLedger),
+        db.select({ n: sql<number>`count(*)::int` }).from(payments),
+      ]),
+    );
 
   return {
     jobs: Number(jobRows[0]?.n ?? 0),
@@ -173,12 +185,14 @@ export async function getResetCounts() {
  * is the order they were keyed in.
  */
 export async function getSupplierWithEntries(supplierId: string) {
-  return db.query.suppliers.findFirst({
-    where: eq(suppliers.id, supplierId),
-    with: {
-      entries: {
-        orderBy: [desc(supplierLedger.entryDate), desc(supplierLedger.createdAt)],
+  return withDbRetry('overview:supplier-entries', () =>
+    db.query.suppliers.findFirst({
+      where: eq(suppliers.id, supplierId),
+      with: {
+        entries: {
+          orderBy: [desc(supplierLedger.entryDate), desc(supplierLedger.createdAt)],
+        },
       },
-    },
-  });
+    }),
+  );
 }

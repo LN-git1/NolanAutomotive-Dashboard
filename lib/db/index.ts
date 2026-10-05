@@ -48,6 +48,12 @@ function createDb() {
     // See the note above — must be > 1 or concurrent queries deadlock.
     max: 8,
     idle_timeout: 20,
+    // Fail fast on a stalled pooler instead of hanging the page forever;
+    // withDbRetry (lib/db/retry.ts) retries on a fresh connection. Seconds.
+    connect_timeout: 10,
+    // Retire pooled connections after 15 minutes so silently-staled Supavisor
+    // backends are rotated out instead of failing intermittently. Seconds.
+    max_lifetime: 15 * 60,
   });
 
   return drizzle(sql, { schema });

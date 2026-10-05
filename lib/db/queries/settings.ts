@@ -3,6 +3,7 @@ import 'server-only';
 import { eq } from 'drizzle-orm';
 
 import { db } from '../index';
+import { withDbRetry } from '../retry';
 import { settings, type Settings } from '../schema';
 
 export const SETTINGS_ID = 1;
@@ -15,7 +16,9 @@ export const SETTINGS_ID = 1;
  * of a 500 on every page. The seed script is still the supported path.
  */
 export async function getSettings(): Promise<Settings> {
-  const rows = await db.select().from(settings).where(eq(settings.id, SETTINGS_ID)).limit(1);
+  const rows = await withDbRetry('settings:get', () =>
+    db.select().from(settings).where(eq(settings.id, SETTINGS_ID)).limit(1),
+  );
   const existing = rows[0];
   if (existing) return existing;
 

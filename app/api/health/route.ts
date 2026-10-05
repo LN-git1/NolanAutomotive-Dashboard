@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { after } from 'next/server';
 
 import { db } from '@/lib/db';
+import { withDbRetry } from '@/lib/db/retry';
 import { sendDbDownAlert } from '@/lib/email/resend';
 
 export const runtime = 'nodejs';
@@ -29,7 +30,21 @@ export async function GET(request: Request) {
   }
 
   try {
-    await db.execute(sql`SELECT 1`);
+    // Timed so the keep-alive cron doubles as a responsiveness monitor: a
+    // database that answers but takes seconds is the early warning before the
+    // page-level Suspense streams start stalling (see lib/db/retry.ts).
+    const started = Date.now();
+    // Same retry policy as every page read, so the health verdict matches
+    // what the app itself experiences rather than a single lucky attempt.
+    await withDbRetry('health:select-1', () => db.execute(sql`SELECT 1`));
+    const dbMs = Date.now() - started;
+    if (dbMs > 5000) {
+      console.error(`[db] health check slow: SELECT 1 took ${dbMs}ms`);
+    }
+    return Response.json(
+      { ok: true, dbMs },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Database unreachable';
 
@@ -49,6 +64,4 @@ export async function GET(request: Request) {
       { status: 503, headers: { 'Cache-Control': 'no-store' } },
     );
   }
-
-  return Response.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } });
 }

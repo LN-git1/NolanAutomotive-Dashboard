@@ -3,6 +3,7 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 
 import type { Database } from './db';
+import { withDbRetry } from './db/retry';
 
 /** Either the base client or an open transaction — allocation requires the latter. */
 export type DbOrTx = Database | Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -59,9 +60,13 @@ export async function allocateNumber(tx: DbOrTx, key: CounterKey): Promise<numbe
  * Settings card just shows a stale number until the page next reloads.
  */
 export async function peekNextNumber(tx: DbOrTx, key: CounterKey): Promise<number> {
-  const result = await tx.execute<{ next_value: number }>(sql`
-    SELECT next_value FROM counters WHERE key = ${key}
-  `);
+  // Read-only peek — safe to retry, unlike allocateNumber below whose
+  // UPDATE consumes a value on every execution and must run exactly once.
+  const result = await withDbRetry('counters:peek', () =>
+    tx.execute<{ next_value: number }>(sql`
+      SELECT next_value FROM counters WHERE key = ${key}
+    `),
+  );
 
   const rows = result as unknown as { next_value: number | string }[];
   const raw = rows[0]?.next_value;

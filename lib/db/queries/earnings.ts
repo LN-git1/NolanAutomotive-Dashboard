@@ -3,6 +3,7 @@ import 'server-only';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '../index';
+import { withDbRetry } from '../retry';
 import { invoices, jobs, payments } from '../schema';
 import { MONTH_NAMES } from './schedule';
 
@@ -74,32 +75,34 @@ function monthLabel(monthKey: string): string {
  * `getEarningsMonthInvoices`.
  */
 export async function getEarningsSummary(): Promise<EarningsSummary> {
-  const [totals, monthRows] = await Promise.all([
-    db
-      .select({
-        allTimeCents: sql<string>`COALESCE(SUM(${payments.amount}) * 100, 0)::bigint`,
-        last30DaysCents: sql<string>`COALESCE(SUM(${payments.amount}) FILTER (WHERE ${LAST_30_DAYS}) * 100, 0)::bigint`,
-      })
-      .from(payments)
-      .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
-      .innerJoin(jobs, eq(invoices.jobId, jobs.id))
-      .where(EARNED_PAYMENT),
-    db
-      .select({
-        monthKey: sql<string>`to_char(date_trunc('month', ${EARNED_DATE}), 'YYYY-MM')`,
-        totalCents: sql<string>`COALESCE(SUM(${payments.amount}) * 100, 0)::bigint`,
-        // DISTINCT because two instalments against one invoice are one invoice,
-        // not two — this is what keeps `invoiceCount` equal to the number of
-        // rows `getEarningsMonthInvoices` returns for the same month.
-        invoiceCount: sql<number>`COUNT(DISTINCT ${invoices.id})::int`,
-      })
-      .from(payments)
-      .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
-      .innerJoin(jobs, eq(invoices.jobId, jobs.id))
-      .where(EARNED_PAYMENT)
-      .groupBy(sql`date_trunc('month', ${EARNED_DATE})`)
-      .orderBy(sql`date_trunc('month', ${EARNED_DATE}) DESC`),
-  ]);
+  const [totals, monthRows] = await withDbRetry('earnings:summary', () =>
+    Promise.all([
+      db
+        .select({
+          allTimeCents: sql<string>`COALESCE(SUM(${payments.amount}) * 100, 0)::bigint`,
+          last30DaysCents: sql<string>`COALESCE(SUM(${payments.amount}) FILTER (WHERE ${LAST_30_DAYS}) * 100, 0)::bigint`,
+        })
+        .from(payments)
+        .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+        .innerJoin(jobs, eq(invoices.jobId, jobs.id))
+        .where(EARNED_PAYMENT),
+      db
+        .select({
+          monthKey: sql<string>`to_char(date_trunc('month', ${EARNED_DATE}), 'YYYY-MM')`,
+          totalCents: sql<string>`COALESCE(SUM(${payments.amount}) * 100, 0)::bigint`,
+          // DISTINCT because two instalments against one invoice are one invoice,
+          // not two — this is what keeps `invoiceCount` equal to the number of
+          // rows `getEarningsMonthInvoices` returns for the same month.
+          invoiceCount: sql<number>`COUNT(DISTINCT ${invoices.id})::int`,
+        })
+        .from(payments)
+        .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+        .innerJoin(jobs, eq(invoices.jobId, jobs.id))
+        .where(EARNED_PAYMENT)
+        .groupBy(sql`date_trunc('month', ${EARNED_DATE})`)
+        .orderBy(sql`date_trunc('month', ${EARNED_DATE}) DESC`),
+    ]),
+  );
 
   const last30DaysCents = Number(totals[0]?.last30DaysCents ?? 0);
 
@@ -129,26 +132,28 @@ export interface EarningsMonthInvoice {
 
 /** Fetched only when a month is actually expanded — never on initial page load. */
 export async function getEarningsMonthInvoices(monthKey: string): Promise<EarningsMonthInvoice[]> {
-  const rows = await db
-    .select({
-      id: invoices.id,
-      invoiceNumber: invoices.invoiceNumber,
-      jobId: invoices.jobId,
-      jobNumber: jobs.jobNumber,
-      customerName: jobs.customerName,
-      grandTotal: invoices.grandTotal,
-      receivedCents: sql<string>`COALESCE(SUM(${payments.amount}) * 100, 0)::bigint`,
-    })
-    .from(payments)
-    .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
-    .innerJoin(jobs, eq(invoices.jobId, jobs.id))
-    .where(
-      and(EARNED_PAYMENT, sql`to_char(date_trunc('month', ${EARNED_DATE}), 'YYYY-MM') = ${monthKey}`),
-    )
-    // Grouping by BOTH primary keys lets Postgres' functional-dependency
-    // inference allow `jobs.dueDate` in the ORDER BY below.
-    .groupBy(invoices.id, jobs.id)
-    .orderBy(EARNED_DATE);
+  const rows = await withDbRetry('earnings:month-invoices', () =>
+    db
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+        jobId: invoices.jobId,
+        jobNumber: jobs.jobNumber,
+        customerName: jobs.customerName,
+        grandTotal: invoices.grandTotal,
+        receivedCents: sql<string>`COALESCE(SUM(${payments.amount}) * 100, 0)::bigint`,
+      })
+      .from(payments)
+      .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .innerJoin(jobs, eq(invoices.jobId, jobs.id))
+      .where(
+        and(EARNED_PAYMENT, sql`to_char(date_trunc('month', ${EARNED_DATE}), 'YYYY-MM') = ${monthKey}`),
+      )
+      // Grouping by BOTH primary keys lets Postgres' functional-dependency
+      // inference allow `jobs.dueDate` in the ORDER BY below.
+      .groupBy(invoices.id, jobs.id)
+      .orderBy(EARNED_DATE),
+  );
 
   return rows.map((row) => ({ ...row, receivedCents: Number(row.receivedCents) }));
 }

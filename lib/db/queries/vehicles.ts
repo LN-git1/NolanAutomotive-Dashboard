@@ -3,6 +3,7 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 
 import { db } from '../index';
+import { withDbRetry } from '../retry';
 import { jobs } from '../schema';
 
 /**
@@ -138,59 +139,61 @@ export async function searchVehicles(term: string, limit = 8): Promise<VehicleMa
   const normPattern = `%${normalizeRegistration(trimmed)}%`;
   const textPattern = `%${trimmed}%`;
 
-  const rows = await db.execute<{
-    normalizedRegistration: string;
-    registration: string;
-    customerName: string;
-    customerPhone: string | null;
-    customerEmail: string | null;
-    customerAddress: string | null;
-    vehicleMake: string | null;
-    vehicleModel: string | null;
-    vehicleYear: number | null;
-    vehicleColor: string | null;
-    vehicleVin: string | null;
-    vehicleMileage: number | null;
-    lastJobNumber: string;
-    jobCount: number;
-    firstVisit: string;
-    lastVisit: string;
-    totalBilledCents: string;
-    totalPaidCents: string;
-  }>(sql`
-    WITH scoped AS (${SCOPED_JOBS}),
-    matching AS (
-      SELECT DISTINCT norm
-      FROM scoped
-      WHERE norm LIKE ${normPattern}
-         OR customer_name ILIKE ${textPattern}
-         OR job_number ILIKE ${textPattern}
-    )
-    SELECT
-      s.norm AS "normalizedRegistration",
-      (array_agg(s.vehicle_registration ORDER BY s.created_at DESC))[1] AS "registration",
-      (array_agg(s.customer_name        ORDER BY s.created_at DESC))[1] AS "customerName",
-      (array_agg(s.customer_phone       ORDER BY s.created_at DESC))[1] AS "customerPhone",
-      (array_agg(s.customer_email       ORDER BY s.created_at DESC))[1] AS "customerEmail",
-      (array_agg(s.customer_address     ORDER BY s.created_at DESC))[1] AS "customerAddress",
-      (array_agg(s.vehicle_make         ORDER BY s.created_at DESC))[1] AS "vehicleMake",
-      (array_agg(s.vehicle_model        ORDER BY s.created_at DESC))[1] AS "vehicleModel",
-      (array_agg(s.vehicle_year         ORDER BY s.created_at DESC))[1] AS "vehicleYear",
-      (array_agg(s.vehicle_color        ORDER BY s.created_at DESC))[1] AS "vehicleColor",
-      (array_agg(s.vehicle_vin          ORDER BY s.created_at DESC))[1] AS "vehicleVin",
-      (array_agg(s.vehicle_mileage      ORDER BY s.created_at DESC))[1] AS "vehicleMileage",
-      (array_agg(s.job_number           ORDER BY s.created_at DESC))[1] AS "lastJobNumber",
-      count(*)::int   AS "jobCount",
-      min(s.created_at) AS "firstVisit",
-      max(s.created_at) AS "lastVisit",
-      (SUM(s.billed) * 100)::bigint AS "totalBilledCents",
-      (SUM(s.paid)   * 100)::bigint AS "totalPaidCents"
-    FROM scoped s
-    JOIN matching m ON m.norm = s.norm
-    GROUP BY s.norm
-    ORDER BY max(s.created_at) DESC
-    LIMIT ${limit}
-  `);
+  const rows = await withDbRetry('vehicles:search', () =>
+    db.execute<{
+      normalizedRegistration: string;
+      registration: string;
+      customerName: string;
+      customerPhone: string | null;
+      customerEmail: string | null;
+      customerAddress: string | null;
+      vehicleMake: string | null;
+      vehicleModel: string | null;
+      vehicleYear: number | null;
+      vehicleColor: string | null;
+      vehicleVin: string | null;
+      vehicleMileage: number | null;
+      lastJobNumber: string;
+      jobCount: number;
+      firstVisit: string;
+      lastVisit: string;
+      totalBilledCents: string;
+      totalPaidCents: string;
+    }>(sql`
+      WITH scoped AS (${SCOPED_JOBS}),
+      matching AS (
+        SELECT DISTINCT norm
+        FROM scoped
+        WHERE norm LIKE ${normPattern}
+           OR customer_name ILIKE ${textPattern}
+           OR job_number ILIKE ${textPattern}
+      )
+      SELECT
+        s.norm AS "normalizedRegistration",
+        (array_agg(s.vehicle_registration ORDER BY s.created_at DESC))[1] AS "registration",
+        (array_agg(s.customer_name        ORDER BY s.created_at DESC))[1] AS "customerName",
+        (array_agg(s.customer_phone       ORDER BY s.created_at DESC))[1] AS "customerPhone",
+        (array_agg(s.customer_email       ORDER BY s.created_at DESC))[1] AS "customerEmail",
+        (array_agg(s.customer_address     ORDER BY s.created_at DESC))[1] AS "customerAddress",
+        (array_agg(s.vehicle_make         ORDER BY s.created_at DESC))[1] AS "vehicleMake",
+        (array_agg(s.vehicle_model        ORDER BY s.created_at DESC))[1] AS "vehicleModel",
+        (array_agg(s.vehicle_year         ORDER BY s.created_at DESC))[1] AS "vehicleYear",
+        (array_agg(s.vehicle_color        ORDER BY s.created_at DESC))[1] AS "vehicleColor",
+        (array_agg(s.vehicle_vin          ORDER BY s.created_at DESC))[1] AS "vehicleVin",
+        (array_agg(s.vehicle_mileage      ORDER BY s.created_at DESC))[1] AS "vehicleMileage",
+        (array_agg(s.job_number           ORDER BY s.created_at DESC))[1] AS "lastJobNumber",
+        count(*)::int   AS "jobCount",
+        min(s.created_at) AS "firstVisit",
+        max(s.created_at) AS "lastVisit",
+        (SUM(s.billed) * 100)::bigint AS "totalBilledCents",
+        (SUM(s.paid)   * 100)::bigint AS "totalPaidCents"
+      FROM scoped s
+      JOIN matching m ON m.norm = s.norm
+      GROUP BY s.norm
+      ORDER BY max(s.created_at) DESC
+      LIMIT ${limit}
+    `),
+  );
 
   // `db.execute` hands back whatever the driver produced, so the numeric
   // aggregates arrive as strings. Converted here rather than at each call site,
@@ -224,29 +227,31 @@ export async function getVehicleHistory(registration: string): Promise<VehicleHi
   const norm = normalizeRegistration(registration);
   if (norm === '') return [];
 
-  const rows = await db.execute<{
-    id: string;
-    jobNumber: string;
-    status: string;
-    createdAt: string;
-    dueDate: string | null;
-    billedCents: string;
-    paidCents: string;
-  }>(sql`
-    WITH scoped AS (${SCOPED_JOBS})
-    SELECT
-      s.id,
-      s.job_number  AS "jobNumber",
-      s.status,
-      s.created_at  AS "createdAt",
-      s.due_date    AS "dueDate",
-      (s.billed * 100)::bigint AS "billedCents",
-      (s.paid   * 100)::bigint AS "paidCents"
-    FROM scoped s
-    WHERE s.norm = ${norm}
-    ORDER BY s.created_at DESC
-    LIMIT 100
-  `);
+  const rows = await withDbRetry('vehicles:history', () =>
+    db.execute<{
+      id: string;
+      jobNumber: string;
+      status: string;
+      createdAt: string;
+      dueDate: string | null;
+      billedCents: string;
+      paidCents: string;
+    }>(sql`
+      WITH scoped AS (${SCOPED_JOBS})
+      SELECT
+        s.id,
+        s.job_number  AS "jobNumber",
+        s.status,
+        s.created_at  AS "createdAt",
+        s.due_date    AS "dueDate",
+        (s.billed * 100)::bigint AS "billedCents",
+        (s.paid   * 100)::bigint AS "paidCents"
+      FROM scoped s
+      WHERE s.norm = ${norm}
+      ORDER BY s.created_at DESC
+      LIMIT 100
+    `),
+  );
 
   return rows.map((row) => ({
     ...row,

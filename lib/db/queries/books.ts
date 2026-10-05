@@ -6,6 +6,7 @@ import { netExpenseCents, profitCents } from '@/lib/books';
 import { toCents } from '@/lib/money';
 
 import { db } from '../index';
+import { withDbRetry } from '../retry';
 import { expenses, invoices, jobs, payments, supplierLedger } from '../schema';
 import { MONTH_NAMES } from './schedule';
 
@@ -51,34 +52,36 @@ function sumByMonth<T extends { monthKey: string; cents: number }>(rows: T[]): M
 export async function getBooksSummary(): Promise<BooksSummary> {
   const yearPrefix = `${new Date().getFullYear()}-`;
 
-  const [incomeRows, supplierRows, expenseRows] = await Promise.all([
-    db
-      .select({
-        monthKey: sql<string>`to_char(date_trunc('month', ${INCOME_MONTH}), 'YYYY-MM')`,
-        cents: sql<string>`COALESCE(SUM(${payments.amount}) * 100, 0)::bigint`,
-      })
-      .from(payments)
-      .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
-      .innerJoin(jobs, eq(invoices.jobId, jobs.id))
-      .where(LIVE_INVOICE)
-      .groupBy(sql`date_trunc('month', ${INCOME_MONTH})`),
-    db
-      .select({
-        monthKey: sql<string>`to_char(date_trunc('month', ${SUPPLIER_MONTH}), 'YYYY-MM')`,
-        cents: sql<string>`COALESCE(SUM(${supplierLedger.amount}) * 100, 0)::bigint`,
-      })
-      .from(supplierLedger)
-      .where(eq(supplierLedger.kind, 'charge'))
-      .groupBy(sql`date_trunc('month', ${SUPPLIER_MONTH})`),
-    db
-      .select({
-        id: expenses.id,
-        amount: expenses.amount,
-        reversesId: expenses.reversesId,
-        monthKey: sql<string>`to_char(date_trunc('month', ${EXPENSE_MONTH}), 'YYYY-MM')`,
-      })
-      .from(expenses),
-  ]);
+  const [incomeRows, supplierRows, expenseRows] = await withDbRetry('books:summary', () =>
+    Promise.all([
+      db
+        .select({
+          monthKey: sql<string>`to_char(date_trunc('month', ${INCOME_MONTH}), 'YYYY-MM')`,
+          cents: sql<string>`COALESCE(SUM(${payments.amount}) * 100, 0)::bigint`,
+        })
+        .from(payments)
+        .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+        .innerJoin(jobs, eq(invoices.jobId, jobs.id))
+        .where(LIVE_INVOICE)
+        .groupBy(sql`date_trunc('month', ${INCOME_MONTH})`),
+      db
+        .select({
+          monthKey: sql<string>`to_char(date_trunc('month', ${SUPPLIER_MONTH}), 'YYYY-MM')`,
+          cents: sql<string>`COALESCE(SUM(${supplierLedger.amount}) * 100, 0)::bigint`,
+        })
+        .from(supplierLedger)
+        .where(eq(supplierLedger.kind, 'charge'))
+        .groupBy(sql`date_trunc('month', ${SUPPLIER_MONTH})`),
+      db
+        .select({
+          id: expenses.id,
+          amount: expenses.amount,
+          reversesId: expenses.reversesId,
+          monthKey: sql<string>`to_char(date_trunc('month', ${EXPENSE_MONTH}), 'YYYY-MM')`,
+        })
+        .from(expenses),
+    ]),
+  );
 
   const incomeByMonth = sumByMonth(
     incomeRows.map((row) => ({ monthKey: row.monthKey, cents: Number(row.cents) })),
@@ -151,56 +154,58 @@ export interface BooksMonthDetail {
 export async function getBooksMonthDetail(monthKey: string): Promise<BooksMonthDetail> {
   if (!/^\d{4}-\d{2}$/.test(monthKey)) return { income: [], supplier: [], expenses: [] };
 
-  const [income, supplier, expenseLines] = await Promise.all([
-    db
-      .select({
-        id: invoices.id,
-        invoiceNumber: invoices.invoiceNumber,
-        jobId: invoices.jobId,
-        jobNumber: jobs.jobNumber,
-        customerName: jobs.customerName,
-        receivedCents: sql<string>`COALESCE(SUM(${payments.amount}) * 100, 0)::bigint`,
-      })
-      .from(payments)
-      .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
-      .innerJoin(jobs, eq(invoices.jobId, jobs.id))
-      .where(
-        and(
-          LIVE_INVOICE,
-          sql`to_char(date_trunc('month', ${INCOME_MONTH}), 'YYYY-MM') = ${monthKey}`,
-        ),
-      )
-      .groupBy(invoices.id, jobs.id)
-      .orderBy(INCOME_MONTH),
-    db
-      .select({
-        id: supplierLedger.id,
-        supplierId: supplierLedger.supplierId,
-        reference: supplierLedger.reference,
-        notes: supplierLedger.notes,
-        amount: supplierLedger.amount,
-      })
-      .from(supplierLedger)
-      .where(
-        and(
-          eq(supplierLedger.kind, 'charge'),
-          sql`to_char(date_trunc('month', ${SUPPLIER_MONTH}), 'YYYY-MM') = ${monthKey}`,
-        ),
-      )
-      .orderBy(SUPPLIER_MONTH),
-    db
-      .select({
-        id: expenses.id,
-        category: expenses.category,
-        note: expenses.note,
-        amount: expenses.amount,
-        reversesId: expenses.reversesId,
-        receiptStoragePath: expenses.receiptStoragePath,
-      })
-      .from(expenses)
-      .where(sql`to_char(date_trunc('month', ${EXPENSE_MONTH}), 'YYYY-MM') = ${monthKey}`)
-      .orderBy(EXPENSE_MONTH),
-  ]);
+  const [income, supplier, expenseLines] = await withDbRetry('books:month-detail', () =>
+    Promise.all([
+      db
+        .select({
+          id: invoices.id,
+          invoiceNumber: invoices.invoiceNumber,
+          jobId: invoices.jobId,
+          jobNumber: jobs.jobNumber,
+          customerName: jobs.customerName,
+          receivedCents: sql<string>`COALESCE(SUM(${payments.amount}) * 100, 0)::bigint`,
+        })
+        .from(payments)
+        .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+        .innerJoin(jobs, eq(invoices.jobId, jobs.id))
+        .where(
+          and(
+            LIVE_INVOICE,
+            sql`to_char(date_trunc('month', ${INCOME_MONTH}), 'YYYY-MM') = ${monthKey}`,
+          ),
+        )
+        .groupBy(invoices.id, jobs.id)
+        .orderBy(INCOME_MONTH),
+      db
+        .select({
+          id: supplierLedger.id,
+          supplierId: supplierLedger.supplierId,
+          reference: supplierLedger.reference,
+          notes: supplierLedger.notes,
+          amount: supplierLedger.amount,
+        })
+        .from(supplierLedger)
+        .where(
+          and(
+            eq(supplierLedger.kind, 'charge'),
+            sql`to_char(date_trunc('month', ${SUPPLIER_MONTH}), 'YYYY-MM') = ${monthKey}`,
+          ),
+        )
+        .orderBy(SUPPLIER_MONTH),
+      db
+        .select({
+          id: expenses.id,
+          category: expenses.category,
+          note: expenses.note,
+          amount: expenses.amount,
+          reversesId: expenses.reversesId,
+          receiptStoragePath: expenses.receiptStoragePath,
+        })
+        .from(expenses)
+        .where(sql`to_char(date_trunc('month', ${EXPENSE_MONTH}), 'YYYY-MM') = ${monthKey}`)
+        .orderBy(EXPENSE_MONTH),
+    ]),
+  );
 
   return {
     income: income.map((row) => ({

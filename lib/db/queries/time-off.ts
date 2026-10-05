@@ -3,6 +3,7 @@ import 'server-only';
 import { and, asc, desc, gte, lte } from 'drizzle-orm';
 
 import { db } from '../index';
+import { withDbRetry } from '../retry';
 import { timeOff, type TimeOff } from '../schema';
 
 /**
@@ -12,16 +13,20 @@ import { timeOff, type TimeOff } from '../schema';
  * (an overlap test), not `start >= from AND end <= to` (a containment test).
  */
 export async function listTimeOffInRange(fromIso: string, toIso: string) {
-  return db
-    .select()
-    .from(timeOff)
-    .where(and(lte(timeOff.startDate, toIso), gte(timeOff.endDate, fromIso)))
-    .orderBy(asc(timeOff.startDate));
+  return withDbRetry('time-off:in-range', () =>
+    db
+      .select()
+      .from(timeOff)
+      .where(and(lte(timeOff.startDate, toIso), gte(timeOff.endDate, fromIso)))
+      .orderBy(asc(timeOff.startDate)),
+  );
 }
 
 /** Every entry, most recent first — for the Settings list. */
 export async function listAllTimeOff() {
-  return db.select().from(timeOff).orderBy(desc(timeOff.startDate));
+  return withDbRetry('time-off:all', () =>
+    db.select().from(timeOff).orderBy(desc(timeOff.startDate)),
+  );
 }
 
 function eachIsoDate(fromIso: string, toIso: string): string[] {

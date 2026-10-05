@@ -3,6 +3,7 @@ import 'server-only';
 import { and, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm';
 
 import { db } from '../index';
+import { withDbRetry } from '../retry';
 import { invoices, jobs, type JobStatus } from '../schema';
 import {
   INVOICE_HAS_BALANCE,
@@ -78,29 +79,35 @@ export async function listJobs(filters: JobFilters = {}) {
     conditions.push(eq(jobs.status, filters.status));
   }
 
-  return db
-    .select()
-    .from(jobs)
-    .where(and(...conditions.filter(Boolean as unknown as (v: SQL | undefined) => v is SQL)))
-    .orderBy(desc(jobs.createdAt))
-    .limit(500);
+  return withDbRetry('jobs:list', () =>
+    db
+      .select()
+      .from(jobs)
+      .where(and(...conditions.filter(Boolean as unknown as (v: SQL | undefined) => v is SQL)))
+      .orderBy(desc(jobs.createdAt))
+      .limit(500),
+  );
 }
 
 export async function getJob(jobId: string) {
-  const rows = await db
-    .select()
-    .from(jobs)
-    .where(and(eq(jobs.id, jobId), notDeleted))
-    .limit(1);
+  const rows = await withDbRetry('jobs:get', () =>
+    db
+      .select()
+      .from(jobs)
+      .where(and(eq(jobs.id, jobId), notDeleted))
+      .limit(1),
+  );
 
   return rows[0] ?? null;
 }
 
 export async function getJobWithAttachments(jobId: string) {
-  return db.query.jobs.findFirst({
-    where: and(eq(jobs.id, jobId), notDeleted),
-    with: { attachments: true, invoices: { with: { payments: true } } },
-  });
+  return withDbRetry('jobs:with-attachments', () =>
+    db.query.jobs.findFirst({
+      where: and(eq(jobs.id, jobId), notDeleted),
+      with: { attachments: true, invoices: { with: { payments: true } } },
+    }),
+  );
 }
 
 /**
@@ -122,12 +129,14 @@ export async function listJobsInPipeline(
         ? JOB_IS_AWAITING_PAYMENT
         : JOB_IS_SETTLED;
 
-  return db
-    .select()
-    .from(jobs)
-    .where(and(condition, notDeleted))
-    .orderBy(desc(jobs.updatedAt))
-    .limit(limit);
+  return withDbRetry('jobs:pipeline', () =>
+    db
+      .select()
+      .from(jobs)
+      .where(and(condition, notDeleted))
+      .orderBy(desc(jobs.updatedAt))
+      .limit(limit),
+  );
 }
 
 /**
@@ -153,35 +162,37 @@ export async function listInvoiceableJobs() {
     .where(isNull(invoices.voidedAt))
     .as('live');
 
-  return db
-    .select({
-      id: jobs.id,
-      jobNumber: jobs.jobNumber,
-      customerName: jobs.customerName,
-      // Carried so the send bar can address the email and the WhatsApp chat
-      // without a second round trip once the invoice is issued.
-      customerEmail: jobs.customerEmail,
-      customerPhone: jobs.customerPhone,
-      vehicleRegistration: jobs.vehicleRegistration,
-      status: jobs.status,
-      labourLines: jobs.labourLines,
-      hourlyRate: jobs.hourlyRate,
-      labourTotalOverride: jobs.labourTotalOverride,
-      parts: jobs.parts,
-      partsTotalOverride: jobs.partsTotalOverride,
-      otherComments: jobs.otherComments,
-      liveInvoiceId: live.id,
-      liveInvoiceNumber: live.number,
-    })
-    .from(jobs)
-    .leftJoin(live, eq(live.jobId, jobs.id))
-    .where(notDeleted)
-    .orderBy(
-      // Ready-to-bill work first, then whatever was touched most recently.
-      sql`CASE WHEN ${jobs.status} = 'completed' THEN 0 WHEN ${jobs.status} = 'paid' THEN 2 ELSE 1 END`,
-      desc(jobs.updatedAt),
-    )
-    .limit(300);
+  return withDbRetry('jobs:invoiceable', () =>
+    db
+      .select({
+        id: jobs.id,
+        jobNumber: jobs.jobNumber,
+        customerName: jobs.customerName,
+        // Carried so the send bar can address the email and the WhatsApp chat
+        // without a second round trip once the invoice is issued.
+        customerEmail: jobs.customerEmail,
+        customerPhone: jobs.customerPhone,
+        vehicleRegistration: jobs.vehicleRegistration,
+        status: jobs.status,
+        labourLines: jobs.labourLines,
+        hourlyRate: jobs.hourlyRate,
+        labourTotalOverride: jobs.labourTotalOverride,
+        parts: jobs.parts,
+        partsTotalOverride: jobs.partsTotalOverride,
+        otherComments: jobs.otherComments,
+        liveInvoiceId: live.id,
+        liveInvoiceNumber: live.number,
+      })
+      .from(jobs)
+      .leftJoin(live, eq(live.jobId, jobs.id))
+      .where(notDeleted)
+      .orderBy(
+        // Ready-to-bill work first, then whatever was touched most recently.
+        sql`CASE WHEN ${jobs.status} = 'completed' THEN 0 WHEN ${jobs.status} = 'paid' THEN 2 ELSE 1 END`,
+        desc(jobs.updatedAt),
+      )
+      .limit(300),
+  );
 }
 
 /**
@@ -201,25 +212,27 @@ export async function findJobByRegistration(registration: string) {
   const term = normalizeRegistration(registration);
   if (term === '') return null;
 
-  const rows = await db
-    .select({
-      jobNumber: jobs.jobNumber,
-      customerName: jobs.customerName,
-      customerPhone: jobs.customerPhone,
-      customerEmail: jobs.customerEmail,
-      customerAddress: jobs.customerAddress,
-      vehicleRegistration: jobs.vehicleRegistration,
-      vehicleMake: jobs.vehicleMake,
-      vehicleModel: jobs.vehicleModel,
-      vehicleYear: jobs.vehicleYear,
-      vehicleColor: jobs.vehicleColor,
-      vehicleVin: jobs.vehicleVin,
-      vehicleMileage: jobs.vehicleMileage,
-    })
-    .from(jobs)
-    .where(and(eq(NORMALIZED_REGISTRATION, term), notDeleted))
-    .orderBy(desc(jobs.createdAt))
-    .limit(1);
+  const rows = await withDbRetry('jobs:by-registration', () =>
+    db
+      .select({
+        jobNumber: jobs.jobNumber,
+        customerName: jobs.customerName,
+        customerPhone: jobs.customerPhone,
+        customerEmail: jobs.customerEmail,
+        customerAddress: jobs.customerAddress,
+        vehicleRegistration: jobs.vehicleRegistration,
+        vehicleMake: jobs.vehicleMake,
+        vehicleModel: jobs.vehicleModel,
+        vehicleYear: jobs.vehicleYear,
+        vehicleColor: jobs.vehicleColor,
+        vehicleVin: jobs.vehicleVin,
+        vehicleMileage: jobs.vehicleMileage,
+      })
+      .from(jobs)
+      .where(and(eq(NORMALIZED_REGISTRATION, term), notDeleted))
+      .orderBy(desc(jobs.createdAt))
+      .limit(1),
+  );
 
   return rows[0] ?? null;
 }
@@ -245,16 +258,18 @@ export async function findJobByRegistration(registration: string) {
  * unfiltered list would make the reader do the search a second time by eye.
  */
 export async function listAwaitingPayment(q?: string) {
-  return db
-    .select({
-      job: jobs,
-      invoice: invoices,
-      remainingCents: REMAINING_CENTS,
-    })
-    .from(jobs)
-    .innerJoin(invoices, and(eq(invoices.jobId, jobs.id), isNull(invoices.voidedAt)))
-    .where(and(INVOICE_HAS_BALANCE, notDeleted, searchCondition(q)))
-    .orderBy(desc(jobs.updatedAt));
+  return withDbRetry('jobs:awaiting-payment', () =>
+    db
+      .select({
+        job: jobs,
+        invoice: invoices,
+        remainingCents: REMAINING_CENTS,
+      })
+      .from(jobs)
+      .innerJoin(invoices, and(eq(invoices.jobId, jobs.id), isNull(invoices.voidedAt)))
+      .where(and(INVOICE_HAS_BALANCE, notDeleted, searchCondition(q)))
+      .orderBy(desc(jobs.updatedAt)),
+  );
 }
 
 /**
@@ -266,19 +281,21 @@ export async function listAwaitingPayment(q?: string) {
  * and when it was settled, months later.
  */
 export async function listSettledJobs(q?: string) {
-  return db
-    .select({
-      job: jobs,
-      invoice: invoices,
-      paidAt: sql<string | null>`${LAST_PAYMENT_AT}`,
-    })
-    .from(jobs)
-    .innerJoin(invoices, and(eq(invoices.jobId, jobs.id), isNull(invoices.voidedAt)))
-    .where(and(INVOICE_IS_SETTLED, notDeleted, searchCondition(q)))
-    // Most recently settled first. NULLS LAST keeps a zero-total invoice with
-    // no payment row behind it from floating to the top of "recently paid".
-    .orderBy(sql`${LAST_PAYMENT_AT} DESC NULLS LAST`)
-    .limit(500);
+  return withDbRetry('jobs:settled', () =>
+    db
+      .select({
+        job: jobs,
+        invoice: invoices,
+        paidAt: sql<string | null>`${LAST_PAYMENT_AT}`,
+      })
+      .from(jobs)
+      .innerJoin(invoices, and(eq(invoices.jobId, jobs.id), isNull(invoices.voidedAt)))
+      .where(and(INVOICE_IS_SETTLED, notDeleted, searchCondition(q)))
+      // Most recently settled first. NULLS LAST keeps a zero-total invoice with
+      // no payment row behind it from floating to the top of "recently paid".
+      .orderBy(sql`${LAST_PAYMENT_AT} DESC NULLS LAST`)
+      .limit(500),
+  );
 }
 
 /**
@@ -289,10 +306,12 @@ export async function listSettledJobs(q?: string) {
  * been lost. The page uses this to point at `/paid-jobs` instead.
  */
 export async function countSettledJobs(q?: string): Promise<number> {
-  const rows = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(jobs)
-    .where(and(notDeleted, JOB_IS_SETTLED, searchCondition(q)));
+  const rows = await withDbRetry('jobs:count-settled', () =>
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(jobs)
+      .where(and(notDeleted, JOB_IS_SETTLED, searchCondition(q))),
+  );
 
   return Number(rows[0]?.n ?? 0);
 }
@@ -307,10 +326,12 @@ export async function countSettledJobs(q?: string): Promise<number> {
  * so both need a way back.
  */
 export async function countAwaitingPaymentJobs(q?: string): Promise<number> {
-  const rows = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(jobs)
-    .where(and(notDeleted, JOB_IS_AWAITING_PAYMENT, searchCondition(q)));
+  const rows = await withDbRetry('jobs:count-awaiting', () =>
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(jobs)
+      .where(and(notDeleted, JOB_IS_AWAITING_PAYMENT, searchCondition(q))),
+  );
 
   return Number(rows[0]?.n ?? 0);
 }
@@ -329,14 +350,16 @@ export async function countAwaitingPaymentJobs(q?: string): Promise<number> {
  * is finished.
  */
 export async function countJobPipeline() {
-  const rows = await db
-    .select({
-      active: sql<number>`COUNT(*) FILTER (WHERE ${JOB_IS_PRE_INVOICE})::int`,
-      invoiced: sql<number>`COUNT(*) FILTER (WHERE ${JOB_IS_AWAITING_PAYMENT})::int`,
-      paid: sql<number>`COUNT(*) FILTER (WHERE ${JOB_IS_SETTLED})::int`,
-    })
-    .from(jobs)
-    .where(notDeleted);
+  const rows = await withDbRetry('jobs:pipeline-counts', () =>
+    db
+      .select({
+        active: sql<number>`COUNT(*) FILTER (WHERE ${JOB_IS_PRE_INVOICE})::int`,
+        invoiced: sql<number>`COUNT(*) FILTER (WHERE ${JOB_IS_AWAITING_PAYMENT})::int`,
+        paid: sql<number>`COUNT(*) FILTER (WHERE ${JOB_IS_SETTLED})::int`,
+      })
+      .from(jobs)
+      .where(notDeleted),
+  );
 
   const row = rows[0];
   return {

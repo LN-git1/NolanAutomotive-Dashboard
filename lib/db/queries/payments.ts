@@ -5,6 +5,7 @@ import { eq, sql } from 'drizzle-orm';
 import type { DbOrTx } from '../../counters';
 import { formatEur, fromCents, toCents } from '../../money';
 import { db } from '../index';
+import { withDbRetry } from '../retry';
 import { invoices, jobs, payments } from '../schema';
 
 /**
@@ -19,10 +20,14 @@ import { invoices, jobs, payments } from '../schema';
  * view of payments made so far under that lock.
  */
 export async function getPaidCentsForInvoice(invoiceId: string, tx: DbOrTx = db): Promise<number> {
-  const rows = await tx
-    .select({ paidCents: sql<string>`COALESCE(SUM(${payments.amount}) * 100, 0)::bigint` })
-    .from(payments)
-    .where(eq(payments.invoiceId, invoiceId));
+  // Safe to retry even when called inside a transaction: this is a bare
+  // SELECT with no side effects, so re-running it changes nothing.
+  const rows = await withDbRetry('payments:paid-for-invoice', () =>
+    tx
+      .select({ paidCents: sql<string>`COALESCE(SUM(${payments.amount}) * 100, 0)::bigint` })
+      .from(payments)
+      .where(eq(payments.invoiceId, invoiceId)),
+  );
 
   return Number(rows[0]?.paidCents ?? 0);
 }

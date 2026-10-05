@@ -3,6 +3,7 @@ import 'server-only';
 import { and, asc, gte, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 
 import { db } from '../index';
+import { withDbRetry } from '../retry';
 import { jobs, type Job } from '../schema';
 import { JOB_IS_PRE_INVOICE, JOB_IS_SETTLED } from './invoice-state';
 
@@ -45,18 +46,20 @@ export function todayIso(): string {
  * the same day, tie-broken by job number.
  */
 export async function listScheduledJobs(fromIso: string, toIso: string) {
-  return db
-    .select()
-    .from(jobs)
-    .where(
-      and(
-        isNull(jobs.deletedAt),
-        isNotNull(jobs.dueDate),
-        gte(jobs.dueDate, fromIso),
-        lte(jobs.dueDate, toIso),
-      ),
-    )
-    .orderBy(asc(jobs.dueDate), asc(jobs.dueTime), asc(jobs.jobNumber));
+  return withDbRetry('schedule:in-range', () =>
+    db
+      .select()
+      .from(jobs)
+      .where(
+        and(
+          isNull(jobs.deletedAt),
+          isNotNull(jobs.dueDate),
+          gte(jobs.dueDate, fromIso),
+          lte(jobs.dueDate, toIso),
+        ),
+      )
+      .orderBy(asc(jobs.dueDate), asc(jobs.dueTime), asc(jobs.jobNumber)),
+  );
 }
 
 /**
@@ -64,44 +67,48 @@ export async function listScheduledJobs(fromIso: string, toIso: string) {
  * invisible on a calendar and quietly forgotten, so the page surfaces them.
  */
 export async function listUnscheduledJobs(limit = 25) {
-  return db
-    .select()
-    .from(jobs)
-    .where(
-      and(
-        isNull(jobs.deletedAt),
-        isNull(jobs.dueDate),
-        // Work that has not been billed yet — the same test the Overview's
-        // Active tile uses, from the invoices rather than from `jobs.status`.
-        // That column is a workflow label the owner can move at any time, and
-        // keying scheduling off it is how J-0019 came to be wrong everywhere
-        // else; see `invoice-state.ts`.
-        JOB_IS_PRE_INVOICE,
-      ),
-    )
-    .orderBy(asc(jobs.createdAt))
-    .limit(limit);
+  return withDbRetry('schedule:unscheduled', () =>
+    db
+      .select()
+      .from(jobs)
+      .where(
+        and(
+          isNull(jobs.deletedAt),
+          isNull(jobs.dueDate),
+          // Work that has not been billed yet — the same test the Overview's
+          // Active tile uses, from the invoices rather than from `jobs.status`.
+          // That column is a workflow label the owner can move at any time, and
+          // keying scheduling off it is how J-0019 came to be wrong everywhere
+          // else; see `invoice-state.ts`.
+          JOB_IS_PRE_INVOICE,
+        ),
+      )
+      .orderBy(asc(jobs.createdAt))
+      .limit(limit),
+  );
 }
 
 /** Count of live jobs per day across a range — drives the workload summary. */
 export async function countJobsPerDay(fromIso: string, toIso: string) {
-  const rows = await db
-    .select({
-      day: jobs.dueDate,
-      n: sql<number>`count(*)::int`,
-    })
-    .from(jobs)
-    .where(
-      and(
-        isNull(jobs.deletedAt),
-        isNotNull(jobs.dueDate),
-        gte(jobs.dueDate, fromIso),
-        lte(jobs.dueDate, toIso),
-        // Settled work is history, not workload.
-        sql`NOT ${JOB_IS_SETTLED}`,
-      ),
-    )
-    .groupBy(jobs.dueDate);
+  const rows = await withDbRetry('schedule:per-day', () =>
+    db
+      .select({
+        day: jobs.dueDate,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(jobs)
+      .where(
+        and(
+          isNull(jobs.deletedAt),
+          isNotNull(jobs.dueDate),
+          gte(jobs.dueDate, fromIso),
+          lte(jobs.dueDate, toIso),
+          // Settled work is history, not workload.
+          sql`NOT ${JOB_IS_SETTLED}`,
+        ),
+      )
+      .groupBy(jobs.dueDate),
+  );
 
   const counts = new Map<string, number>();
   for (const row of rows) if (row.day) counts.set(row.day, Number(row.n));

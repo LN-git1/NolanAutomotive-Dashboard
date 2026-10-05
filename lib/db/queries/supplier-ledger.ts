@@ -6,6 +6,7 @@ import type { DbOrTx } from '../../counters';
 import { todayIsoDate } from '../../format';
 import { fromCents } from '../../money';
 import { db } from '../index';
+import { withDbRetry } from '../retry';
 import { supplierLedger } from '../schema';
 
 /**
@@ -19,13 +20,17 @@ export async function getSupplierBalanceCents(
   supplierId: string,
   tx: DbOrTx = db,
 ): Promise<number> {
-  const rows = await tx
-    .select({
-      balanceCents: sql<string>`COALESCE(SUM(CASE WHEN ${supplierLedger.kind} = 'payment'
-        THEN -${supplierLedger.amount} ELSE ${supplierLedger.amount} END) * 100, 0)::bigint`,
-    })
-    .from(supplierLedger)
-    .where(eq(supplierLedger.supplierId, supplierId));
+  // Safe to retry even when called inside a transaction: this is a bare
+  // SELECT with no side effects, so re-running it changes nothing.
+  const rows = await withDbRetry('suppliers:balance', () =>
+    tx
+      .select({
+        balanceCents: sql<string>`COALESCE(SUM(CASE WHEN ${supplierLedger.kind} = 'payment'
+          THEN -${supplierLedger.amount} ELSE ${supplierLedger.amount} END) * 100, 0)::bigint`,
+      })
+      .from(supplierLedger)
+      .where(eq(supplierLedger.supplierId, supplierId)),
+  );
 
   return Number(rows[0]?.balanceCents ?? 0);
 }
