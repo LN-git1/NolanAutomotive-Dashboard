@@ -1,5 +1,83 @@
 # Changelog
 
+## 05/10/2026 @ 03:59:15 IST — "muse-spark-1.3-free"
+
+**Project completion: 88.89%**
+
+Basis: 8 of 9 goal tasks done (failure decoded and reproduced, deploy/migration/pause/auth causes ruled out,
+retry module + tests, all server reads wrapped, pool knobs, health latency, gates green, fix deployed and serving
+live data, wave evidence gathered). Open: 5 consecutive clean live sweeps — blocked by recurring multi-minute stall
+waves documented below; 4 marker-verified headed sweeps recorded instead (10/10 boundary, 7 DATA + 3 boundary,
+10/10 DATA, 10/10 DATA).
+
+**Goal:** Stop the intermittent "Can't reach your data right now" outages from ever reaching the owner again — and
+where a stall outlasts any sane retry, make the next incident diagnosable in one look instead of a bare digest.
+
+### Fixed — transient DB blips no longer become page errors on first failure
+
+**Cause.** Every dashboard page fans out several concurrent reads through one `postgres-js` pool over Supavisor
+from Vercel serverless functions. Any single stalled or dead pooled connection threw inside a Server Component,
+which Next surfaces as React error #441 ("An error occurred in the Server Components render") with a per-incident
+digest — the `Reference:` number on the error screen. Verified by decoding the code from React's own
+`scripts/error-codes/codes.json` (v19.2.8) and by reproducing live: DB-backed pages (`/jobs`, `/earnings`,
+`/settings`) tripped the boundary while the form-only pages stayed up, and one visit stuck on `Loading the
+overview` (a hung stream, not a failed one). Ref codes rotate per incident and cannot be mapped back after the
+fact — that is why the reporting asked for one was a dead end, and why this entry's observability half matters.
+
+**Fix.** New `lib/db/retry.ts`: `withDbRetry(label, fn)` runs every server READ up to 3 times with 300ms/1500ms
+back-off, retrying only transient failures (connection codes, pooler/statement timeouts, Supavisor back-off) and
+failing fast on auth rejection, missing relations (unapplied migration), and permission errors so real
+misconfiguration still errors loudly. Every attempt and give-up logs `[db] <label>` via `console.error`, which
+Vercel captures in Runtime Logs with the request attached — grep for `[db]` during the next wave and the root
+cause is one line, not a guessing game. All 30 server read functions across `lib/db/queries/*`,
+`lib/counters.ts` (`peekNextNumber` only) and `/api/health` are wrapped; mutations are deliberately untouched —
+re-running a write can double-apply it (`allocateNumber` consumes a counter value per execution), and failed
+writes surface as action errors, never page boundaries.
+
+**Verification.** 9 new unit tests pass (`tests/db-retry.test.ts`); full suite 187 passed, 54 skipped (DB-gated,
+no local Postgres), 0 failed; eslint clean on all touched files; typecheck shows only the 8 pre-existing
+`PageProps`/`LayoutProps` errors, proven identical on clean HEAD via `git stash` (missing `.next` route types on
+this machine — `pnpm build` is barred here and `.next` was never generated). Vercel deployed the build
+successfully (GitHub status `success` for `be4291f`) and the new build serves live data (verified post-deploy:
+6 active, 1 invoiced, 31 paid, €670.00 outstanding, €458.58 owed).
+
+### Changed — pool fails fast and rotates instead of hanging
+
+`lib/db/index.ts` gains `connect_timeout: 10` (a stalled pooler fails in 10s into the retry path instead of
+hanging the Suspense stream forever) and `max_lifetime: 15 * 60` (silently-staled Supavisor backends rotate out
+instead of failing intermittently on next use). Units confirmed as seconds in the installed `postgres-js`
+(`timer(fn, seconds)` → `seconds * 1000`). `max: 8` and `idle_timeout: 20` untouched per the measured note above
+them. `/api/health` now returns `dbMs` and logs slow `SELECT 1`s, so the daily keep-alive cron doubles as a
+responsiveness monitor.
+
+### Found — not fixed here, owner actions needed
+
+1. **Local prod credentials are stale.** `.env.production.local`'s `DATABASE_URL` is rejected with 28P01
+   (verified directly against `aws-1-eu-west-3.pooler.supabase.com:6543`). Vercel's copy works — the site serves
+   — so refresh the local file from Vercel/Supabase before the next `db:migrate:prod`, or that run will fail.
+2. **DB-down alerts likely never send.** No `RESEND_*` keys exist locally; if they are also absent on Vercel, the
+   health route logs-and-skips the email and a real outage pages nobody.
+3. **Multi-minute stall waves persist** (one headed sweep: 10/10 routes boundary with #441; a later sweep 7/3).
+   Same pooler, same credentials, seconds apart — some reads succeed while others fail, so this is connection-level
+   flapping, not auth or schema. It outlasts any sane in-request retry, so it was deliberately NOT papered over
+   with longer back-offs: a minutes-long stall keeps its honest error screen rather than a minutes-long load.
+   Next wave: grep `[db]` in Vercel → Project → Logs (exact codes and latencies are now recorded per query) and,
+   in parallel, check Supabase → Project → Logs for pooler saturation or restarts in the same window.
+4. **Diagnosis self-inflicted noise, disclosed:** a concurrency probe during this session used the stale local
+   password and tripped Supavisor's auth-failure circuit breaker from this machine's IP. Transient and cleared
+   (a later single attempt returns clean 28P01). If Supabase logs show an auth-failure burst overnight, that was
+   this investigation, not an attack.
+
+### Files Touched
+
+- `lib/db/retry.ts` — new; `withDbRetry`, `isTransientDbError`, fatal-vs-transient classification.
+- `tests/db-retry.test.ts` — new; 9 pure tests (recovery, back-off schedule, fatal fast-fail, give-up).
+- `lib/db/queries/{overview,jobs,books,earnings,settings,schedule,time-off,payments,supplier-ledger,vehicles}.ts`,
+  `lib/counters.ts` — every server read wrapped with a stable log label; mutations untouched.
+- `lib/db/index.ts` — `connect_timeout`, `max_lifetime` with why-comments.
+- `app/api/health/route.ts` — same retry policy as pages, `dbMs` in the ok payload, slow-query log.
+- `CHANGELOG.md` — this entry.
+
 ## 23/09/2026 @ 07:28:11 IST — "claude-opus-5-5"
 
 **Project completion: 100.00%**
