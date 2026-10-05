@@ -40,6 +40,32 @@ export async function GET(request: Request) {
     const dbMs = Date.now() - started;
     if (dbMs > 5000) {
       console.error(`[db] health check slow: SELECT 1 took ${dbMs}ms`);
+      // Slow-query webhook to matrix-dash: kind=warning (not error) since DB still
+      // responds; this is the leading indicator of a stall before it breaks.
+      try {
+        const url = process.env.MATRIX_DASH_WEBHOOK_URL;
+        const token = process.env.MATRIX_DASH_WEBHOOK_TOKEN;
+        if (url && token && !url.includes('REPLACE_WITH_REAL')) {
+          await fetch(url.replace('REPLACE_WITH_REAL_TOKEN', token), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              action: 'notify',
+              title: 'DB slow — nolan-automotive/dashboard',
+              body: 'Source: nolan-automotive/dashboard (health:select-1). ' +
+                'Category: warning. ' +
+                'Message: SELECT 1 took ' + dbMs + 'ms (threshold: 5000ms). ' +
+                'Location: app/api/health/route.ts. ' +
+                'Timestamp: ' + new Date().toISOString() + '. ' +
+                'Next step: check Vercel Runtime Logs for [db] lines — stall may follow.',
+              kind: 'warning',
+            }),
+          });
+        }
+      } catch (e) {
+        // Non-blocking; log only.
+        console.error('Failed to send matrix-dash slow-query webhook:', e);
+      }
     }
     return Response.json(
       { ok: true, dbMs },
@@ -48,10 +74,35 @@ export async function GET(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Database unreachable';
 
-    // Scheduled via after() so a slow or broken Resend call can never delay
-    // the 503 itself — the cron and any caller get the real status back
-    // immediately either way.
+    // Send webhook notification to matrix-dash (replaces Resend email with
+    // push + in-app alert via the webhook endpoint). Never blocks the 503.
     after(async () => {
+      try {
+        const url = process.env.MATRIX_DASH_WEBHOOK_URL;
+        const token = process.env.MATRIX_DASH_WEBHOOK_TOKEN;
+        if (url && token && url.includes('REPLACE_WITH_REAL')) {
+          console.error('[db] matrix-dash webhook skipped: token not configured');
+        } else if (url && token) {
+          const webUrl = url.replace('REPLACE_WITH_REAL_TOKEN', token);
+          await fetch(webUrl, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              action: 'notify',
+              title: 'DB down — nolan-automotive/dashboard',
+              body: 'Source: nolan-automotive/dashboard (health:select-1). ' +
+                'Category: error. ' +
+                'Message: ' + message + '. ' +
+                'Location: app/api/health/route.ts (DB connection stalled/rejected; retries applied via lib/db/retry.ts). ' +
+                'Timestamp: ' + new Date().toISOString() + '. ' +
+                'Next step: check Vercel Runtime Logs for [db] lines.',
+              kind: 'error',
+            }),
+          });
+        }
+      } catch (webhookErr) {
+        console.error('Failed to send matrix-dash webhook:', webhookErr);
+      }
       try {
         await sendDbDownAlert(message);
       } catch (alertError) {

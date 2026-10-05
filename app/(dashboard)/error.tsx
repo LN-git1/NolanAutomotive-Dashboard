@@ -30,6 +30,30 @@ export default function DashboardError({
 }) {
   useEffect(() => {
     console.error(error);
+    // Notify via server-side webhook endpoint (token stays server-side,
+    // never exposed to browser).
+    try {
+      fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: `Server error — nolan-automotive/dashboard (digest: ${error.digest || 'none'})`,
+          body: `Source: nolan-automotive/dashboard. ` +
+            `Category: error. ` +
+            `Message: ${error.message || 'Unknown server component failure'}. ` +
+            `Location: app/(dashboard)/error.tsx (React #441 — server render error; ` +
+            `check Vercel Runtime Logs for underlying cause). ` +
+            `Digest: ${error.digest || 'none'}. ` +
+            `Timestamp: ${new Date().toISOString()}. ` +
+            `Next step: grep [db] in Vercel Logs; if DB is live, inspect the digest rotation pattern.`,
+          kind: 'error',
+        }),
+      }).catch(() => {
+        // Non-blocking — notification must not prevent the error screen.
+      });
+    } catch {
+      // Silent fallthrough; the error screen is the primary signal.
+    }
   }, [error]);
 
   return (

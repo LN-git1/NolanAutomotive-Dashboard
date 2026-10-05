@@ -50,3 +50,6 @@ next-env.d.ts
 # Cloudflare Workers build output
 .open-next
 .wrangler
+
+.vercel
+.env*

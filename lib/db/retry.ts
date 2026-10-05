@@ -155,6 +155,36 @@ export async function withDbRetry<T>(
           `[db] ${label} failed after ${attempt}/${attempts} attempt(s) ` +
             `(${code}, ${elapsed}ms): ${errorMessage(error).slice(0, 300)}`,
         );
+        // Webhook notification to matrix-dash for any DB failure (fatal or
+        // exhausted retries) — non-blocking, never delays the error.
+        try {
+          const webhookUrl = process.env.MATRIX_DASH_WEBHOOK_URL;
+          const webhookToken = process.env.MATRIX_DASH_WEBHOOK_TOKEN;
+          if (webhookUrl && webhookToken && !webhookUrl.includes('REPLACE_WITH_REAL')) {
+            const webUrl = webhookUrl.replace('REPLACE_WITH_REAL_TOKEN', webhookToken);
+            fetch(webUrl, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                action: 'notify',
+                title: `DB failure — nolan-automotive/dashboard (${label})`,
+                body: 'Source: nolan-automotive/dashboard (query: ' + label + '). ' +
+                  'Category: error. ' +
+                  'Message: ' + String(errorMessage(error)).slice(0, 400) + '. ' +
+                  'SQLSTATE/code: ' + code + '. ' +
+                  'Attempts: ' + attempt + '/' + attempts + '. ' +
+                  'Elapsed: ' + elapsed + 'ms. ' +
+                  'Location: lib/db/retry.ts. ' +
+                  'Next step: check Vercel Runtime Logs for [db] lines.',
+                kind: 'error',
+              }),
+            }).catch(() => {
+              // Silent — webhook is best-effort; the console.error above is the durable signal.
+            });
+          }
+        } catch {
+          // Silent.
+        }
         throw error;
       }
 
