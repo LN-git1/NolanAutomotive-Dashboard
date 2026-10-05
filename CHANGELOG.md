@@ -1,5 +1,19 @@
 # Changelog
 
+## 05/10/2026 @ 22:46:19 IST — "muse-spark-1.3-free"
+
+**Project completion: 88.89%** (same basis — 8/9; open: 5 clean sweeps, blocked by recurring stall waves; 4 marker sweeps verified live instead).
+
+**Added — webhook notifications to matrix-dash (replaces email-only).**
+
+- **Fixed — any DB failure now pushes to matrix-dash.** `lib/db/retry.ts`: every final DB failure (fatal auth/migration/permission error, or exhausted retries after back-off) calls `fetch()` to `dashboard.zbautomations.ie/api/hooks/<token>` via the endpoint in `.env.local` (`mdx_f37d...`) — `kind: error`, `body` includes `label` (query name), `SQLSTATE/code`, attempts/elapsed, timestamp, source (`nolan-automotive/dashboard`), location (`lib/db/retry.ts`), next step (`check Vercel Runtime Logs for [db] lines`). Non-blocking (`.catch()` silent; console.error is the durable signal).
+- **Fixed — any React #441 server render error pushes.** `app/(dashboard)/error.tsx`: `useEffect()` sends the same payload format (`kind: error`) with digest, message, location (`app/(dashboard)/error.tsx`), timestamp — readable by any human, not agent-only.
+- **Fixed — health-route DB-down pushes; slow-query pushes warning.** `app/api/health/route.ts`: 503 pushes `kind: error` (message = DB unreachable, source/health-check label); `dbMs > 5000` pushes `kind: warning` (SELECT 1 latency, threshold, stall warning). Both via `after()` so the health response (503/200) is never delayed.
+- **New endpoint — `app/api/notify/route.ts`**: receives `{ action, title, body, kind }` from server-side callers (error boundary, retry, health) and forwards to the webhook URL with token — token stays server-side (read from `.env.local`); never exposed to browser.
+- **Label contract enforced.** Every notification includes: source (`nolan-automotive/dashboard`), category (`error`/`warning`), message (`[db]` line or error message), location (exact file/route/query label), timestamp, next step. So the next incident is a single grep in matrix-dash (or Vercel Logs), not a guessing game.
+
+**Files Touched:** `.gitignore`, `app/api/notify/route.ts` (new), `app/(dashboard)/error.tsx`, `app/api/health/route.ts`, `lib/db/retry.ts`. `.env.local` updated with real token (`mdx_f37d380...`).
+
 ## 05/10/2026 @ 03:59:15 IST — "muse-spark-1.3-free"
 
 **Project completion: 88.89%**
