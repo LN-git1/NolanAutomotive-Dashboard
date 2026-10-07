@@ -25,9 +25,9 @@ import * as schema from './schema';
  *    error but a HANG: a single query is fine, so `/api/health` and `/jobs`
  *    look healthy while the Overview page (six queries via `Promise.all`)
  *    never returns. Measured against this exact database: `max: 1` exceeded
- *    20s and never completed; `max: 5` finished the same six queries in 0.28s.
+ *    20s and never completed; `max: 5` finished the same six queries in 0.28s (it has since been raised to 8).
  *
- *    Five is enough to serve the widest fan-out on any page while staying far
+ *    Eight serves the widest fan-out on any page (and its parallel writes) while staying far
  *    below the free tier's client limit. Do not lower it to 1.
  *
  *  - Migrations must NOT use this client. They use DIRECT_DATABASE_URL

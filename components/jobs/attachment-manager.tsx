@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { Alert, Button, buttonClass, Empty } from '@/components/ui';
+import { redirectIfUnauthorized } from '@/lib/client/session';
 import { Skeleton } from '@/components/ui/skeleton';
 import { deleteAttachment, recordAttachment } from '@/lib/actions/jobs';
 import type { JobAttachment } from '@/lib/db/schema';
@@ -58,6 +59,7 @@ export function AttachmentManager({
     });
 
     if (!urlResponse.ok) {
+      redirectIfUnauthorized(urlResponse);
       const body = (await urlResponse.json().catch(() => null)) as { error?: string } | null;
       throw new Error(body?.error ?? `Could not start the upload for ${file.name}.`);
     }

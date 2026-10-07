@@ -22,6 +22,7 @@ export function TimeOffCard({ entries }: { entries: TimeOff[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -49,9 +50,11 @@ export function TimeOffCard({ entries }: { entries: TimeOff[] }) {
 
   function handleDelete(id: string) {
     setDeletingId(id);
+    setDeleteError(null);
     startTransition(async () => {
-      await deleteTimeOff(id);
+      const result = await deleteTimeOff(id);
       setDeletingId(null);
+      if (!result.ok) setDeleteError(result.error ?? 'Could not remove time off');
       router.refresh();
     });
   }
@@ -64,6 +67,7 @@ export function TimeOffCard({ entries }: { entries: TimeOff[] }) {
       />
 
       <CardBody className="flex flex-col gap-3">
+        {deleteError ? <Alert>{deleteError}</Alert> : null}
         {entries.length === 0 ? (
           <p className="text-sm text-muted">No time off booked.</p>
         ) : (

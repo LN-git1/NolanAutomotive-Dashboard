@@ -156,6 +156,12 @@ export const jobs = pgTable(
     /** Private. Never printed on an invoice. */
     notes: text('notes'),
 
+    /**
+     * Idempotency key minted by the create form, so a double tap or a retried
+     * request creates one job. Null for jobs created before this existed.
+     */
+    submissionKey: text('submission_key'),
+
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     /** Soft delete. Every list query must filter `deletedAt IS NULL`. */
@@ -163,6 +169,7 @@ export const jobs = pgTable(
   },
   (table) => [
     uniqueIndex('jobs_job_number_key').on(table.jobNumber),
+    uniqueIndex('jobs_submission_key_key').on(table.submissionKey),
     index('jobs_status_idx').on(table.status),
     index('jobs_vehicle_registration_idx').on(table.vehicleRegistration),
     /*

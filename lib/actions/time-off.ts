@@ -3,6 +3,7 @@
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
+import { guardedWrite } from '@/lib/actions/safe';
 import { requireSession } from '@/lib/auth/require-session';
 import { db } from '@/lib/db';
 import { timeOff } from '@/lib/db/schema';
@@ -23,10 +24,12 @@ export async function addTimeOff(formData: FormData): Promise<ActionResult> {
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid time off details' };
   }
 
-  await db.insert(timeOff).values(parsed.data);
+  return guardedWrite('addTimeOff', async () => {
+    await db.insert(timeOff).values(parsed.data);
 
-  for (const path of TIME_OFF_PATHS) revalidatePath(path);
-  return { ok: true };
+    for (const path of TIME_OFF_PATHS) revalidatePath(path);
+    return { ok: true };
+  });
 }
 
 export async function deleteTimeOff(id: string): Promise<ActionResult> {
@@ -35,8 +38,10 @@ export async function deleteTimeOff(id: string): Promise<ActionResult> {
   const parsed = timeOffIdSchema.safeParse(id);
   if (!parsed.success) return { ok: false, error: 'Invalid time off entry' };
 
-  await db.delete(timeOff).where(eq(timeOff.id, parsed.data));
+  return guardedWrite('deleteTimeOff', async () => {
+    await db.delete(timeOff).where(eq(timeOff.id, parsed.data));
 
-  for (const path of TIME_OFF_PATHS) revalidatePath(path);
-  return { ok: true };
+    for (const path of TIME_OFF_PATHS) revalidatePath(path);
+    return { ok: true };
+  });
 }

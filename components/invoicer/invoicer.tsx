@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Alert, Button, buttonClass, Card, CardBody, CardHeader } from '@/components/ui';
+import { redirectIfUnauthorized } from '@/lib/client/session';
 import { Skeleton } from '@/components/ui/skeleton';
 import { JobPicker, type InvoiceableJob } from '@/components/invoicer/job-picker';
 import { SendBar, type IssuedInvoice, type SendChannel } from '@/components/invoicer/send-bar';
@@ -30,7 +31,7 @@ export function Invoicer({
 }) {
   const router = useRouter();
 
-  const [job, setJob] = useState<InvoiceableJob | null>(null);
+  const [pickedJob, setJob] = useState<InvoiceableJob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [issued, setIssued] = useState<IssuedInvoice | null>(null);
@@ -43,6 +44,16 @@ export function Invoicer({
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
+
+  // `pickedJob` is a snapshot taken when the owner chose it, so after a refresh
+  // (or an edit made on the job page in another tab) it would keep showing the
+  // old lines, totals and invoice state. Read the fresh copy from the prop — but
+  // freeze it while an invoice is mid-issue, so the screen doesn't shift under
+  // the owner.
+  const job =
+    pickedJob && !issued
+      ? (jobs.find((candidate) => candidate.id === pickedJob.id) ?? pickedJob)
+      : pickedJob;
 
   /** Totals shown read-only, computed with the same module the server uses. */
   const totals = useMemo(
@@ -94,6 +105,7 @@ export function Invoicer({
       });
 
       if (!response.ok) {
+        redirectIfUnauthorized(response);
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
         setError(body?.error ?? 'Could not generate the invoice.');
         return;

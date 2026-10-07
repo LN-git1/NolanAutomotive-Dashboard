@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 import { requireApiSession } from '@/lib/auth/require-session';
@@ -43,30 +43,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ error: 'Invoice not found' }, { status: 404 });
   }
 
-  if (invoice.voidedAt) {
-    return Response.json(
-      { error: `Invoice ${invoice.invoiceNumber} is already void.` },
-      { status: 400 },
-    );
-  }
+  // Everything that decides "may this be voided" is re-read INSIDE the
+  // transaction, after locking the job row first — the same lock order
+  // `applyPayment` uses, so a payment and a void serialise instead of the void
+  // passing its paid check and a payment then committing before the update.
+  const outcome = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM jobs WHERE id = ${invoice.jobId} FOR UPDATE`);
 
-  // A voided invoice drops out of every money query (voidedAt IS NULL is
-  // required everywhere), which would take any real payment already recorded
-  // against it with it — cash the business actually collected would vanish
-  // from every report. No refund/credit-note flow exists yet, so voiding an
-  // invoice with payments is refused outright rather than silently losing
-  // that money.
-  const paidCents = await getPaidCentsForInvoice(id);
-  if (paidCents > 0) {
-    return Response.json(
-      {
-        error: `${invoice.invoiceNumber} has ${formatEur(paidCents)} recorded against it and can't be voided.`,
-      },
-      { status: 400 },
-    );
-  }
+    const [current] = await tx.select().from(invoices).where(eq(invoices.id, id)).limit(1);
+    if (!current) return { error: 'Invoice not found', status: 404 } as const;
 
-  await db.transaction(async (tx) => {
+    if (current.voidedAt) {
+      return { error: `Invoice ${current.invoiceNumber} is already void.`, status: 400 } as const;
+    }
+
+    // A voided invoice drops out of every money query (voidedAt IS NULL is
+    // required everywhere), which would take any real payment already recorded
+    // against it with it — cash the business actually collected would vanish
+    // from every report. No refund/credit-note flow exists yet, so voiding an
+    // invoice with payments is refused outright rather than silently losing
+    // that money.
+    const paidCents = await getPaidCentsForInvoice(id, tx);
+    if (paidCents > 0) {
+      return {
+        error: `${current.invoiceNumber} has ${formatEur(paidCents)} recorded against it and can't be voided.`,
+        status: 400,
+      } as const;
+    }
+
     await tx
       .update(invoices)
       .set({ voidedAt: new Date(), voidReason: parsed.data.reason ?? null })
@@ -76,7 +80,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .update(jobs)
       .set({ status: 'completed', updatedAt: new Date() })
       .where(eq(jobs.id, invoice.jobId));
+
+    return null;
   });
+
+  if (outcome) return Response.json({ error: outcome.error }, { status: outcome.status });
 
   // The PDF is left in storage on purpose: a voided invoice the customer already
   // holds should still be retrievable, and it costs a few kilobytes.
