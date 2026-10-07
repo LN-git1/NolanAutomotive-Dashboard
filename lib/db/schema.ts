@@ -395,6 +395,28 @@ export const expenses = pgTable(
   (table) => [uniqueIndex('expenses_submission_key_key').on(table.submissionKey)],
 );
 
+/**
+ * Failures worth reporting, written as they happen so the 3-hourly digest email
+ * can list them. Best-effort and append-only: `lib/errors/log.ts` never throws,
+ * and the digest prunes rows older than 30 days. No customer data goes in here —
+ * just where it failed and the error message.
+ */
+export const errorLog = pgTable(
+  'error_log',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+    /** 'action' | 'db' | 'health' | 'ui' | 'digest' */
+    source: text('source').notNull(),
+    /** Which action / query / route, e.g. `reverseExpense` or `jobs:with-attachments`. */
+    label: text('label').notNull(),
+    message: text('message').notNull(),
+    /** SQLSTATE or Node error code when there is one. */
+    code: text('code'),
+  },
+  (table) => [index('error_log_occurred_at_idx').on(table.occurredAt)],
+);
+
 export const jobsRelations = relations(jobs, ({ many }) => ({
   attachments: many(jobAttachments),
   invoices: many(invoices),

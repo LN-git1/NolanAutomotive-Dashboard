@@ -1,0 +1,30 @@
+name: Digest email
+
+# Emails the 3-hourly activity digest to zach@zbautomations.ie.
+#
+# Runs here rather than on Vercel Cron because Vercel's free plan only allows a
+# daily cron. The endpoint works out the window itself (the last complete
+# UTC-aligned 3-hour block), so a late-starting run still produces a contiguous,
+# non-overlapping digest. GitHub may delay scheduled runs by several minutes.
+#
+# Scheduled workflows only run from the default branch. GitHub also pauses them
+# after 60 days without repository activity — push anything to re-enable.
+on:
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger digest
+        env:
+          DIGEST_SECRET: ${{ secrets.DIGEST_SECRET }}
+        run: |
+          curl --fail-with-body -sS -m 90 \
+            --retry 3 --retry-delay 20 --retry-all-errors \
+            -X POST \
+            -H "Authorization: Bearer $DIGEST_SECRET" \
+            https://dashboard.nolanautomotive.ie/api/digest

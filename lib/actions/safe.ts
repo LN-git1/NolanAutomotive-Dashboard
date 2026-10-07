@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { recordError } from '@/lib/errors/log';
+
 /**
  * Run a mutation and turn a thrown failure into `{ ok: false, error }`.
  *
@@ -24,7 +26,10 @@ export async function guardedWrite<T extends { ok: boolean; error?: string }>(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[action:${label}] failed: ${message.slice(0, 300)}`);
-    await notifyWriteFailure(label, message);
+    await Promise.all([
+      notifyWriteFailure(label, message),
+      recordError({ source: 'action', label, message }),
+    ]);
     return { ok: false, error: 'Could not save that just now — please try again.' };
   }
 }

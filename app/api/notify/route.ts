@@ -1,6 +1,21 @@
+import { recordError } from '@/lib/errors/log';
+
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
+  // Browser-reported errors (the error boundary) also go into the digest log,
+  // whether or not the webhook is configured.
+  try {
+    const reported = (await req.clone().json().catch(() => ({}))) as { title?: string; body?: string };
+    await recordError({
+      source: 'ui',
+      label: String(reported.title ?? 'Client error'),
+      message: String(reported.body ?? 'No context provided.'),
+    });
+  } catch {
+    // Best-effort.
+  }
+
   const url = process.env.MATRIX_DASH_WEBHOOK_URL;
   const token = process.env.MATRIX_DASH_WEBHOOK_TOKEN;
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 08/10/2026 — 3-hourly digest email (errors + activity) to zach@zbautomations.ie
+
+- **Added — `/api/digest`.** Emails a clean HTML overview of the last complete 3-hour block, 8 times a day: errors (time, source, where, message), jobs added / updated / deleted, invoices issued / sent / voided, payments received (with total), expenses, supplier ledger entries, attachments, time off, plus a business snapshot (jobs by status, outstanding € and oldest unpaid invoice, received today / this month, overdue jobs, jobs due in 48h) and system health (DB round trip, size, record counts, last change). If the database cannot be read it still sends a "database unreachable" email.
+- **Privacy.** Only job/invoice numbers, statuses, dates and amounts are included — never customer names, phones, emails, addresses, registrations or free-text notes.
+- **Added — `error_log` table** (migration `0014`, additive). Failures are now recorded as they happen: failed saves (`guardedWrite`), exhausted DB retries (`lib/db/retry.ts`), health-check failures, and browser-reported errors (`/api/notify`). Rows older than 30 days are pruned by the digest. Recording is best-effort and never throws.
+- **Scheduling.** `.github/workflows/digest.yml` (cron `0 */3 * * *`, plus manual `workflow_dispatch`) — Vercel's free plan only allows a daily cron. Windows are aligned to UTC 3-hour boundaries (Dublin 01:00, 04:00 … in summer), so a late-starting run still gives contiguous, non-overlapping digests. Scheduled workflows run only from `main`.
+- **Config.** New `DIGEST_SECRET` (Vercel Production + GitHub secret, same value). Requires `RESEND_API_KEY` and `RESEND_FROM` (a verified Resend domain) — not set in Production at the time of writing, so sends fail with 502 until they are.
+- **Preview.** `GET /api/digest?dryRun=1&hours=3` with the bearer token returns the HTML without sending.
+
+**Deploy order:** apply migration `0014` before merging (`CREATE TABLE IF NOT EXISTS`, safe to re-run).
+
 ## 07/10/2026 — Rapid-use hardening: writes fail gracefully, double actions can't double-apply
 
 **Goal:** the app intermittently misbehaved when data was changed or the app used quickly. Reads were already retried (`lib/db/retry.ts`); this covers writes and the double-click races.
