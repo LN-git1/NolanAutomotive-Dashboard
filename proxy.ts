@@ -53,6 +53,6 @@ export const config = {
    * offline page is a static "no connection" message with no data on it.
    */
   matcher: [
-    '/((?!login|offline|sw.js|api/auth/login|api/health|_next/static|_next/image|favicon.ico|favicon-32.png|manifest.webmanifest|icons/).*)',
+    '/((?!login|offline|sw.js|api/auth/login|api/health|api/digest|_next/static|_next/image|favicon.ico|favicon-32.png|manifest.webmanifest|icons/).*)',
   ],
 };

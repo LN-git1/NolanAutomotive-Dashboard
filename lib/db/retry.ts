@@ -155,6 +155,12 @@ export async function withDbRetry<T>(
           `[db] ${label} failed after ${attempt}/${attempts} attempt(s) ` +
             `(${code}, ${elapsed}ms): ${errorMessage(error).slice(0, 300)}`,
         );
+        // Recorded for the 3-hourly digest email. Fire-and-forget and imported
+        // lazily: this module stays dependency-free (and unit-testable), and a
+        // struggling database must not make the failing request wait on a log write.
+        void import('@/lib/errors/log')
+          .then((m) => m.recordError({ source: 'db', label, message: errorMessage(error), code }))
+          .catch(() => {});
         // Webhook notification to matrix-dash for any DB failure (fatal or
         // exhausted retries) — non-blocking, never delays the error.
         try {

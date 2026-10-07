@@ -64,3 +64,23 @@ export async function sendDbDownAlert(detail: string): Promise<void> {
     throw new Error(`Resend rejected the alert email: ${error.message}`);
   }
 }
+
+// The 3-hourly activity digest goes to the developer, not the shop owner.
+const DIGEST_RECIPIENT = 'zach@zbautomations.ie';
+
+/** Sends the rendered digest. Throws on any Resend-level rejection. */
+export async function sendDigestEmail(content: { subject: string; html: string; text: string }): Promise<void> {
+  const resend = getResendClient();
+
+  const { error } = await resend.emails.send({
+    from: getAlertSender(),
+    to: DIGEST_RECIPIENT,
+    subject: content.subject,
+    html: content.html,
+    text: content.text,
+  });
+
+  if (error) {
+    throw new Error(`Resend rejected the digest email: ${error.message}`);
+  }
+}

@@ -4,6 +4,7 @@ import { after } from 'next/server';
 import { db } from '@/lib/db';
 import { withDbRetry } from '@/lib/db/retry';
 import { sendDbDownAlert } from '@/lib/email/resend';
+import { recordError } from '@/lib/errors/log';
 
 export const runtime = 'nodejs';
 
@@ -73,6 +74,7 @@ export async function GET(request: Request) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Database unreachable';
+    await recordError({ source: 'health', label: 'health:select-1', message });
 
     // Send webhook notification to matrix-dash (replaces Resend email with
     // push + in-app alert via the webhook endpoint). Never blocks the 503.
