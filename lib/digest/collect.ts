@@ -23,6 +23,8 @@ const TZ = 'Europe/Dublin';
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Per-section cap so a busy window cannot produce an enormous email. */
 const LIST_LIMIT = 40;
+/** Concurrent digest queries — see the note in `collectDigest`. */
+const MAX_CONCURRENT = 4;
 
 /** Today's date in Dublin as YYYY-MM-DD. */
 function dublinDate(at: Date): string {
@@ -44,7 +46,32 @@ function rowsOf<T>(result: unknown): T[] {
  */
 export async function collectDigest(start: Date, end: Date): Promise<DigestData> {
   const inWindow = (col: Parameters<typeof gte>[0]) => and(gte(col, start), lt(col, end));
-  const read = <T>(label: string, fn: () => Promise<T>) => withDbRetry(`digest:${label}`, fn);
+  // At most MAX_CONCURRENT queries in flight. Firing all ~20 at once through
+  // Supavisor's transaction pooler leaves the last few hanging forever (the same
+  // pipelining stall `lib/db/index.ts` documents); no other page runs more than
+  // about six at a time.
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  const acquire = async () => {
+    if (active < MAX_CONCURRENT) {
+      active += 1;
+      return;
+    }
+    await new Promise<void>((resolve) => waiting.push(resolve)); // slot is handed over
+  };
+  const release = () => {
+    const next = waiting.shift();
+    if (next) next();
+    else active -= 1;
+  };
+  const read = async <T>(label: string, fn: () => Promise<T>): Promise<T> => {
+    await acquire();
+    try {
+      return await withDbRetry(`digest:${label}`, fn);
+    } finally {
+      release();
+    }
+  };
 
   const todayDublin = dublinDate(end);
   const monthStartDublin = `${todayDublin.slice(0, 8)}01`;
