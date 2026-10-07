@@ -417,6 +417,19 @@ export const errorLog = pgTable(
   (table) => [index('error_log_occurred_at_idx').on(table.occurredAt)],
 );
 
+/**
+ * One row per digest window that has been emailed (or is being sent). The
+ * window end is the primary key, so two schedulers firing for the same window —
+ * GitHub Actions and pg_cron both run — cannot send it twice, and a retry after
+ * a failed send can claim the window again once the claim is released.
+ */
+export const digestRuns = pgTable('digest_runs', {
+  windowEnd: timestamp('window_end', { withTimezone: true }).primaryKey(),
+  claimedAt: timestamp('claimed_at', { withTimezone: true }).notNull().defaultNow(),
+  /** Null while the send is in flight or if it failed and the claim is stale. */
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+});
+
 export const jobsRelations = relations(jobs, ({ many }) => ({
   attachments: many(jobAttachments),
   invoices: many(invoices),
