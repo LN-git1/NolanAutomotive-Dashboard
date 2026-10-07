@@ -80,6 +80,8 @@ export function JobForm({
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  // One key per form instance: a double tap or retried submit creates one job.
+  const [submissionKey] = useState(() => crypto.randomUUID());
   const [pending, startTransition] = useTransition();
 
   const isNew = !job;
@@ -172,6 +174,7 @@ export function JobForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      {job ? null : <input type="hidden" name="submissionKey" value={submissionKey} />}
       {error ? <Alert>{error}</Alert> : null}
 
       {/* Registration leads: it is the one thing the owner always knows when a

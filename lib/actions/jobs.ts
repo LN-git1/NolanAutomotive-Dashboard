@@ -1,8 +1,9 @@
 'use server';
 
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
+import { guardedWrite } from '@/lib/actions/safe';
 import { requireSession } from '@/lib/auth/require-session';
 import { allocateNumber, formatJobNumber } from '@/lib/counters';
 import { db } from '@/lib/db';
@@ -16,12 +17,20 @@ import {
 import { jobAttachments, jobs } from '@/lib/db/schema';
 import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
 import { removeObject } from '@/lib/storage/signedUrl';
+import { uuidString } from '@/lib/validation/common';
 import { jobContentSchema, jobStatusChangeSchema } from '@/lib/validation/job';
 
 export interface ActionResult {
   ok: boolean;
   error?: string;
   jobId?: string;
+}
+
+/** Thrown inside the create transaction to roll it back when the job already exists. */
+class DuplicateSubmission extends Error {
+  constructor(readonly jobId: string) {
+    super('Duplicate job submission');
+  }
 }
 
 /**
@@ -42,19 +51,41 @@ export async function createJob(formData: FormData): Promise<ActionResult> {
   }
 
   const input = parsed.data;
+  // Minted by the form per "page load". Absent or malformed just means no dedupe.
+  const keyParsed = uuidString.safeParse(formData.get('submissionKey'));
+  const submissionKey = keyParsed.success ? keyParsed.data : null;
 
   try {
-    const jobId = await db.transaction(async (tx) => {
-      const nextNumber = await allocateNumber(tx, 'job');
+    const jobId = await db
+      .transaction(async (tx) => {
+        // Allocating first matters: it takes the counter row's lock, so two
+        // simultaneous submits of the same form queue here and the second one
+        // sees the first's committed job below.
+        const nextNumber = await allocateNumber(tx, 'job');
 
-      const [created] = await tx
-        .insert(jobs)
-        .values({ ...input, jobNumber: formatJobNumber(nextNumber) })
-        .returning({ id: jobs.id });
+        if (submissionKey) {
+          const [existing] = await tx
+            .select({ id: jobs.id })
+            .from(jobs)
+            .where(eq(jobs.submissionKey, submissionKey))
+            .limit(1);
+          // A double tap or retried request. Roll back (releasing the job number
+          // so the sequence has no gap) and hand back the job already created.
+          if (existing) throw new DuplicateSubmission(existing.id);
+        }
 
-      if (!created) throw new Error('Job insert returned no row');
-      return created.id;
-    });
+        const [created] = await tx
+          .insert(jobs)
+          .values({ ...input, submissionKey, jobNumber: formatJobNumber(nextNumber) })
+          .returning({ id: jobs.id });
+
+        if (!created) throw new Error('Job insert returned no row');
+        return created.id;
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DuplicateSubmission) return error.jobId;
+        throw error;
+      });
 
     revalidatePath('/jobs');
     revalidatePath('/');
@@ -80,20 +111,24 @@ export async function updateJob(jobId: string, formData: FormData): Promise<Acti
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid job details' };
   }
 
-  await db
-    .update(jobs)
-    .set({ ...parsed.data, updatedAt: new Date() })
-    .where(and(eq(jobs.id, jobId), isNull(jobs.deletedAt)));
+  return guardedWrite('updateJob', async () => {
+    const updated = await db
+      .update(jobs)
+      .set({ ...parsed.data, updatedAt: new Date() })
+      .where(and(eq(jobs.id, jobId), isNull(jobs.deletedAt)))
+      .returning({ id: jobs.id });
+    if (updated.length === 0) return { ok: false, error: 'This job no longer exists.' };
 
-  revalidatePath('/jobs');
-  revalidatePath(`/jobs/${jobId}`);
-  revalidatePath('/paid-jobs');
-  revalidatePath('/awaiting-payments');
-  revalidatePath('/');
-  // dueDate is the Monthly breakdown's grouping key — editing it moves money
-  // between months.
-  revalidatePath('/earnings');
-  return { ok: true, jobId };
+    revalidatePath('/jobs');
+    revalidatePath(`/jobs/${jobId}`);
+    revalidatePath('/paid-jobs');
+    revalidatePath('/awaiting-payments');
+    revalidatePath('/');
+    // dueDate is the Monthly breakdown's grouping key — editing it moves money
+    // between months.
+    revalidatePath('/earnings');
+    return { ok: true, jobId };
+  });
 }
 
 /**
@@ -170,18 +205,27 @@ export async function changeJobStatus(jobId: string, status: string): Promise<Ac
     };
   }
 
-  await db
-    .update(jobs)
-    .set({ status: parsed.data.status, updatedAt: new Date() })
-    .where(and(eq(jobs.id, parsed.data.jobId), isNull(jobs.deletedAt)));
+  return guardedWrite('changeJobStatus', async () => {
+    // Under the same job-row lock `applyPayment` takes, so a status change and a
+    // payment landing together serialise instead of the last writer winning.
+    const updated = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM jobs WHERE id = ${parsed.data.jobId} FOR UPDATE`);
+      return tx
+        .update(jobs)
+        .set({ status: parsed.data.status, updatedAt: new Date() })
+        .where(and(eq(jobs.id, parsed.data.jobId), isNull(jobs.deletedAt)))
+        .returning({ id: jobs.id });
+    });
+    if (updated.length === 0) return { ok: false, error: 'This job no longer exists.' };
 
-  revalidatePath('/jobs');
-  revalidatePath(`/jobs/${jobId}`);
-  revalidatePath('/paid-jobs');
-  revalidatePath('/awaiting-payments');
-  revalidatePath('/earnings');
-  revalidatePath('/');
-  return { ok: true, jobId };
+    revalidatePath('/jobs');
+    revalidatePath(`/jobs/${jobId}`);
+    revalidatePath('/paid-jobs');
+    revalidatePath('/awaiting-payments');
+    revalidatePath('/earnings');
+    revalidatePath('/');
+    return { ok: true, jobId };
+  });
 }
 
 /**
@@ -191,19 +235,21 @@ export async function changeJobStatus(jobId: string, status: string): Promise<Ac
 export async function softDeleteJob(jobId: string): Promise<ActionResult> {
   await requireSession();
 
-  await db
-    .update(jobs)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(jobs.id, jobId), isNull(jobs.deletedAt)));
+  return guardedWrite('softDeleteJob', async () => {
+    await db
+      .update(jobs)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(jobs.id, jobId), isNull(jobs.deletedAt)));
 
-  revalidatePath('/jobs');
-  revalidatePath('/');
-  // A deleted job's payments drop out of Earnings, and its invoice out of
-  // Awaiting Payments or Paid jobs, whichever it was sitting in.
-  revalidatePath('/earnings');
-  revalidatePath('/awaiting-payments');
-  revalidatePath('/paid-jobs');
-  return { ok: true };
+    revalidatePath('/jobs');
+    revalidatePath('/');
+    // A deleted job's payments drop out of Earnings, and its invoice out of
+    // Awaiting Payments or Paid jobs, whichever it was sitting in.
+    revalidatePath('/earnings');
+    revalidatePath('/awaiting-payments');
+    revalidatePath('/paid-jobs');
+    return { ok: true };
+  });
 }
 
 /** Record an attachment after the browser has uploaded it straight to Storage. */
@@ -216,39 +262,43 @@ export async function recordAttachment(input: {
 }): Promise<ActionResult> {
   await requireSession();
 
-  await db.insert(jobAttachments).values({
-    jobId: input.jobId,
-    storagePath: input.storagePath,
-    fileName: input.fileName,
-    mimeType: input.mimeType ?? null,
-    fileSizeBytes: input.fileSizeBytes ?? null,
-  });
+  return guardedWrite('recordAttachment', async () => {
+    await db.insert(jobAttachments).values({
+      jobId: input.jobId,
+      storagePath: input.storagePath,
+      fileName: input.fileName,
+      mimeType: input.mimeType ?? null,
+      fileSizeBytes: input.fileSizeBytes ?? null,
+    });
 
-  revalidatePath(`/jobs/${input.jobId}`);
-  return { ok: true };
+    revalidatePath(`/jobs/${input.jobId}`);
+    return { ok: true };
+  });
 }
 
 /** Delete an attachment from both Storage and the database. */
 export async function deleteAttachment(attachmentId: string): Promise<ActionResult> {
   await requireSession();
 
-  const rows = await db
-    .select()
-    .from(jobAttachments)
-    .where(eq(jobAttachments.id, attachmentId))
-    .limit(1);
+  return guardedWrite('deleteAttachment', async () => {
+    const rows = await db
+      .select()
+      .from(jobAttachments)
+      .where(eq(jobAttachments.id, attachmentId))
+      .limit(1);
 
-  const attachment = rows[0];
-  if (!attachment) return { ok: false, error: 'Attachment not found' };
+    const attachment = rows[0];
+    if (!attachment) return { ok: false, error: 'Attachment not found' };
 
-  try {
-    await removeObject(ATTACHMENTS_BUCKET, attachment.storagePath);
-  } catch {
-    // Storage object may already be gone; removing the row is still correct.
-  }
+    try {
+      await removeObject(ATTACHMENTS_BUCKET, attachment.storagePath);
+    } catch {
+      // Storage object may already be gone; removing the row is still correct.
+    }
 
-  await db.delete(jobAttachments).where(eq(jobAttachments.id, attachmentId));
+    await db.delete(jobAttachments).where(eq(jobAttachments.id, attachmentId));
 
-  revalidatePath(`/jobs/${attachment.jobId}`);
-  return { ok: true };
+    revalidatePath(`/jobs/${attachment.jobId}`);
+    return { ok: true };
+  });
 }

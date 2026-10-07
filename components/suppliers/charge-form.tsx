@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition, type FormEvent } from 'react';
 
 import { Alert, Button, Field, Input, Textarea } from '@/components/ui';
+import { redirectIfUnauthorized } from '@/lib/client/session';
 import { addSupplierCharge } from '@/lib/actions/suppliers';
 import { todayIsoDate } from '@/lib/format';
 
@@ -42,7 +43,10 @@ export function ChargeForm({
       body: JSON.stringify({ kind: 'supplier-bill', supplierId, fileName: file.name, mimeType }),
     });
 
-    if (!urlResponse.ok) throw new Error('Could not start the receipt upload.');
+    if (!urlResponse.ok) {
+      redirectIfUnauthorized(urlResponse);
+      throw new Error('Could not start the receipt upload.');
+    }
 
     const { uploadUrl, storagePath } = (await urlResponse.json()) as {
       uploadUrl: string;

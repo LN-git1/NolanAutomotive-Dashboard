@@ -133,17 +133,43 @@ export async function POST(request: Request) {
 
       const bytes = await stampInvoice(built.stampInput);
 
+      // Commit the new snapshot FIRST, under the job-row lock `applyPayment`
+      // takes, re-checking payments inside the lock. The check above is only a
+      // fast path: a payment can land between it and here, and without this a
+      // paid invoice's total (and its stored PDF) would be rewritten anyway.
+      // The PDF is uploaded only after that check has passed.
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT id FROM jobs WHERE id = ${jobId} FOR UPDATE`);
+
+        // A void takes the same lock, so one may have committed since `existing`
+        // was read. A voided invoice's PDF is kept on purpose — never overwrite it.
+        const [live] = await tx
+          .select({ voidedAt: invoices.voidedAt })
+          .from(invoices)
+          .where(eq(invoices.id, existing.id))
+          .limit(1);
+        if (!live || live.voidedAt) {
+          throw new InvoiceBuildError(
+            `${existing.invoiceNumber} was voided in the meantime — reload and issue a fresh invoice.`,
+          );
+        }
+
+        const paidNow = await getPaidCentsForInvoice(existing.id, tx);
+        if (paidNow > 0) {
+          throw new InvoiceBuildError(
+            `${existing.invoiceNumber} has ${formatEur(paidNow)} recorded against it and can't be regenerated.`,
+          );
+        }
+
+        await tx.update(invoices).set(invoiceSnapshot(built)).where(eq(invoices.id, existing.id));
+      });
+
       let storageFailed = false;
       try {
         await uploadBytes(INVOICES_BUCKET, existing.pdfStoragePath, bytes, 'application/pdf');
       } catch {
         storageFailed = true;
       }
-
-      await db
-        .update(invoices)
-        .set(invoiceSnapshot(built))
-        .where(eq(invoices.id, existing.id));
 
       revalidateInvoicePaths(jobId);
 

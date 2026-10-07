@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Alert, Button, Card, CardHeader, Empty, Table, Td, Th } from '@/components/ui';
+import { redirectIfUnauthorized } from '@/lib/client/session';
 import { formatDate, numericToEur } from '@/lib/format';
 
 export interface JobInvoiceRow {
@@ -49,6 +50,7 @@ export function InvoiceCard({ invoices }: { invoices: JobInvoiceRow[] }) {
       });
 
       if (!response.ok) {
+        redirectIfUnauthorized(response);
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
         setError(body?.error ?? 'Could not void the invoice.');
         return;

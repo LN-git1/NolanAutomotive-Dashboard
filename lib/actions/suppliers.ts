@@ -134,11 +134,18 @@ export async function deleteSupplierEntry(entryId: string): Promise<ActionResult
   const parsedId = supplierEntryIdSchema.safeParse({ entryId });
   if (!parsedId.success) return { ok: false, error: 'Invalid entry' };
 
-  const existing = await db
-    .select({ attachmentStoragePath: supplierLedger.attachmentStoragePath })
-    .from(supplierLedger)
-    .where(eq(supplierLedger.id, entryId))
-    .limit(1);
+  // A lookup failure here must come back as an error, not reach the error page.
+  let existing: { attachmentStoragePath: string | null }[];
+  try {
+    existing = await db
+      .select({ attachmentStoragePath: supplierLedger.attachmentStoragePath })
+      .from(supplierLedger)
+      .where(eq(supplierLedger.id, entryId))
+      .limit(1);
+  } catch (error) {
+    console.error('[action:deleteSupplierEntry] lookup failed', error);
+    return { ok: false, error: 'Could not delete that entry just now — please try again.' };
+  }
 
   const receiptPath = existing[0]?.attachmentStoragePath;
   if (receiptPath) {
@@ -185,17 +192,22 @@ export async function deleteSupplier(supplierId: string): Promise<ActionResult> 
   const parsedId = supplierIdSchema.safeParse({ supplierId });
   if (!parsedId.success) return { ok: false, error: 'Invalid supplier' };
 
-  const entries = await db
-    .select({ attachmentStoragePath: supplierLedger.attachmentStoragePath })
-    .from(supplierLedger)
-    .where(eq(supplierLedger.supplierId, supplierId));
+  try {
+    const entries = await db
+      .select({ attachmentStoragePath: supplierLedger.attachmentStoragePath })
+      .from(supplierLedger)
+      .where(eq(supplierLedger.supplierId, supplierId));
 
-  const receiptPaths = entries
-    .map((entry) => entry.attachmentStoragePath)
-    .filter((path): path is string => path !== null);
+    const receiptPaths = entries
+      .map((entry) => entry.attachmentStoragePath)
+      .filter((path): path is string => path !== null);
 
-  if (receiptPaths.length > 0) {
-    await removeObjects(ATTACHMENTS_BUCKET, receiptPaths);
+    if (receiptPaths.length > 0) {
+      await removeObjects(ATTACHMENTS_BUCKET, receiptPaths);
+    }
+  } catch (error) {
+    console.error('[action:deleteSupplier] receipt cleanup failed', error);
+    return { ok: false, error: 'Could not delete that supplier just now — please try again.' };
   }
 
   try {

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 
 import { ExpenseForm } from '@/components/expenses/expense-form';
+import { redirectIfUnauthorized } from '@/lib/client/session';
 import { Alert, Badge, Button, Card, CardBody, CardHeader } from '@/components/ui';
 import { getBooksMonthDetail } from '@/lib/actions/earnings';
 import { attachExpenseReceipt, reverseExpense } from '@/lib/actions/expenses';
@@ -13,7 +14,7 @@ import type { BooksMonthDetail, BooksMonthLine, BooksSummary } from '@/lib/db/qu
 import { formatEur } from '@/lib/money';
 import { cn } from '@/lib/utils';
 
-type MonthState = 'loading' | BooksMonthDetail;
+type MonthState = 'loading' | 'error' | BooksMonthDetail;
 
 function GroupTitle({ children }: { children: string }) {
   return <p className="px-4 pt-3 text-xs font-medium text-muted">{children}</p>;
@@ -64,7 +65,10 @@ function ExpenseRow({
           mimeType,
         }),
       });
-      if (!urlResponse.ok) throw new Error('Could not start the receipt upload.');
+      if (!urlResponse.ok) {
+        redirectIfUnauthorized(urlResponse);
+        throw new Error('Could not start the receipt upload.');
+      }
       const { uploadUrl, storagePath } = (await urlResponse.json()) as {
         uploadUrl: string;
         storagePath: string;
@@ -166,7 +170,7 @@ function MonthRow({
     <details
       className="group"
       onToggle={(event) => {
-        if (event.currentTarget.open && detail === undefined) onFirstOpen(monthKey);
+        if (event.currentTarget.open && (detail === undefined || detail === 'error')) onFirstOpen(monthKey);
       }}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 hover:bg-canvas [&::-webkit-details-marker]:hidden">
@@ -182,7 +186,9 @@ function MonthRow({
         </span>
       </summary>
       <div className="border-t border-line px-4 py-3">
-        {detail === undefined || detail === 'loading' ? (
+        {detail === 'error' ? (
+          <p className="text-xs text-muted">Could not load this month — close and reopen it to retry.</p>
+        ) : detail === undefined || detail === 'loading' ? (
           <p className="text-xs text-muted">Loading…</p>
         ) : detail.income.length === 0 &&
           detail.supplier.length === 0 &&
@@ -250,12 +256,23 @@ function MonthRow({
 export function EarningsPanel({ summary }: { summary: BooksSummary }) {
   const router = useRouter();
   const [detail, setDetail] = useState<Record<string, MonthState>>({});
+  // Latest request per month: rapid edits re-fetch every open month, and an
+  // older response landing after a newer one must not overwrite it.
+  const latestRequest = useRef<Record<string, number>>({});
 
   function loadMonth(monthKey: string) {
+    const requestId = (latestRequest.current[monthKey] ?? 0) + 1;
+    latestRequest.current[monthKey] = requestId;
     setDetail((prev) => ({ ...prev, [monthKey]: 'loading' }));
-    void getBooksMonthDetail(monthKey).then((lines) => {
-      setDetail((prev) => ({ ...prev, [monthKey]: lines }));
-    });
+    getBooksMonthDetail(monthKey)
+      .then((lines) => {
+        if (latestRequest.current[monthKey] !== requestId) return;
+        setDetail((prev) => ({ ...prev, [monthKey]: lines }));
+      })
+      .catch(() => {
+        if (latestRequest.current[monthKey] !== requestId) return;
+        setDetail((prev) => ({ ...prev, [monthKey]: 'error' }));
+      });
   }
 
   function handleSaved() {

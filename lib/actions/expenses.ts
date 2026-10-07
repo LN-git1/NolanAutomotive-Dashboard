@@ -3,6 +3,7 @@
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
+import { guardedWrite } from '@/lib/actions/safe';
 import { requireSession } from '@/lib/auth/require-session';
 import { db } from '@/lib/db';
 import { expenses } from '@/lib/db/schema';
@@ -24,27 +25,23 @@ export async function addExpense(formData: FormData): Promise<ActionResult> {
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid expense details' };
   }
 
-  const rows = await db
-    .insert(expenses)
-    .values({
-      expenseDate: parsed.data.expenseDate,
-      category: parsed.data.category,
-      amount: parsed.data.amount,
-      note: parsed.data.note,
-      submissionKey: parsed.data.submissionKey,
-    })
-    .onConflictDoNothing({ target: expenses.submissionKey })
-    .returning({ id: expenses.id });
+  return guardedWrite('addExpense', async () => {
+    await db
+      .insert(expenses)
+      .values({
+        expenseDate: parsed.data.expenseDate,
+        category: parsed.data.category,
+        amount: parsed.data.amount,
+        note: parsed.data.note,
+        submissionKey: parsed.data.submissionKey,
+      })
+      // A conflict on the submission key is a retried POST after a successful
+      // insert. The expense IS recorded, so it is reported as success.
+      .onConflictDoNothing({ target: expenses.submissionKey });
 
-  // Zero rows back means the submission key already exists: a retried POST
-  // after a successful insert. Report success — the expense IS recorded.
-  if (rows.length === 0) {
     revalidateBooks();
     return { ok: true };
-  }
-
-  revalidateBooks();
-  return { ok: true };
+  });
 }
 
 /**
@@ -58,38 +55,48 @@ export async function reverseExpense(expenseId: string): Promise<ActionResult> {
   const parsed = expenseReversalSchema.safeParse({ expenseId });
   if (!parsed.success) return { ok: false, error: 'Invalid expense' };
 
-  const original = await db
-    .select({
-      id: expenses.id,
-      expenseDate: expenses.expenseDate,
-      category: expenses.category,
-      amount: expenses.amount,
-      note: expenses.note,
-      reversesId: expenses.reversesId,
-    })
-    .from(expenses)
-    .where(eq(expenses.id, parsed.data.expenseId));
+  // One transaction with the original row locked: two rapid clicks queue on the
+  // lock, and the second sees the first's correction and refuses.
+  const result = await guardedWrite('reverseExpense', () =>
+    db.transaction(async (tx): Promise<ActionResult> => {
+      const original = await tx
+        .select({
+          id: expenses.id,
+          expenseDate: expenses.expenseDate,
+          category: expenses.category,
+          amount: expenses.amount,
+          note: expenses.note,
+          reversesId: expenses.reversesId,
+        })
+        .from(expenses)
+        .where(eq(expenses.id, parsed.data.expenseId))
+        .for('update');
 
-  const row = original[0];
-  if (!row) return { ok: false, error: 'Expense not found' };
-  if (row.reversesId !== null) return { ok: false, error: 'This correction has already been made' };
+      const row = original[0];
+      if (!row) return { ok: false, error: 'Expense not found' };
+      if (row.reversesId !== null) return { ok: false, error: 'This correction has already been made' };
 
-  const alreadyReversed = await db
-    .select({ id: expenses.id })
-    .from(expenses)
-    .where(eq(expenses.reversesId, row.id));
-  if (alreadyReversed.length > 0) return { ok: false, error: 'This expense was already corrected' };
+      const alreadyReversed = await tx
+        .select({ id: expenses.id })
+        .from(expenses)
+        .where(eq(expenses.reversesId, row.id));
+      if (alreadyReversed.length > 0) return { ok: false, error: 'This expense was already corrected' };
 
-  await db.insert(expenses).values({
-    expenseDate: row.expenseDate,
-    category: row.category,
-    amount: row.amount,
-    note: row.note ? `Correction of: ${row.note}` : 'Correction',
-    reversesId: row.id,
-  });
+      await tx.insert(expenses).values({
+        expenseDate: row.expenseDate,
+        category: row.category,
+        amount: row.amount,
+        note: row.note ? `Correction of: ${row.note}` : 'Correction',
+        reversesId: row.id,
+      });
 
-  revalidateBooks();
-  return { ok: true };
+      return { ok: true };
+    }),
+  );
+
+  // Only after the transaction has committed.
+  if (result.ok) revalidateBooks();
+  return result;
 }
 
 /** Record a receipt path after the browser has PUT the file straight to R2. */
@@ -103,11 +110,13 @@ export async function attachExpenseReceipt(
   if (!parsed.success) return { ok: false, error: 'Invalid expense' };
   if (!storagePath.startsWith('expenses/')) return { ok: false, error: 'Invalid receipt path' };
 
-  await db
-    .update(expenses)
-    .set({ receiptStoragePath: storagePath })
-    .where(eq(expenses.id, parsed.data.expenseId));
+  return guardedWrite('attachExpenseReceipt', async () => {
+    await db
+      .update(expenses)
+      .set({ receiptStoragePath: storagePath })
+      .where(eq(expenses.id, parsed.data.expenseId));
 
-  revalidateBooks();
-  return { ok: true };
+    revalidateBooks();
+    return { ok: true };
+  });
 }

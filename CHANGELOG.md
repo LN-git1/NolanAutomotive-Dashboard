@@ -1,5 +1,22 @@
 # Changelog
 
+## 07/10/2026 — Rapid-use hardening: writes fail gracefully, double actions can't double-apply
+
+**Goal:** the app intermittently misbehaved when data was changed or the app used quickly. Reads were already retried (`lib/db/retry.ts`); this covers writes and the double-click races.
+
+- **Fixed — failed saves no longer land on the full-page error.** New `lib/actions/safe.ts` (`guardedWrite`): `updateJob`, `changeJobStatus`, `softDeleteJob`, attachments, expenses and time-off return `{ ok: false, error }` instead of throwing, log `[action:<name>]`, and send the matrix-dash webhook (the error boundary no longer sees these). Writes are still never retried. Supplier delete lookups are guarded too. `updateJob`/`changeJobStatus` now report a job that no longer exists.
+- **Fixed — double-click on "correct expense" could record two corrections.** `reverseExpense` now runs in one transaction with the original row locked (`FOR UPDATE`).
+- **Fixed — double-submit of "New job" created duplicate jobs.** Jobs have a `submission_key` (migration `0013`, additive: one nullable column + unique index). The create form sends a key; a repeat returns the existing job and releases the job number.
+- **Fixed — void / regenerate vs. a payment landing at the same moment.** Both take the job-row lock first (same order as `applyPayment`) and re-check voided/paid state inside the transaction. Regenerate now commits the new snapshot before overwriting the PDF, and never touches a voided invoice's PDF.
+- **Fixed — `changeJobStatus` now takes the job-row lock**, so a status change and a payment serialise.
+- **Fixed — Invoicer showed a stale copy of the job after a refresh**; it now reads the fresh prop (frozen while an invoice is being issued).
+- **Fixed — Earnings month detail could stick on "Loading…"** or be overwritten by an older response; it now ignores stale responses and shows an error (reopen to retry).
+- **Fixed — an expired session on an API call** (generate, void, uploads) now sends the browser to `/login` instead of a generic error.
+- **Docs — `lib/db/index.ts` comment** now says the pool is 8 (value unchanged: `max: 1` hangs).
+- **Deliberately not done:** `updateJob` stays last-write-wins (status/payment actions also bump `updatedAt`, so an optimistic check would raise false conflicts for a single-owner shop); no unique index on `expenses.reverses_id` (production data was checked: no duplicate reversals, and the row lock prevents new ones); `revalidatePath` calls untouched.
+
+**Deploy order:** apply migration `0013` (`pnpm db:migrate:prod`) BEFORE the new code goes live — `createJob` writes the new column.
+
 ## 05/10/2026 @ 22:46:19 IST — "muse-spark-1.3-free"
 
 **Project completion: 88.89%** (same basis — 8/9; open: 5 clean sweeps, blocked by recurring stall waves; 4 marker sweeps verified live instead).
