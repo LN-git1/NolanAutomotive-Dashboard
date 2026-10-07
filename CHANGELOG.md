@@ -15,7 +15,7 @@
 - **Docs — `lib/db/index.ts` comment** now says the pool is 8 (value unchanged: `max: 1` hangs).
 - **Deliberately not done:** `updateJob` stays last-write-wins (status/payment actions also bump `updatedAt`, so an optimistic check would raise false conflicts for a single-owner shop); no unique index on `expenses.reverses_id` (production data was checked: no duplicate reversals, and the row lock prevents new ones); `revalidatePath` calls untouched.
 
-**Deploy order:** apply migration `0013` (`pnpm db:migrate:prod`) BEFORE the new code goes live — `createJob` writes the new column.
+**Deploy order — migration FIRST.** Apply `0013` (`pnpm db:migrate:prod`, or paste the SQL — it is `IF NOT EXISTS`, so both are safe) BEFORE merging to `main` and before any preview build that points at the production database. The new schema adds `submission_key` to every full-row read of `jobs` (job page, lists, schedule, export queries), so code that ships before the column exists breaks those pages, not just `createJob`. Applying the migration early is safe: it is additive and the old code ignores the column. If you paste it into the SQL editor instead of using the script, drizzle's migrations table won't record it — the script's later run is harmless because of `IF NOT EXISTS`.
 
 ## 05/10/2026 @ 22:46:19 IST — "muse-spark-1.3-free"
 
