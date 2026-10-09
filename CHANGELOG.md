@@ -1,5 +1,51 @@
 # Changelog
 
+## 09/10/2026 @ 04:40:00 IST — "muse-spark-1.3"
+
+**Project completion: 100.00%**
+
+Basis: 43 of 43 checklist items done — 27 of 27 audited user interactions now confirm success and failure with toasts (plus 4 latent result-handling bugs fixed underneath them), 13 of 13 routes with structural skeleton loaders (11 rewritten/fixed, 1 created, primitives extended, 3 dead exports removed), 3 performance changes, 4 security changes. Verification green across all five gates: `tsc --noEmit` 0 errors, eslint 0 errors, 275 tests (221 passed, 54 DB-gated skips, 0 failed), `pnpm audit --prod` 0 vulnerabilities, `db:generate` no drift.
+
+**Goal:** Every tap that changes something says what happened; every screen shows a placeholder shaped like its content while loading; the app answers faster top to bottom; the dependency audit is clean.
+
+### Added — toast notifications on every mutation (27/27 interactions)
+
+**Cause.** No toast system existed — 15 interactions refreshed or redirected in total silence on success, and 4 paths had no visible feedback in either direction (time-format toggle both ways, logout network failure, supplier-entry delete failure, sent-record failure). The only success signals were 4 inline `<Alert>`s.
+
+**Fix.** New dependency-free `ToastProvider` in the root layout (`components/providers/toast-provider.tsx`, queue logic in `lib/toast.ts`): top-centre/top-right, above modals (`z-[60]`), per-kind lifetimes (success 4s → error 9s), max 4 with oldest dropped, assertive live region for errors and polite for the rest, entry animation that respects `prefers-reduced-motion`. Wired into every caller: job create/save/status/delete, payment record (both flows, amounts named), attachments upload/delete, invoice generate/reissue/storage-warning/void, sent-record failure (warning, not error — the customer already has the PDF), expense add/correct/receipt, supplier charge/payment/entry-delete/supplier-delete/supplier-add, time-off add/delete, settings save, time-format toggle (with revert + error when persistence fails), factory reset, sign in/out, dev coordinate save. Existing inline `<Alert>`s stay as the durable record; toasts are the transient confirmation.
+
+**Fixed underneath, found while wiring.** `deleteSupplierEntry`'s result was discarded and time-off delete refreshed unconditionally — both now check the result and only refresh on success. `window.alert` (supplier delete) replaced with an error toast. Logout wrapped in try/catch (a network failure previously left a dead session with no message). The time-format provider's `isPending` was dead — now drives the toggle disabled state — and `setTimeFormat` returns the save result with optimistic revert on failure. `createJob` returns `jobNumber` + `duplicate` so the toast can name the job and say "already saved" on a double-tap.
+
+**Verification.** 7 new unit tests (`tests/toast.test.ts`: ordering, cap + oldest-drop, removal, TTL ladder) — all pass.
+
+### Changed — skeleton loaders match every page structurally (13/13 routes)
+
+**Cause.** Route-by-route audit found real mismatches: settings missed 3 whole cards and was the wrong width; schedule hid the grid on phones and omitted the day panel; earnings missed the Profit card, month-row shape and expense form; job detail had a phantom header button and missed the Payments card; supplier pages had wrong heights/widths/column alignment; search bars missed the Apply button; the template-mapper had no loader at all; `SkeletonTable` scrolled horizontally on phones where real tables become cards; stat tiles were ~28px short with no hint line; month-expansion and vehicle-history showed plain "Loading…" text.
+
+**Fix.** `skeleton.tsx`: `SkeletonTable` mirrors `.rtable` (cards on phones, blank `data-label` cells) + `rightColumns` for non-last right-aligned columns; `SkeletonStatTile` gains the hint line and `h-8` metric; header line-heights corrected to real line boxes; new `SkeletonTextarea`, `SkeletonAccordionRow`, `SkeletonScheduleHeader`; dead `SkeletonText`/`SkeletonTableCard`/`SkeletonFormCard` removed. Loaders rewritten or fixed: settings (max-w-3xl + all 7 cards), schedule (panel + grid at every width + tiered cell heights), earnings (profit + accordion rows + expense form + refresh), job detail (4 side cards, no phantom button), supplier detail/list, search Apply buttons everywhere, new `dev/template-mapper/loading.tsx`. In-page: month expansion, vehicle history and template render now show skeleton rows instead of text.
+
+### Changed — faster loads: one settings query per request, instant streaming
+
+**Cause.** `getSettings()` ran uncached 2–3 times per load (layout + page sections), and the dashboard layout `await`ed it — so on a hard load no skeleton could stream until the database answered.
+
+**Fix.** `getSettings` wrapped in React `cache()` (one shared query per request, nothing shared across requests so saves show immediately), and the layout no longer awaits it: the promise goes to `TimeFormatProvider`, which syncs it into context inside an isolated Suspense boundary. Shell, skeletons and pages stream at once; server-rendered output stays exact (pages read the cached row themselves); client consumers briefly see the default, and a late promise never overwrites a toggle the owner already touched.
+
+### Fixed — dependency audit clean (12 → 0) + baseline security headers
+
+**Cause.** `pnpm audit --prod` reported 12 advisories (3 critical RCE, 4 high incl. sharp/libheif/librsvg/SSRF, 1 low) — all rooted in `next@16.3.0` and its bundled `sharp`/`source-map-js`.
+
+**Fix.** `next` + `eslint-config-next` 16.3.0 → 16.3.8 (newest stable on the 16.3 line, the patched floor), plus a `pnpm.overrides` pin of transitive `source-map-js` to 1.2.2 (satisfies postcss's own range). `pnpm audit --prod` now reports **no known vulnerabilities**. `next.config.ts` gains the cheap break-nothing headers: `nosniff`, `DENY` framing, strict referrer policy, and camera/mic/geolocation/payment disabled (HSTS already comes from Vercel). Auth surface re-checked while here: timing-safe credential compare, generic login errors, httpOnly + strict + 7-day session cookie, proxy + in-route session gates intact — no changes needed.
+
+**Verification.** `tsc --noEmit` 0 errors; eslint 0 errors on all touched files; full suite 275 tests — 221 passed, 54 skipped (DB-gated, no local Postgres), 0 failed on the clean run (one 5s dynamic-import timeout appeared once under concurrent load, green on re-run — same known flake as the previous entry); `db:generate` reports no schema drift (no schema changes in this entry).
+
+### Files Touched
+
+- `components/providers/toast-provider.tsx` (new), `lib/toast.ts` (new), `tests/toast.test.ts` (new), `app/layout.tsx` (mount), `app/globals.css` (entry animation)
+- Toast wiring: `components/jobs/{job-actions,job-form,attachment-manager,invoice-card,vehicle-history}.tsx`, `components/payments/{mark-paid-modal,mark-paid-button}.tsx`, `components/invoicer/invoicer.tsx`, `components/expenses/expense-form.tsx`, `components/earnings/earnings-panel.tsx`, `components/suppliers/{charge-form,supplier-account-actions,entry-actions,supplier-actions,supplier-form}.tsx`, `components/settings/{settings-form,time-off,factory-reset}.tsx`, `components/auth/login-form.tsx`, `components/layout/logout-button.tsx`, `components/dev/template-mapper-canvas.tsx`, `components/providers/time-format-provider.tsx`, `lib/actions/jobs.ts`
+- Skeletons: `components/ui/skeleton.tsx`, `app/(dashboard)/{loading,settings/loading,schedule/loading,earnings/loading,jobs/loading,jobs/[jobId]/loading,suppliers/loading,suppliers/[supplierId]/loading,paid-jobs/loading,awaiting-payments/loading}.tsx`, `app/(dashboard)/dev/template-mapper/loading.tsx` (new)
+- Performance: `lib/db/queries/settings.ts`, `app/(dashboard)/layout.tsx`
+- Security: `package.json`, `pnpm-lock.yaml`, `next.config.ts`
+
 ## 08/10/2026 @ 18:15:00 IST — "gemini-3.8-flash"
 
 **Project completion: 100.00%**
