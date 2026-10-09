@@ -13,8 +13,9 @@ import {
   shiftMonth,
   todayIso,
 } from '@/lib/db/queries/schedule';
+import { getSettings } from '@/lib/db/queries/settings';
 import { listTimeOffInRange, timeOffDateMap } from '@/lib/db/queries/time-off';
-import { formatDate, formatTime } from '@/lib/format';
+import { formatDate, formatTime, type TimeFormat } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Job } from '@/lib/db/schema';
 
@@ -47,8 +48,16 @@ function vehicleDescription(job: Job): string {
   return [job.vehicleMake, job.vehicleModel].filter(Boolean).join(' ');
 }
 
-function JobChip({ job, className }: { job: Job; className?: string }) {
-  const time = formatTime(job.dueTime);
+function JobChip({
+  job,
+  timeFormat,
+  className,
+}: {
+  job: Job;
+  timeFormat?: TimeFormat;
+  className?: string;
+}) {
+  const time = formatTime(job.dueTime, timeFormat);
   const vehicle = vehicleDescription(job);
   return (
     <Link
@@ -67,8 +76,8 @@ function JobChip({ job, className }: { job: Job; className?: string }) {
 }
 
 /** Full detail for one job — make/model and the work list, not just a chip's job number. */
-function JobDetailCard({ job }: { job: Job }) {
-  const time = formatTime(job.dueTime);
+function JobDetailCard({ job, timeFormat }: { job: Job; timeFormat?: TimeFormat }) {
+  const time = formatTime(job.dueTime, timeFormat);
   const vehicle = vehicleDescription(job);
   const work = job.labourLines.map((line) => line.description).filter(Boolean);
   return (
@@ -110,10 +119,11 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
   );
 
   const { from, to } = monthGridRange(year, month);
-  const [scheduled, unscheduled, timeOffEntries] = await Promise.all([
+  const [scheduled, unscheduled, timeOffEntries, settings] = await Promise.all([
     listScheduledJobs(from, to),
     listUnscheduledJobs(),
     listTimeOffInRange(from, to),
+    getSettings(),
   ]);
 
   // Bucket by date once, rather than filtering the list inside every cell.
@@ -266,7 +276,7 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
               ) : (
                 <div className="flex flex-col gap-2">
                   {selectedCell.jobs.map((job) => (
-                    <JobDetailCard key={job.id} job={job} />
+                    <JobDetailCard key={job.id} job={job} timeFormat={settings.timeFormat} />
                   ))}
                 </div>
               )}
@@ -294,7 +304,7 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
                   </div>
                   <div className="flex flex-col gap-2">
                     {cell.jobs.map((job) => (
-                      <JobDetailCard key={job.id} job={job} />
+                      <JobDetailCard key={job.id} job={job} timeFormat={settings.timeFormat} />
                     ))}
                   </div>
                 </div>
@@ -372,6 +382,7 @@ export default async function SchedulePage({ searchParams }: PageProps<'/schedul
                         <JobChip
                           key={job.id}
                           job={job}
+                          timeFormat={settings.timeFormat}
                           className={cn(
                             'pointer-events-auto',
                             i === 1 && 'hidden sm:block',

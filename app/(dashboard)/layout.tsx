@@ -1,5 +1,7 @@
 import { DashboardShell } from '@/components/layout/dashboard-shell';
+import { TimeFormatProvider } from '@/components/providers/time-format-provider';
 import { requireSession } from '@/lib/auth/require-session';
+import { getSettings } from '@/lib/db/queries/settings';
 
 /**
  * Every authenticated page hangs off this layout.
@@ -14,6 +16,11 @@ import { requireSession } from '@/lib/auth/require-session';
  */
 export default async function DashboardLayout({ children }: LayoutProps<'/'>) {
   await requireSession();
+  const settings = await getSettings();
 
-  return <DashboardShell>{children}</DashboardShell>;
+  return (
+    <TimeFormatProvider initialFormat={settings.timeFormat}>
+      <DashboardShell>{children}</DashboardShell>
+    </TimeFormatProvider>
+  );
 }

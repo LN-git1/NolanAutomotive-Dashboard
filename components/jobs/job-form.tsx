@@ -11,6 +11,7 @@ import { VehicleFields } from '@/components/jobs/vehicle-fields';
 import { VehicleHistory } from '@/components/jobs/vehicle-history';
 import { createJob, updateJob } from '@/lib/actions/jobs';
 import { applyQuantity, formatEur, formatHours, sumLabourHours, toCents } from '@/lib/money';
+import { useTimeFormat } from '@/components/providers/time-format-provider';
 import { JOB_PRIORITIES } from '@/lib/validation/job';
 import type { VehicleMatch } from '@/lib/db/queries/vehicles';
 import type { Job } from '@/lib/db/schema';
@@ -79,6 +80,7 @@ export function JobForm({
   partsCapacity: number;
 }) {
   const router = useRouter();
+  const { timeFormat, formatTime } = useTimeFormat();
   const [error, setError] = useState<string | null>(null);
   // One key per form instance: a double tap or retried submit creates one job.
   const [submissionKey] = useState(() => crypto.randomUUID());
@@ -427,7 +429,15 @@ export function JobForm({
               <Input id="dueDate" name="dueDate" type="date" defaultValue={job?.dueDate ?? ''} />
             </Field>
 
-            <Field label="Due time" htmlFor="dueTime">
+            <Field
+              label="Due time"
+              htmlFor="dueTime"
+              hint={
+                job?.dueTime
+                  ? `Displays as ${formatTime(job.dueTime)} (${timeFormat === '24h' ? '24-hour' : '12-hour'})`
+                  : undefined
+              }
+            >
               <Input id="dueTime" name="dueTime" type="time" defaultValue={job?.dueTime ?? ''} />
             </Field>
           </div>

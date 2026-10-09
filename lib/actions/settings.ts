@@ -45,6 +45,7 @@ export async function updateSettings(formData: FormData): Promise<ActionResult> 
           vatNumber: sql`excluded.vat_number`,
           defaultVatRate: sql`excluded.default_vat_rate`,
           defaultHourlyRate: sql`excluded.default_hourly_rate`,
+          timeFormat: sql`excluded.time_format`,
           updatedAt: sql`excluded.updated_at`,
         },
       });
@@ -52,7 +53,50 @@ export async function updateSettings(formData: FormData): Promise<ActionResult> 
     return { ok: false, error: error instanceof Error ? error.message : 'Could not save settings' };
   }
 
+  revalidatePath('/', 'layout');
   revalidatePath('/settings');
   revalidatePath('/invoicer');
+  revalidatePath('/schedule');
+  revalidatePath('/jobs');
+  return { ok: true };
+}
+
+/**
+ * Dedicated action to toggle time format immediately with instant revalidation.
+ */
+export async function updateTimeFormat(timeFormat: '12h' | '24h'): Promise<ActionResult> {
+  await requireSession();
+  if (timeFormat !== '12h' && timeFormat !== '24h') {
+    return { ok: false, error: 'Invalid time format' };
+  }
+
+  try {
+    await db
+      .insert(settings)
+      .values({
+        id: SETTINGS_ID,
+        timeFormat,
+        defaultVatRate: '23.00',
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: settings.id,
+        set: {
+          timeFormat: sql`excluded.time_format`,
+          updatedAt: sql`excluded.updated_at`,
+        },
+      });
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Could not update time format',
+    };
+  }
+
+  revalidatePath('/', 'layout');
+  revalidatePath('/settings');
+  revalidatePath('/invoicer');
+  revalidatePath('/schedule');
+  revalidatePath('/jobs');
   return { ok: true };
 }

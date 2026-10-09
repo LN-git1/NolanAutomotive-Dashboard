@@ -10,7 +10,8 @@ import {
   listRecentInvoices,
 } from '@/lib/db/queries/overview';
 import { countJobPipeline, listJobsInPipeline } from '@/lib/db/queries/jobs';
-import { formatDate, numericToEur } from '@/lib/format';
+import { getSettings } from '@/lib/db/queries/settings';
+import { formatDate, formatDueDateTime, numericToEur, type TimeFormat } from '@/lib/format';
 import { formatEur } from '@/lib/money';
 import { SkeletonStatGrid, SkeletonTable } from '@/components/ui/skeleton';
 import type { Job } from '@/lib/db/schema';
@@ -44,7 +45,15 @@ function Kpi({
   );
 }
 
-function JobList({ jobs, emptyText }: { jobs: Job[]; emptyText: string }) {
+function JobList({
+  jobs,
+  emptyText,
+  timeFormat,
+}: {
+  jobs: Job[];
+  emptyText: string;
+  timeFormat?: TimeFormat;
+}) {
   if (jobs.length === 0) return <Empty>{emptyText}</Empty>;
 
   return (
@@ -70,7 +79,7 @@ function JobList({ jobs, emptyText }: { jobs: Job[]; emptyText: string }) {
               {job.vehicleRegistration}
             </Td>
             <Td label="Due" className="text-muted">
-              {formatDate(job.dueDate)}
+              {formatDueDateTime(job.dueDate, job.dueTime, timeFormat)}
             </Td>
           </tr>
         ))}
@@ -161,8 +170,8 @@ async function JobsInPipeline({
   bucket: 'active' | 'invoiced';
   emptyText: string;
 }) {
-  const jobs = await listJobsInPipeline(bucket, 5);
-  return <JobList jobs={jobs} emptyText={emptyText} />;
+  const [jobs, settings] = await Promise.all([listJobsInPipeline(bucket, 5), getSettings()]);
+  return <JobList jobs={jobs} emptyText={emptyText} timeFormat={settings.timeFormat} />;
 }
 
 async function RecentInvoices() {

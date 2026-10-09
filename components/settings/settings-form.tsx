@@ -4,15 +4,25 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition, type FormEvent } from 'react';
 
 import { Alert, Button, Card, CardBody, CardHeader, Field, Input, Textarea } from '@/components/ui';
+import { useTimeFormat } from '@/components/providers/time-format-provider';
 import { updateSettings } from '@/lib/actions/settings';
+import type { TimeFormat } from '@/lib/format';
 import type { Settings } from '@/lib/db/schema';
+import { cn } from '@/lib/utils';
 
 export function SettingsForm({ settings }: { settings: Settings }) {
   const router = useRouter();
+  const { setTimeFormat: syncGlobalTimeFormat } = useTimeFormat();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [vatRegistered, setVatRegistered] = useState(settings.vatRegistered);
+  const [timeFormat, setTimeFormat] = useState<TimeFormat>(settings.timeFormat ?? '12h');
   const [pending, startTransition] = useTransition();
+
+  function handleTimeFormatChange(nextFormat: TimeFormat) {
+    setTimeFormat(nextFormat);
+    void syncGlobalTimeFormat(nextFormat);
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -131,6 +141,74 @@ export function SettingsForm({ settings }: { settings: Settings }) {
               defaultValue={settings.defaultHourlyRate ?? ''}
             />
           </Field>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Time format"
+          description="Choose whether times appear in 12-hour or 24-hour format across the entire dashboard."
+        />
+        <CardBody className="flex flex-col gap-3">
+          <input type="hidden" name="timeFormat" value={timeFormat} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              id="time-format-12h"
+              onClick={() => handleTimeFormatChange('12h')}
+              className={cn(
+                'flex cursor-pointer items-center justify-between rounded-md border p-3.5 text-left transition-colors',
+                timeFormat === '12h'
+                  ? 'border-brand bg-info-soft text-brand-dark ring-1 ring-brand'
+                  : 'border-line bg-surface text-ink hover:bg-canvas',
+              )}
+            >
+              <div>
+                <span className="block text-sm font-semibold">12-hour format</span>
+                <span className="block text-xs text-muted">e.g. 9:30am, 4:30pm</span>
+              </div>
+              <span
+                className={cn(
+                  'flex size-5 items-center justify-center rounded-full border text-xs font-bold',
+                  timeFormat === '12h'
+                    ? 'border-brand bg-brand text-white'
+                    : 'border-line text-transparent',
+                )}
+              >
+                ✓
+              </span>
+            </button>
+
+            <button
+              type="button"
+              id="time-format-24h"
+              onClick={() => handleTimeFormatChange('24h')}
+              className={cn(
+                'flex cursor-pointer items-center justify-between rounded-md border p-3.5 text-left transition-colors',
+                timeFormat === '24h'
+                  ? 'border-brand bg-info-soft text-brand-dark ring-1 ring-brand'
+                  : 'border-line bg-surface text-ink hover:bg-canvas',
+              )}
+            >
+              <div>
+                <span className="block text-sm font-semibold">24-hour format</span>
+                <span className="block text-xs text-muted">e.g. 09:30, 16:30</span>
+              </div>
+              <span
+                className={cn(
+                  'flex size-5 items-center justify-center rounded-full border text-xs font-bold',
+                  timeFormat === '24h'
+                    ? 'border-brand bg-brand text-white'
+                    : 'border-line text-transparent',
+                )}
+              >
+                ✓
+              </span>
+            </button>
+          </div>
+          <p className="text-xs text-muted">
+            Updates schedule chips and agendas, job lists, and overviews across the dashboard.
+          </p>
         </CardBody>
       </Card>
 

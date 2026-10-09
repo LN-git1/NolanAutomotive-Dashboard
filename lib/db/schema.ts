@@ -60,6 +60,7 @@ export const settings = pgTable('settings', {
     .notNull()
     .default('23.00'),
   defaultHourlyRate: numeric('default_hourly_rate', { precision: 10, scale: 2 }),
+  timeFormat: text('time_format').$type<'12h' | '24h'>().notNull().default('12h'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

@@ -20,7 +20,12 @@ export async function getSettings(): Promise<Settings> {
     db.select().from(settings).where(eq(settings.id, SETTINGS_ID)).limit(1),
   );
   const existing = rows[0];
-  if (existing) return existing;
+  if (existing) {
+    return {
+      ...existing,
+      timeFormat: existing.timeFormat ?? '12h',
+    };
+  }
 
   const now = new Date();
   return {
@@ -33,6 +38,7 @@ export async function getSettings(): Promise<Settings> {
     vatNumber: null,
     defaultVatRate: '23.00',
     defaultHourlyRate: null,
+    timeFormat: '12h',
     createdAt: now,
     updatedAt: now,
   };

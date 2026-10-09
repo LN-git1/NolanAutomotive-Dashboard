@@ -34,8 +34,8 @@ async function main() {
 
     // The settings singleton. Pinned to id = 1 by convention.
     await db.execute(sql`
-      INSERT INTO settings (id, business_name, business_address, business_phone, vat_registered, default_vat_rate)
-      VALUES (1, 'Nolan Automotive', 'Ballybrack, Kilcock, Naas, Co. Kildare, W23 AWV1', '(085) 149-5591', false, '23.00')
+      INSERT INTO settings (id, business_name, business_address, business_phone, vat_registered, default_vat_rate, time_format)
+      VALUES (1, 'Nolan Automotive', 'Ballybrack, Kilcock, Naas, Co. Kildare, W23 AWV1', '(085) 149-5591', false, '23.00', '12h')
       ON CONFLICT (id) DO NOTHING
     `);
 

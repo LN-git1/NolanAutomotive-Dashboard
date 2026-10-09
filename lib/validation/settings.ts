@@ -17,7 +17,10 @@ export const settingsInputSchema = z
       ),
     vatNumber: optionalText,
     defaultVatRate: decimalString({ label: 'Default VAT rate' }).default('23'),
-    defaultHourlyRate: decimalString({ label: 'Default hourly rate', allowEmpty: true }),
+    defaultHourlyRate: decimalString({ label: 'Default hourly rate', allowEmpty: true })
+      .optional()
+      .default(''),
+    timeFormat: z.enum(['12h', '24h']).default('12h'),
   })
   .refine(
     (value) => !value.vatRegistered || (value.vatNumber !== null && value.vatNumber !== ''),

@@ -19,7 +19,8 @@ import {
   countSettledJobs,
   listJobs,
 } from '@/lib/db/queries/jobs';
-import { formatDate } from '@/lib/format';
+import { getSettings } from '@/lib/db/queries/settings';
+import { formatDueDateTime } from '@/lib/format';
 import { JOB_STATUS_LABELS } from '@/lib/validation/job';
 import type { JobStatus } from '@/lib/db/schema';
 
@@ -60,7 +61,7 @@ export default async function JobsPage({ searchParams }: PageProps<'/jobs'>) {
   */
   const filtered = Boolean(q) || status !== 'all';
 
-  const [jobs, invoicedMatches, settledMatches, pipeline] = await Promise.all([
+  const [jobs, invoicedMatches, settledMatches, pipeline, settings] = await Promise.all([
     listJobs({ q, status, scope: 'pre-invoice' }),
     countAwaitingPaymentJobs(q),
     countSettledJobs(q),
@@ -68,6 +69,7 @@ export default async function JobsPage({ searchParams }: PageProps<'/jobs'>) {
     // workshop, and with a search or status filter on, the header count would
     // not agree with it.
     filtered ? null : countJobPipeline(),
+    getSettings(),
   ]);
 
   return (
@@ -209,7 +211,7 @@ export default async function JobsPage({ searchParams }: PageProps<'/jobs'>) {
                     <Badge value={job.priority} />
                   </Td>
                   <Td label="Due" className="text-muted">
-                    {formatDate(job.dueDate)}
+                    {formatDueDateTime(job.dueDate, job.dueTime, settings.timeFormat)}
                   </Td>
                 </tr>
               ))}

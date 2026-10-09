@@ -30,18 +30,73 @@ export function todayIsoDate(): string {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
-/** "HH:MM" (24-hour, as stored/submitted) -> "4:30pm". */
-export function formatTime(value: string | null | undefined): string | null {
+export type TimeFormat = '12h' | '24h';
+
+/**
+ * "HH:MM" (24-hour, as stored/submitted) -> formatted time string.
+ * In '12h' mode: "16:30" -> "4:30pm", "09:15" -> "9:15am".
+ * In '24h' mode: "16:30" -> "16:30", "09:15" -> "09:15".
+ */
+export function formatTime(
+  value: string | null | undefined,
+  format: TimeFormat = '12h',
+): string | null {
   if (!value) return null;
 
   const match = /^(\d{2}):(\d{2})$/.exec(value);
   if (!match) return null;
+
+  if (format === '24h') {
+    return `${match[1]}:${match[2]}`;
+  }
 
   const hour24 = Number(match[1]);
   const minute = match[2];
   const period = hour24 >= 12 ? 'pm' : 'am';
   const hour12 = hour24 % 12 || 12;
   return `${hour12}:${minute}${period}`;
+}
+
+/**
+ * Format a Date or date string with time in the chosen format.
+ * e.g. "12/08/2026 4:30pm" or "12/08/2026 16:30".
+ */
+export function formatDateTime(
+  value: Date | string | null | undefined,
+  format: TimeFormat = '12h',
+): string {
+  if (!value) return '—';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const dateStr = `${day}/${month}/${date.getFullYear()}`;
+
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const timeStr = formatTime(`${hours}:${minutes}`, format);
+
+  return `${dateStr} ${timeStr}`;
+}
+
+/**
+ * Combines a due date ("yyyy-mm-dd") and optional due time ("HH:MM") into display text.
+ * e.g. "12/08/2026 · 4:30pm" or "12/08/2026 · 16:30", or just "12/08/2026" if no time set.
+ */
+export function formatDueDateTime(
+  dueDate: string | null | undefined,
+  dueTime: string | null | undefined,
+  format: TimeFormat = '12h',
+): string {
+  if (!dueDate && !dueTime) return '—';
+  const datePart = dueDate ? formatDate(dueDate) : null;
+  const timePart = dueTime ? formatTime(dueTime, format) : null;
+
+  if (datePart && timePart) return `${datePart} · ${timePart}`;
+  if (datePart) return datePart;
+  if (timePart) return timePart;
+  return '—';
 }
 
 /** A numeric column returned by Drizzle as a string -> display euros. */
