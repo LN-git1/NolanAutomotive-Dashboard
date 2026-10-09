@@ -1,5 +1,37 @@
 # Changelog
 
+## 08/10/2026 @ 18:15:00 IST — "gemini-3.8-flash"
+
+**Project completion: 100.00%**
+
+Basis: 10 of 10 items in this feature's own scope done — the /settings toggle with instant persisted
+switching; the `lib/format` helpers; the reactive provider wired into the dashboard layout; Schedule
+surfaces (chips, day cards); the Jobs list Due column; Overview's "Active jobs"/"Invoiced jobs" tables;
+the job-form hint; the data layer (schema, seed, validation, both server actions); the migration
+artifacts (`0016` + snapshot + journal, regenerated against the current chain, `db:generate` clean);
+and verification (17 new tests; 268-test suite, 0 failed; typecheck and eslint clean). The hand-written
+`0013` this work originally carried was renumbered on rebase: `origin/main` had meanwhile taken
+`0013`–`0015` (rapid-use hardening, error log, digest), so the migration was regenerated as `0016` and
+made re-runnable (`IF NOT EXISTS`), matching the project's deploy-order convention.
+
+**Goal:** Let the garage choose 12-hour or 24-hour times once in Settings and have every time the
+dashboard displays follow it, without reformatting each screen separately.
+
+**Added — 12-hour / 24-hour time format selection in Settings, updating the entire dashboard top to bottom.**
+
+- **Time format toggle in Settings**: Added a new "Time format" section to `/settings` with an interactive toggle between `12-hour format (e.g. 9:30am, 4:30pm)` and `24-hour format (e.g. 09:30, 16:30)`. The setting updates reactively and persists to the singleton `settings` table, revalidating all cached routes.
+- **Top-to-bottom time formatting**:
+  - `lib/format.ts`: Expanded `formatTime` to accept `TimeFormat` (`'12h' | '24h'`), returning either standard 12-hour format or 24-hour HH:MM notation. Added `formatDueDateTime` and `formatDateTime` helpers.
+  - `TimeFormatProvider` (`components/providers/time-format-provider.tsx`): React context wrapped at `app/(dashboard)/layout.tsx` so any client component has instant access to `timeFormat`, `useTimeFormat()`, and reactive toggle transitions.
+  - **Schedule** (`app/(dashboard)/schedule/page.tsx`): Both the desktop month grid chips (`JobChip`) and the mobile & desktop day detail panel / agenda (`JobDetailCard`) format job due times with the garage's selected time format.
+  - **Jobs List** (`app/(dashboard)/jobs/page.tsx`): Table "Due" column displays both date and formatted time (e.g. `12/08/2026 · 9:30am` or `12/08/2026 · 09:30`) when a due time is present.
+  - **Overview** (`app/(dashboard)/page.tsx`): the "Active jobs" and "Invoiced jobs" pipeline tables format due dates and times according to the active time format.
+  - **Job Forms** (`components/jobs/job-form.tsx`): Due time field displays a hint showing the formatted display representation according to the active setting.
+  - **Database schema & migration**: `settings.time_format` added to schema and seed with `'12h'` default, accompanied by `0016_add_time_format_to_settings.sql` (+ snapshot/journal). The SQL is `IF NOT EXISTS` — paste-safe in the Supabase editor, and the `pnpm db:migrate:prod` script path stays safe after a paste. **Deploy order: apply `0016` before the code goes live** (additive: old code ignores the column; new code reads it on every page, so shipping first would break pages the same way `0013`'s note describes).
+- **Verification**: 17 unit tests in `tests/time-format.test.ts` covering 12h and 24h edge cases (midnight, morning, noon, afternoon/evening, nulls), `formatDueDateTime`, `formatDateTime`, and zod validation. All 25 suites: 268 tests — 214 passed, 54 skipped (DB-gated; no local Postgres), 0 failed (one 5s dynamic-import timeout appeared once under concurrent CPU load; green on the clean re-run). `tsc --noEmit` passes with 0 errors; eslint clean on all touched files; `db:generate` reports no schema drift after the regenerated snapshot.
+
+**Files Touched:** `lib/format.ts`, `lib/db/schema.ts`, `lib/db/queries/settings.ts`, `lib/validation/settings.ts`, `lib/actions/settings.ts`, `components/providers/time-format-provider.tsx` (new), `components/settings/settings-form.tsx`, `components/jobs/job-form.tsx`, `app/(dashboard)/layout.tsx`, `app/(dashboard)/schedule/page.tsx`, `app/(dashboard)/jobs/page.tsx`, `app/(dashboard)/page.tsx`, `drizzle/seed.ts`, `drizzle/migrations/0016_add_time_format_to_settings.sql` (new), `drizzle/migrations/meta/0016_snapshot.json` (new), `drizzle/migrations/meta/_journal.json`, `tests/time-format.test.ts` (new).
+
 ## 08/10/2026 — 3-hourly digest email (errors + activity) to zach@zbautomations.ie
 
 - **Added — `/api/digest`.** Emails a clean HTML overview of the last complete 3-hour block, 8 times a day: errors (time, source, where, message), jobs added / updated / deleted, invoices issued / sent / voided, payments received (with total), expenses, supplier ledger entries, attachments, time off, plus a business snapshot (jobs by status, outstanding € and oldest unpaid invoice, received today / this month, overdue jobs, jobs due in 48h) and system health (DB round trip, size, record counts, last change). If the database cannot be read it still sends a "database unreachable" email.
