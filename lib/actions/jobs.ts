@@ -24,11 +24,17 @@ export interface ActionResult {
   ok: boolean;
   error?: string;
   jobId?: string;
+  jobNumber?: string;
+  /** True when a repeated submission returned the job already created. */
+  duplicate?: boolean;
 }
 
 /** Thrown inside the create transaction to roll it back when the job already exists. */
 class DuplicateSubmission extends Error {
-  constructor(readonly jobId: string) {
+  constructor(
+    readonly jobId: string,
+    readonly jobNumber: string,
+  ) {
     super('Duplicate job submission');
   }
 }
@@ -56,7 +62,7 @@ export async function createJob(formData: FormData): Promise<ActionResult> {
   const submissionKey = keyParsed.success ? keyParsed.data : null;
 
   try {
-    const jobId = await db
+    const createdJob = await db
       .transaction(async (tx) => {
         // Allocating first matters: it takes the counter row's lock, so two
         // simultaneous submits of the same form queue here and the second one
@@ -65,31 +71,33 @@ export async function createJob(formData: FormData): Promise<ActionResult> {
 
         if (submissionKey) {
           const [existing] = await tx
-            .select({ id: jobs.id })
+            .select({ id: jobs.id, jobNumber: jobs.jobNumber })
             .from(jobs)
             .where(eq(jobs.submissionKey, submissionKey))
             .limit(1);
           // A double tap or retried request. Roll back (releasing the job number
           // so the sequence has no gap) and hand back the job already created.
-          if (existing) throw new DuplicateSubmission(existing.id);
+          if (existing) throw new DuplicateSubmission(existing.id, existing.jobNumber);
         }
 
         const [created] = await tx
           .insert(jobs)
           .values({ ...input, submissionKey, jobNumber: formatJobNumber(nextNumber) })
-          .returning({ id: jobs.id });
+          .returning({ id: jobs.id, jobNumber: jobs.jobNumber });
 
         if (!created) throw new Error('Job insert returned no row');
-        return created.id;
+        return { jobId: created.id, jobNumber: created.jobNumber };
       })
       .catch((error: unknown) => {
-        if (error instanceof DuplicateSubmission) return error.jobId;
+        if (error instanceof DuplicateSubmission) {
+          return { jobId: error.jobId, jobNumber: error.jobNumber, duplicate: true };
+        }
         throw error;
       });
 
     revalidatePath('/jobs');
     revalidatePath('/');
-    return { ok: true, jobId };
+    return { ok: true, ...createdJob };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Could not create job' };
   }

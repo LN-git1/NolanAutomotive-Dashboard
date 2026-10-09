@@ -12,6 +12,7 @@ import { VehicleHistory } from '@/components/jobs/vehicle-history';
 import { createJob, updateJob } from '@/lib/actions/jobs';
 import { applyQuantity, formatEur, formatHours, sumLabourHours, toCents } from '@/lib/money';
 import { useTimeFormat } from '@/components/providers/time-format-provider';
+import { useToast } from '@/components/providers/toast-provider';
 import { JOB_PRIORITIES } from '@/lib/validation/job';
 import type { VehicleMatch } from '@/lib/db/queries/vehicles';
 import type { Job } from '@/lib/db/schema';
@@ -81,6 +82,7 @@ export function JobForm({
 }) {
   const router = useRouter();
   const { timeFormat, formatTime } = useTimeFormat();
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   // One key per form instance: a double tap or retried submit creates one job.
   const [submissionKey] = useState(() => crypto.randomUUID());
@@ -159,15 +161,22 @@ export function JobForm({
       const result = job ? await updateJob(job.id, formData) : await createJob(formData);
 
       if (!result.ok) {
-        setError(result.error ?? 'Could not save the job.');
+        const message = result.error ?? 'Could not save the job.';
+        setError(message);
+        toast.error('Job not saved', message);
         return;
       }
 
       if (job) {
+        toast.success(`${job.jobNumber} saved`, 'The job details were updated.');
         // Editing: already at this exact URL. Pushing it again added a
         // duplicate history entry, so leaving the page needed Back twice.
         router.refresh();
       } else {
+        toast.success(
+          result.duplicate ? 'Job already saved' : 'Job created',
+          result.jobNumber ? `${result.jobNumber} is ready.` : 'It is ready on the Jobs list.',
+        );
         router.push(result.jobId ? `/jobs/${result.jobId}` : '/jobs');
         router.refresh();
       }

@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from 'react';
 
 import { Alert, Button, Card, CardBody, Field, Input, Select, Textarea } from '@/components/ui';
+import { useToast } from '@/components/providers/toast-provider';
 import { addExpense } from '@/lib/actions/expenses';
 import { todayIsoDate } from '@/lib/format';
 import { EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS } from '@/lib/validation/expense';
@@ -22,6 +23,7 @@ export function ExpenseForm({ onSaved }: { onSaved?: () => void }) {
   // Minted once per mount, refreshed after each save — never per render, or a
   // re-render between taps would defeat the server-side dedupe.
   const [submissionKey, setSubmissionKey] = useState(() => crypto.randomUUID());
+  const toast = useToast();
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -31,9 +33,12 @@ export function ExpenseForm({ onSaved }: { onSaved?: () => void }) {
     startTransition(async () => {
       const result = await addExpense(formData);
       if (!result.ok) {
-        setError(result.error ?? 'Could not save the expense.');
+        const message = result.error ?? 'Could not save the expense.';
+        setError(message);
+        toast.error('Expense not saved', message);
         return;
       }
+      toast.success('Expense recorded');
       formRef.current?.reset();
       setSubmissionKey(crypto.randomUUID());
       onSaved?.();

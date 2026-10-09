@@ -4,8 +4,10 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { PaymentForm } from '@/components/payments/payment-form';
+import { useToast } from '@/components/providers/toast-provider';
 import { Alert, Button } from '@/components/ui';
 import { recordPayment } from '@/lib/actions/payments';
+import { formatEur } from '@/lib/money';
 
 /**
  * Armed inline reveal, matching `components/settings/factory-reset.tsx`'s
@@ -29,6 +31,7 @@ export function MarkPaidButton({
   const [armed, setArmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
 
   function reset() {
     setArmed(false);
@@ -40,9 +43,21 @@ export function MarkPaidButton({
     startTransition(async () => {
       const result = await recordPayment(invoiceId, payment);
       if (!result.ok) {
-        setError(result.error ?? 'Could not record the payment.');
+        const message = result.error ?? 'Could not record the payment.';
+        setError(message);
+        toast.error('Payment not recorded', message);
         return;
       }
+      const cents =
+        'payInFull' in payment
+          ? remainingCents
+          : Math.round(Number.parseFloat(payment.amount) * 100);
+      toast.success(
+        'Payment recorded',
+        Number.isFinite(cents)
+          ? `${formatEur(cents)} against ${jobNumber}.`
+          : `Recorded against ${jobNumber}.`,
+      );
       reset();
       router.refresh();
     });

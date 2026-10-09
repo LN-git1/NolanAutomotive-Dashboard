@@ -1,6 +1,7 @@
 import { Card } from '@/components/ui';
 import {
   LoadingAnnouncement,
+  Skeleton,
   SkeletonField,
   SkeletonPageHeader,
   SkeletonTable,
@@ -20,6 +21,7 @@ export default function JobsLoading() {
         <div className="flex flex-wrap items-end gap-3 p-4">
           <SkeletonField className="min-w-56 flex-1" />
           <SkeletonField className="w-44" />
+          <Skeleton className="h-9 w-20 rounded-md" />
         </div>
       </Card>
 

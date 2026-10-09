@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { Alert, Button, buttonClass, Empty } from '@/components/ui';
+import { useToast } from '@/components/providers/toast-provider';
 import { redirectIfUnauthorized } from '@/lib/client/session';
 import { Skeleton } from '@/components/ui/skeleton';
 import { deleteAttachment, recordAttachment } from '@/lib/actions/jobs';
@@ -45,6 +46,7 @@ export function AttachmentManager({
    */
   const [inFlight, setInFlight] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
 
   /** One file's full pipeline: get a signed URL, PUT the bytes, record the row. */
   async function uploadOne(file: File): Promise<void> {
@@ -128,17 +130,23 @@ export function AttachmentManager({
     );
 
     if (failures.length > 0) {
-      setError(
+      const message =
         failures.length === fileList.length
           ? failures[0]?.reason instanceof Error
             ? failures[0].reason.message
             : 'Upload failed.'
-          : `${failures.length} of ${fileList.length} files failed to upload.`,
+          : `${failures.length} of ${fileList.length} files failed to upload.`;
+      setError(message);
+      toast.error(
+        failures.length === fileList.length ? 'Upload failed' : 'Some uploads failed',
+        message,
       );
     }
 
     if (failures.length < fileList.length) {
       // At least one file made it — refresh so it appears in the list.
+      const uploaded = fileList.length - failures.length;
+      toast.success(uploaded === 1 ? 'Attachment uploaded' : `${uploaded} attachments uploaded`);
       router.refresh();
     }
 
@@ -168,9 +176,12 @@ export function AttachmentManager({
     startTransition(async () => {
       const result = await deleteAttachment(attachment.id);
       if (!result.ok) {
-        setError(result.error ?? 'Could not delete the attachment.');
+        const message = result.error ?? 'Could not delete the attachment.';
+        setError(message);
+        toast.error('Attachment not deleted', message);
         return;
       }
+      toast.success('Attachment deleted', attachment.fileName);
       router.refresh();
     });
   }

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition, type FormEvent } from 'react';
 
 import { Alert, Button, Field, Input, Textarea } from '@/components/ui';
+import { useToast } from '@/components/providers/toast-provider';
 import { createSupplier } from '@/lib/actions/suppliers';
 
 export function SupplierForm() {
@@ -11,6 +12,7 @@ export function SupplierForm() {
   const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -21,9 +23,12 @@ export function SupplierForm() {
     startTransition(async () => {
       const result = await createSupplier(formData);
       if (!result.ok) {
-        setError(result.error ?? 'Could not add the supplier.');
+        const message = result.error ?? 'Could not add the supplier.';
+        setError(message);
+        toast.error('Supplier not added', message);
         return;
       }
+      toast.success('Supplier added');
       formRef.current?.reset();
       router.refresh();
     });

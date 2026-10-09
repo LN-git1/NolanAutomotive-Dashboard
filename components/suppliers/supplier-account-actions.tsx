@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { PaymentForm } from '@/components/payments/payment-form';
+import { useToast } from '@/components/providers/toast-provider';
 import { ChargeForm } from '@/components/suppliers/charge-form';
 import { Alert, Button } from '@/components/ui';
 import { recordSupplierPayment } from '@/lib/actions/suppliers';
@@ -40,6 +41,7 @@ export function SupplierAccountActions({
   const [open, setOpen] = useState<'charge' | 'payment' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
 
   function close() {
     setOpen(null);
@@ -51,9 +53,21 @@ export function SupplierAccountActions({
     startTransition(async () => {
       const result = await recordSupplierPayment(supplierId, payment);
       if (!result.ok) {
-        setError(result.error ?? 'Could not record the payment.');
+        const message = result.error ?? 'Could not record the payment.';
+        setError(message);
+        toast.error('Payment not recorded', message);
         return;
       }
+      const cents =
+        'payInFull' in payment
+          ? Math.max(balanceCents, 0)
+          : Math.round(Number.parseFloat(payment.amount) * 100);
+      toast.success(
+        'Payment recorded',
+        Number.isFinite(cents) && cents > 0
+          ? `${formatEur(cents)} paid to ${supplierName}.`
+          : `Recorded against ${supplierName}.`,
+      );
       close();
       router.refresh();
     });

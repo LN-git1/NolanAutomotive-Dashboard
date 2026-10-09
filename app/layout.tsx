@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import type { Metadata, Viewport } from 'next';
 
+import { ToastProvider } from '@/components/providers/toast-provider';
 import { ServiceWorker } from '@/components/pwa/service-worker';
 
 import './globals.css';
@@ -81,38 +82,40 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-full">
-        {children}
+        <ToastProvider>
+          {children}
 
-        {/*
-          Vercel Web Analytics and Speed Insights.
+          {/*
+            Vercel Web Analytics and Speed Insights.
 
-          Both products were already switched on for the project — their script
-          endpoints under /_vercel/ were serving 200 — but nothing in the app
-          ever loaded them, so both dashboards were collecting nothing. These two
-          components are the missing half.
+            Both products were already switched on for the project — their script
+            endpoints under /_vercel/ were serving 200 — but nothing in the app
+            ever loaded them, so both dashboards were collecting nothing. These two
+            components are the missing half.
 
-          Safe for this app specifically: Vercel Web Analytics is cookieless and
-          stores no personal data, which matters because this dashboard holds
-          customer names, addresses and phone numbers. It records page paths and
-          referrers, not people. Speed Insights sends Core Web Vitals only.
+            Safe for this app specifically: Vercel Web Analytics is cookieless and
+            stores no personal data, which matters because this dashboard holds
+            customer names, addresses and phone numbers. It records page paths and
+            referrers, not people. Speed Insights sends Core Web Vitals only.
 
-          Both no-op in development and outside Vercel, so neither affects local
-          work or the test suite.
+            Both no-op in development and outside Vercel, so neither affects local
+            work or the test suite.
 
-          The `/react` entry points, NOT `/next`. The Next-specific wrappers put
-          the component inside a <Suspense> around a useSearchParams hook, and on
-          this app's statically prerendered pages that boundary never resolved on
-          the client — the component never mounted, so the script was never
-          injected. Verified on the live site: window.va existed with a pageview
-          queued, no script tag, and no network request, while injecting the very
-          same URL by hand returned 200. The generic components inject directly.
-        */}
-        <Analytics />
-        <SpeedInsights />
+            The `/react` entry points, NOT `/next`. The Next-specific wrappers put
+            the component inside a <Suspense> around a useSearchParams hook, and on
+            this app's statically prerendered pages that boundary never resolved on
+            the client — the component never mounted, so the script was never
+            injected. Verified on the live site: window.va existed with a pageview
+            queued, no script tag, and no network request, while injecting the very
+            same URL by hand returned 200. The generic components inject directly.
+          */}
+          <Analytics />
+          <SpeedInsights />
 
-        {/* Registers the app-shell service worker. Production only, and a no-op
-            if registration fails — see components/pwa/service-worker.tsx. */}
-        <ServiceWorker />
+          {/* Registers the app-shell service worker. Production only, and a no-op
+              if registration fails — see components/pwa/service-worker.tsx. */}
+          <ServiceWorker />
+        </ToastProvider>
       </body>
     </html>
   );

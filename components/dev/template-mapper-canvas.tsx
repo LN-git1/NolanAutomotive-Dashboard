@@ -4,6 +4,8 @@ import { Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Alert, Button, Card, CardBody, CardHeader, Field, Input, Select } from '@/components/ui';
+import { useToast } from '@/components/providers/toast-provider';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { FieldBox, TemplateCoords, TextAlign } from '@/lib/pdf/coords';
 import {
   FIELD_KEY_LABELS,
@@ -40,6 +42,8 @@ export function TemplateMapperCanvas({ initialCoords }: { initialCoords: Templat
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rendering, setRendering] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
 
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [draft, setDraft] = useState<DraftBox | null>(null);
@@ -173,20 +177,32 @@ export function TemplateMapperCanvas({ initialCoords }: { initialCoords: Templat
   async function save() {
     setError(null);
     setStatus(null);
+    setSaving(true);
 
-    const response = await fetch('/api/dev/template-coords', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(coords),
-    });
+    try {
+      const response = await fetch('/api/dev/template-coords', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(coords),
+      });
 
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { error?: string } | null;
-      setError(body?.error ?? 'Could not save.');
-      return;
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        const message = body?.error ?? 'Could not save.';
+        setError(message);
+        toast.error('Coordinates not saved', message);
+        return;
+      }
+
+      setStatus('Saved to lib/pdf/invoiceTemplateCoords.json. Run `pnpm invoice:preview` to check it.');
+      toast.success('Coordinates saved');
+    } catch {
+      const message = 'Could not reach the server.';
+      setError(message);
+      toast.error('Coordinates not saved', message);
+    } finally {
+      setSaving(false);
     }
-
-    setStatus('Saved to lib/pdf/invoiceTemplateCoords.json. Run `pnpm invoice:preview` to check it.');
   }
 
   const mapped = Object.entries(coords.fields) as [SimpleFieldKey, FieldBox][];
@@ -196,7 +212,11 @@ export function TemplateMapperCanvas({ initialCoords }: { initialCoords: Templat
       <div className="flex flex-col gap-3">
         {error ? <Alert>{error}</Alert> : null}
         {status ? <Alert tone="ok">{status}</Alert> : null}
-        {rendering ? <p className="text-sm text-muted">Rendering template…</p> : null}
+        {rendering ? (
+          <div className="flex flex-col gap-2" aria-label="Rendering template">
+            <Skeleton className="aspect-[1/1.4] w-full max-w-xl" />
+          </div>
+        ) : null}
 
         <div
           ref={containerRef}
@@ -378,7 +398,9 @@ export function TemplateMapperCanvas({ initialCoords }: { initialCoords: Templat
           </CardBody>
         </Card>
 
-        <Button onClick={save}>Save coordinates</Button>
+        <Button onClick={save} disabled={saving}>
+          {saving ? 'Saving…' : 'Save coordinates'}
+        </Button>
 
         <p className="text-xs text-muted">
           Row tables (services and parts) are geometry-driven and are edited directly in

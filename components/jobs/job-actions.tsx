@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { MarkPaidModal } from '@/components/payments/mark-paid-modal';
+import { useToast } from '@/components/providers/toast-provider';
 import { Alert, Button, Select } from '@/components/ui';
 import { changeJobStatus, softDeleteJob } from '@/lib/actions/jobs';
 import { JOB_STATUSES, JOB_STATUS_LABELS } from '@/lib/validation/job';
@@ -33,6 +34,7 @@ export function JobActions({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [payingOpen, setPayingOpen] = useState(false);
+  const toast = useToast();
 
   function handleStatusChange(next: string) {
     if (next === status) return;
@@ -50,9 +52,12 @@ export function JobActions({
     startTransition(async () => {
       const result = await changeJobStatus(jobId, next);
       if (!result.ok) {
-        setError(result.error ?? 'Could not update the status.');
+        const message = result.error ?? 'Could not update the status.';
+        setError(message);
+        toast.error('Could not change status', message);
         return;
       }
+      toast.success(`${jobNumber} updated`, `Status set to ${JOB_STATUS_LABELS[next as JobStatus]}.`);
       router.refresh();
     });
   }
@@ -69,9 +74,12 @@ export function JobActions({
     startTransition(async () => {
       const result = await softDeleteJob(jobId);
       if (!result.ok) {
-        setError(result.error ?? 'Could not delete the job.');
+        const message = result.error ?? 'Could not delete the job.';
+        setError(message);
+        toast.error('Could not delete job', message);
         return;
       }
+      toast.success('Job deleted', `${jobNumber} is hidden from all lists.`);
       router.push('/jobs');
       router.refresh();
     });

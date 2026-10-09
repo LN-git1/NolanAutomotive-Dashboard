@@ -5,6 +5,7 @@ import { useState, useTransition, type FormEvent } from 'react';
 
 import { Alert, Button, Card, CardBody, CardHeader, Field, Input, Textarea } from '@/components/ui';
 import { useTimeFormat } from '@/components/providers/time-format-provider';
+import { useToast } from '@/components/providers/toast-provider';
 import { updateSettings } from '@/lib/actions/settings';
 import type { TimeFormat } from '@/lib/format';
 import type { Settings } from '@/lib/db/schema';
@@ -12,7 +13,8 @@ import { cn } from '@/lib/utils';
 
 export function SettingsForm({ settings }: { settings: Settings }) {
   const router = useRouter();
-  const { setTimeFormat: syncGlobalTimeFormat } = useTimeFormat();
+  const { setTimeFormat: syncGlobalTimeFormat, isPending: timeFormatPending } = useTimeFormat();
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [vatRegistered, setVatRegistered] = useState(settings.vatRegistered);
@@ -20,8 +22,20 @@ export function SettingsForm({ settings }: { settings: Settings }) {
   const [pending, startTransition] = useTransition();
 
   function handleTimeFormatChange(nextFormat: TimeFormat) {
+    if (nextFormat === timeFormat || timeFormatPending) return;
     setTimeFormat(nextFormat);
-    void syncGlobalTimeFormat(nextFormat);
+    void syncGlobalTimeFormat(nextFormat).then((result) => {
+      if (result.ok) {
+        toast.success(
+          nextFormat === '24h' ? '24-hour times on' : '12-hour times on',
+          'Every time on the dashboard follows this.',
+        );
+      } else {
+        // The provider already flipped the switch back; say why.
+        setTimeFormat(nextFormat === '24h' ? '12h' : '24h');
+        toast.error('Time format not saved', result.error ?? 'Could not save the time format.');
+      }
+    });
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -34,10 +48,13 @@ export function SettingsForm({ settings }: { settings: Settings }) {
     startTransition(async () => {
       const result = await updateSettings(formData);
       if (!result.ok) {
-        setError(result.error ?? 'Could not save settings.');
+        const message = result.error ?? 'Could not save settings.';
+        setError(message);
+        toast.error('Settings not saved', message);
         return;
       }
       setSaved(true);
+      toast.success('Settings saved');
       router.refresh();
     });
   }
@@ -155,9 +172,10 @@ export function SettingsForm({ settings }: { settings: Settings }) {
             <button
               type="button"
               id="time-format-12h"
+              disabled={timeFormatPending}
               onClick={() => handleTimeFormatChange('12h')}
               className={cn(
-                'flex cursor-pointer items-center justify-between rounded-md border p-3.5 text-left transition-colors',
+                'flex cursor-pointer items-center justify-between rounded-md border p-3.5 text-left transition-colors disabled:cursor-wait disabled:opacity-70',
                 timeFormat === '12h'
                   ? 'border-brand bg-info-soft text-brand-dark ring-1 ring-brand'
                   : 'border-line bg-surface text-ink hover:bg-canvas',
@@ -182,9 +200,10 @@ export function SettingsForm({ settings }: { settings: Settings }) {
             <button
               type="button"
               id="time-format-24h"
+              disabled={timeFormatPending}
               onClick={() => handleTimeFormatChange('24h')}
               className={cn(
-                'flex cursor-pointer items-center justify-between rounded-md border p-3.5 text-left transition-colors',
+                'flex cursor-pointer items-center justify-between rounded-md border p-3.5 text-left transition-colors disabled:cursor-wait disabled:opacity-70',
                 timeFormat === '24h'
                   ? 'border-brand bg-info-soft text-brand-dark ring-1 ring-brand'
                   : 'border-line bg-surface text-ink hover:bg-canvas',

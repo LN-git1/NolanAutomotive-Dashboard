@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition, type FormEvent } from 'react';
 
 import { Alert, Button, Card, CardBody, CardHeader, Field, Input } from '@/components/ui';
+import { useToast } from '@/components/providers/toast-provider';
 import { addTimeOff, deleteTimeOff } from '@/lib/actions/time-off';
 import { formatDate } from '@/lib/format';
 import type { TimeOff } from '@/lib/db/schema';
@@ -25,6 +26,7 @@ export function TimeOffCard({ entries }: { entries: TimeOff[] }) {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const toast = useToast();
 
   function closeModal() {
     setOpen(false);
@@ -40,9 +42,12 @@ export function TimeOffCard({ entries }: { entries: TimeOff[] }) {
     startTransition(async () => {
       const result = await addTimeOff(formData);
       if (!result.ok) {
-        setError(result.error ?? 'Could not add time off');
+        const message = result.error ?? 'Could not add time off';
+        setError(message);
+        toast.error('Time off not added', message);
         return;
       }
+      toast.success('Time off added', 'Those days are struck off the Schedule calendar.');
       closeModal();
       router.refresh();
     });
@@ -54,7 +59,13 @@ export function TimeOffCard({ entries }: { entries: TimeOff[] }) {
     startTransition(async () => {
       const result = await deleteTimeOff(id);
       setDeletingId(null);
-      if (!result.ok) setDeleteError(result.error ?? 'Could not remove time off');
+      if (!result.ok) {
+        const message = result.error ?? 'Could not remove time off';
+        setDeleteError(message);
+        toast.error('Time off not removed', message);
+        return;
+      }
+      toast.success('Time off removed');
       router.refresh();
     });
   }

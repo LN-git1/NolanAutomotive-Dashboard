@@ -4,8 +4,10 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { PaymentForm } from '@/components/payments/payment-form';
+import { useToast } from '@/components/providers/toast-provider';
 import { Alert, Button, LinkButton } from '@/components/ui';
 import { recordPayment } from '@/lib/actions/payments';
+import { formatEur } from '@/lib/money';
 
 /**
  * Opened when the job page's status dropdown is set to `paid`.
@@ -38,6 +40,7 @@ export function MarkPaidModal({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
 
   function submit(payment: { payInFull: true } | { amount: string }) {
     if (!invoice) return;
@@ -45,9 +48,21 @@ export function MarkPaidModal({
     startTransition(async () => {
       const result = await recordPayment(invoice.id, payment);
       if (!result.ok) {
-        setError(result.error ?? 'Could not record the payment.');
+        const message = result.error ?? 'Could not record the payment.';
+        setError(message);
+        toast.error('Payment not recorded', message);
         return;
       }
+      const cents =
+        'payInFull' in payment
+          ? invoice.remainingCents
+          : Math.round(Number.parseFloat(payment.amount) * 100);
+      toast.success(
+        'Payment recorded',
+        Number.isFinite(cents)
+          ? `${formatEur(cents)} against ${jobNumber}.`
+          : `Recorded against ${jobNumber}.`,
+      );
       onClose();
       router.refresh();
     });

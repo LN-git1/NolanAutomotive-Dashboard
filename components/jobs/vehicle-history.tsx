@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import { loadVehicleHistory } from '@/lib/actions/jobs';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { VehicleHistoryEntry, VehicleMatch } from '@/lib/db/queries/vehicles';
 import { formatDate } from '@/lib/format';
 import { formatEur } from '@/lib/money';
@@ -84,7 +85,13 @@ export function VehicleHistory({ vehicle }: { vehicle: VehicleMatch }) {
         </summary>
 
         <div className="mt-1 border-t border-line pt-2">
-          {loading ? <p className="text-xs text-muted">Loading…</p> : null}
+          {loading ? (
+            <div className="flex flex-col gap-1.5" aria-hidden>
+              <Skeleton className="h-3.5 w-3/4" />
+              <Skeleton className="h-3.5 w-2/3" />
+              <Skeleton className="h-3.5 w-1/2" />
+            </div>
+          ) : null}
           {failed ? <p className="text-xs text-muted">Could not load the history.</p> : null}
           {entries?.length === 0 ? <p className="text-xs text-muted">No previous jobs.</p> : null}
 

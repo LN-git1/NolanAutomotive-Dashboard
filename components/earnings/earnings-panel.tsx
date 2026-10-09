@@ -6,8 +6,10 @@ import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 
 import { ExpenseForm } from '@/components/expenses/expense-form';
+import { useToast } from '@/components/providers/toast-provider';
 import { redirectIfUnauthorized } from '@/lib/client/session';
 import { Alert, Badge, Button, Card, CardBody, CardHeader } from '@/components/ui';
+import { Skeleton } from '@/components/ui/skeleton';
 import { getBooksMonthDetail } from '@/lib/actions/earnings';
 import { attachExpenseReceipt, reverseExpense } from '@/lib/actions/expenses';
 import type { BooksMonthDetail, BooksMonthLine, BooksSummary } from '@/lib/db/queries/books';
@@ -36,6 +38,7 @@ function ExpenseRow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
 
   async function handleCorrect() {
     if (!window.confirm('Record a correction that cancels this expense?')) return;
@@ -44,9 +47,12 @@ function ExpenseRow({
     const result = await reverseExpense(line.id);
     setBusy(false);
     if (!result.ok) {
-      setError(result.error ?? 'Could not correct the expense.');
+      const message = result.error ?? 'Could not correct the expense.';
+      setError(message);
+      toast.error('Correction not recorded', message);
       return;
     }
+    toast.success('Expense corrected', 'A cancelling entry was recorded.');
     onChanged();
   }
 
@@ -81,9 +87,13 @@ function ExpenseRow({
       if (!putResponse.ok) throw new Error('Receipt upload failed.');
       const result = await attachExpenseReceipt(line.id, storagePath);
       if (!result.ok) throw new Error(result.error ?? 'Could not attach the receipt.');
+      toast.success('Receipt attached');
       onChanged();
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Receipt upload failed.');
+      const message =
+        uploadError instanceof Error ? uploadError.message : 'Receipt upload failed.';
+      setError(message);
+      toast.error('Receipt not attached', message);
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -189,7 +199,12 @@ function MonthRow({
         {detail === 'error' ? (
           <p className="text-xs text-muted">Could not load this month — close and reopen it to retry.</p>
         ) : detail === undefined || detail === 'loading' ? (
-          <p className="text-xs text-muted">Loading…</p>
+          <div className="flex flex-col gap-2" aria-hidden>
+            <Skeleton className="h-3.5 w-full" />
+            <Skeleton className="h-3.5 w-5/6" />
+            <Skeleton className="h-3.5 w-4/6" />
+            <Skeleton className="h-3.5 w-3/6" />
+          </div>
         ) : detail.income.length === 0 &&
           detail.supplier.length === 0 &&
           detail.expenses.length === 0 ? (

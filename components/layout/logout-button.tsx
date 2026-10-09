@@ -5,14 +5,22 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui';
+import { useToast } from '@/components/providers/toast-provider';
 
 export function LogoutButton() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const toast = useToast();
 
   async function handleLogout() {
     setPending(true);
-    await fetch('/api/auth/logout', { method: 'POST' });
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // A failed sign-out still leaves: the cookie is httpOnly, so only the
+      // server can clear it, and staying on a dead session helps nobody.
+      toast.warning('Sign-out may not have completed', 'Check your connection and sign in again.');
+    }
 
     // Drop the service worker's caches on the way out. Nothing customer-facing
     // is cached in the first place (see public/sw.js), but this makes the

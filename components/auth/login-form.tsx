@@ -4,11 +4,13 @@ import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
 import { Alert, Button, Card, CardBody, Field, Input } from '@/components/ui';
+import { useToast } from '@/components/providers/toast-provider';
 
 export function LoginForm() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const toast = useToast();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -23,15 +25,20 @@ export function LoginForm() {
 
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error ?? 'Sign in failed.');
+        const message = body?.error ?? 'Sign in failed.';
+        setError(message);
+        toast.error('Sign in failed', message);
         return;
       }
 
       // Refresh so the server re-evaluates the session before navigating.
+      toast.success('Signed in', 'Welcome back.');
       router.replace('/');
       router.refresh();
     } catch {
-      setError('Could not reach the server. Check your connection and try again.');
+      const message = 'Could not reach the server. Check your connection and try again.';
+      setError(message);
+      toast.error('Sign in failed', message);
     } finally {
       setPending(false);
     }

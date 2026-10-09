@@ -21,13 +21,10 @@ export default function JobLoading() {
     <div className="flex flex-col gap-4">
       <LoadingAnnouncement label="Loading job" />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-5 w-24" />
-          <Skeleton className="h-5 w-20 rounded-full" />
-          <Skeleton className="h-5 w-16 rounded-full" />
-        </div>
-        <Skeleton className="h-9 w-32 rounded-md" />
+      <div className="flex flex-wrap items-center gap-3">
+        <Skeleton className="h-7 w-24" />
+        <Skeleton className="h-5 w-20 rounded-full" />
+        <Skeleton className="h-5 w-16 rounded-full" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_20rem]">
@@ -53,6 +50,7 @@ export default function JobLoading() {
         </div>
 
         <div className="flex flex-col gap-4">
+          {/* Actions — status select, then the delete button. */}
           <Card>
             <SkeletonCardHeader />
             <div className="flex flex-col gap-3 p-4">
@@ -61,17 +59,33 @@ export default function JobLoading() {
             </div>
           </Card>
 
+          {/* Attachments — upload label, then file rows. */}
           <Card>
             <SkeletonCardHeader description />
             <div className="flex flex-col gap-3 p-4">
-              <Skeleton className="h-9 w-48 rounded-md" />
-              <Skeleton className="h-3.5 w-32" />
+              <Skeleton className="h-9 w-44 rounded-md" />
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Skeleton className="h-3.5 w-32" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+                <Skeleton className="h-10 w-24 shrink-0 rounded-md" />
+              </div>
             </div>
           </Card>
 
+          {/* Invoices — header and the empty state it usually shows. */}
           <Card>
             <SkeletonCardHeader />
-            <SkeletonTable columns={3} rows={2} lastColumnRight />
+            <p className="px-4 py-8 text-center">
+              <Skeleton className="mx-auto h-3.5 w-48" />
+            </p>
+          </Card>
+
+          {/* Payments — date/amount rows. */}
+          <Card>
+            <SkeletonCardHeader />
+            <SkeletonTable columns={2} rows={3} lastColumnRight />
           </Card>
         </div>
       </div>

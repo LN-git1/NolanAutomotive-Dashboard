@@ -42,26 +42,20 @@ export function LoadingAnnouncement({ label }: { label: string }) {
   );
 }
 
-/** A line of text. Widths vary so a stack reads as prose, not as a barcode. */
-export function SkeletonText({
-  width = 'w-full',
-  className,
-}: {
-  width?: string;
-  className?: string;
-}) {
-  return <Skeleton className={cn('h-3.5', width, className)} />;
-}
-
 /* --------------------------------------------------------------- page head */
 
-/** The `h1` + subtitle every page opens with, optionally with an action button. */
+/**
+ * The `h1` + subtitle every page opens with, optionally with an action button.
+ *
+ * Bar heights are the real line boxes, not eyeballed: `text-lg` is a 28px line
+ * (`h-7`), `text-sm` is 20px (`h-5`).
+ */
 export function SkeletonPageHeader({ action = false }: { action?: boolean }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-col gap-2">
-        <Skeleton className="h-5 w-40" />
-        <Skeleton className="h-3.5 w-64 max-w-[70vw]" />
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="h-5 w-64 max-w-[70vw]" />
       </div>
       {action ? <Skeleton className="h-9 w-28 rounded-md" /> : null}
     </div>
@@ -71,34 +65,40 @@ export function SkeletonPageHeader({ action = false }: { action?: boolean }) {
 /* ------------------------------------------------------------------ tables */
 
 /**
- * A table placeholder that matches `Table`/`Th`/`Td` exactly — same
- * `min-w-[36rem]`, same `px-3 py-2`, same bottom borders — so the switch to
- * real rows moves nothing.
+ * A table placeholder that matches `Table`/`Th`/`Td` exactly — same `rtable`
+ * behaviour, same `sm:min-w-[36rem]`, same `px-3 py-2`, same bottom borders —
+ * so the switch to real rows moves nothing.
  *
- * `lastColumnRight` mirrors the money/action columns that are right-aligned.
+ * `lastColumnRight` mirrors a single right-aligned money/action column;
+ * `rightColumns` lists any others by zero-based index (e.g. Awaiting Payments'
+ * "Owed", the supplier detail's Added/Paid-off/Balance).
+ *
+ * Every cell carries a blank `data-label` so that below `sm` — where `.rtable`
+ * turns rows into labelled cards — the skeleton rows become cards too instead
+ * of a 576px horizontal scroller that then snaps into cards on load.
  */
 export function SkeletonTable({
   columns,
   rows = 5,
   lastColumnRight = false,
+  rightColumns = [],
 }: {
   columns: number;
   rows?: number;
   lastColumnRight?: boolean;
+  rightColumns?: number[];
 }) {
+  const rightAligned = (index: number) =>
+    (lastColumnRight && index === columns - 1) || rightColumns.includes(index);
+
   return (
     <div className="w-full overflow-x-auto">
-      <table className="w-full min-w-[36rem] border-collapse text-sm">
+      <table className="rtable w-full border-collapse text-sm sm:min-w-[36rem]">
         <thead>
           <tr>
             {Array.from({ length: columns }).map((_, i) => (
               <th key={i} className="border-b border-line px-3 py-2 text-left">
-                <Skeleton
-                  className={cn(
-                    'h-3 w-16',
-                    lastColumnRight && i === columns - 1 && 'ml-auto',
-                  )}
-                />
+                <Skeleton className={cn('h-3 w-16', rightAligned(i) && 'ml-auto')} />
               </th>
             ))}
           </tr>
@@ -107,7 +107,11 @@ export function SkeletonTable({
           {Array.from({ length: rows }).map((_, rowIndex) => (
             <tr key={rowIndex}>
               {Array.from({ length: columns }).map((_, colIndex) => (
-                <td key={colIndex} className="border-b border-line px-3 py-2 align-top">
+                <td
+                  key={colIndex}
+                  data-label=" "
+                  className="border-b border-line px-3 py-2 align-top"
+                >
                   {colIndex === 0 ? (
                     // First column carries two lines in every table in this app
                     // (job number + customer, supplier + note), so it is taller.
@@ -120,7 +124,7 @@ export function SkeletonTable({
                       className={cn(
                         'h-3.5',
                         colIndex % 2 === 0 ? 'w-20' : 'w-14',
-                        lastColumnRight && colIndex === columns - 1 && 'ml-auto',
+                        rightAligned(colIndex) && 'ml-auto',
                       )}
                     />
                   )}
@@ -131,26 +135,6 @@ export function SkeletonTable({
         </tbody>
       </table>
     </div>
-  );
-}
-
-/** A card wrapping a table, with the header bar above it. */
-export function SkeletonTableCard({
-  columns,
-  rows = 5,
-  lastColumnRight = false,
-  description = false,
-}: {
-  columns: number;
-  rows?: number;
-  lastColumnRight?: boolean;
-  description?: boolean;
-}) {
-  return (
-    <Card>
-      <SkeletonCardHeader description={description} />
-      <SkeletonTable columns={columns} rows={rows} lastColumnRight={lastColumnRight} />
-    </Card>
   );
 }
 
@@ -183,7 +167,10 @@ export function SkeletonCollapsibleCard() {
   );
 }
 
-/** Mirrors `CardHeader`: same border, same `px-4 py-3`. */
+/**
+ * Mirrors `CardHeader`: same border, same `px-4 py-3`. Title is `text-sm`
+ * (20px → `h-5`), description is `text-xs` under `mt-0.5` (`h-4`).
+ */
 export function SkeletonCardHeader({
   description = false,
   action = false,
@@ -194,24 +181,48 @@ export function SkeletonCardHeader({
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3">
       <div className="flex flex-col gap-1.5">
-        <Skeleton className="h-3.5 w-32" />
-        {description ? <Skeleton className="h-3 w-44 max-w-[60vw]" /> : null}
+        <Skeleton className="h-5 w-32" />
+        {description ? <Skeleton className="h-4 w-44 max-w-[60vw]" /> : null}
       </div>
       {action ? <Skeleton className="h-8 w-24 rounded-md" /> : null}
     </div>
   );
 }
 
+/**
+ * Mirrors the schedule's month navigation: Previous button, centred
+ * month + Today, Next button (`schedule/page.tsx` header).
+ */
+export function SkeletonScheduleHeader() {
+  return (
+    <div className="flex items-center gap-2">
+      <Skeleton className="h-9 w-9 shrink-0 rounded-md" />
+      <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+        <Skeleton className="h-5 w-32" />
+        <Skeleton className="h-7 w-16 rounded-md" />
+      </div>
+      <Skeleton className="h-9 w-9 shrink-0 rounded-md" />
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------- tiles */
 
-/** One figure in a stat grid: small label above, large number below. */
+/**
+ * One figure in a stat grid: small label above, large number below, hint line.
+ *
+ * Real KPI tiles are three lines (`text-xs` label, `text-2xl` value, `text-xs`
+ * hint): 16 + 32 + 16 plus the gaps and `p-4`. The value bar is `h-8` because
+ * `text-2xl` is a 32px line box — `h-6` left every tile ~28px short.
+ */
 export function SkeletonStatTile() {
   return (
     <Card>
       <CardBody>
         <div className="flex flex-col gap-2">
           <Skeleton className="h-3 w-20" />
-          <Skeleton className="h-6 w-16" />
+          <Skeleton className="h-8 w-16" />
+          <Skeleton className="h-3 w-24" />
         </div>
       </CardBody>
     </Card>
@@ -247,31 +258,16 @@ export function SkeletonField({ className }: { className?: string }) {
   );
 }
 
-/** A block of fields inside a card, matching the two-column form grids. */
-export function SkeletonFormCard({
-  fields = 4,
-  columns = 2,
-  description = false,
-}: {
-  fields?: number;
-  columns?: 1 | 2 | 3;
-  description?: boolean;
-}) {
+/**
+ * A labelled multi-line control, matching `Textarea` (`min-h-20`, `rows={2}`
+ * on the notes/address fields throughout the app).
+ */
+export function SkeletonTextarea({ className }: { className?: string }) {
   return (
-    <Card>
-      <SkeletonCardHeader description={description} />
-      <div
-        className={cn(
-          'grid grid-cols-1 gap-4 p-4',
-          columns === 2 && 'sm:grid-cols-2',
-          columns === 3 && 'sm:grid-cols-3',
-        )}
-      >
-        {Array.from({ length: fields }).map((_, i) => (
-          <SkeletonField key={i} />
-        ))}
-      </div>
-    </Card>
+    <div className={cn('flex flex-col gap-1.5', className)}>
+      <Skeleton className="h-3 w-24" />
+      <Skeleton className="h-20 w-full rounded-md" />
+    </div>
   );
 }
 
@@ -305,6 +301,23 @@ export function SkeletonList({ rows = 3 }: { rows?: number }) {
           <Skeleton className="h-3.5 w-16" />
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * One collapsed accordion row: label on the left, amount + chevron on the
+ * right. Mirrors the Books month rows and the vehicle-history disclosure
+ * summaries (`px-4 py-3`, label + right-aligned figure).
+ */
+export function SkeletonAccordionRow() {
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 py-3">
+      <Skeleton className="h-3.5 w-32" />
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-3.5 w-16" />
+        <Skeleton className="size-4 rounded" />
+      </div>
     </div>
   );
 }

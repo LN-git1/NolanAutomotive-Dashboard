@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition, type FormEvent } from 'react';
 
 import { Alert, Button, Field, Input, Textarea } from '@/components/ui';
+import { useToast } from '@/components/providers/toast-provider';
 import { redirectIfUnauthorized } from '@/lib/client/session';
 import { addSupplierCharge } from '@/lib/actions/suppliers';
 import { todayIsoDate } from '@/lib/format';
@@ -32,6 +33,7 @@ export function ChargeForm({
   const [pending, startTransition] = useTransition();
   const [uploading, setUploading] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const toast = useToast();
 
   async function uploadAttachment(file: File): Promise<string | null> {
     // Must match the Content-Type on the PUT below — R2 signs for that value.
@@ -83,16 +85,22 @@ export function ChargeForm({
 
         const result = await addSupplierCharge(formData);
         if (!result.ok) {
-          setError(result.error ?? 'Could not add the purchase.');
+          const message = result.error ?? 'Could not add the purchase.';
+          setError(message);
+          toast.error('Purchase not added', message);
           return;
         }
 
+        toast.success('Added to the bill');
         formRef.current?.reset();
         setFileName(null);
         onSaved?.();
         router.refresh();
       } catch (submitError) {
-        setError(submitError instanceof Error ? submitError.message : 'Could not add the purchase.');
+        const message =
+          submitError instanceof Error ? submitError.message : 'Could not add the purchase.';
+        setError(message);
+        toast.error('Purchase not added', message);
       } finally {
         setUploading(false);
       }

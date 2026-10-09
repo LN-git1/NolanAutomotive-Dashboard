@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 
 import { Button } from '@/components/ui';
+import { useToast } from '@/components/providers/toast-provider';
 import { deleteSupplierEntry } from '@/lib/actions/suppliers';
 
 /**
@@ -18,12 +19,18 @@ import { deleteSupplierEntry } from '@/lib/actions/suppliers';
 export function EntryActions({ entryId, label }: { entryId: string; label: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
 
   function remove() {
     if (!window.confirm(`Delete ${label}? This changes the balance and cannot be undone.`)) return;
 
     startTransition(async () => {
-      await deleteSupplierEntry(entryId);
+      const result = await deleteSupplierEntry(entryId);
+      if (!result.ok) {
+        toast.error('Entry not deleted', result.error ?? 'Could not delete the entry.');
+        return;
+      }
+      toast.success('Entry deleted', label);
       router.refresh();
     });
   }

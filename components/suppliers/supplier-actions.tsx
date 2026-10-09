@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 
 import { Button } from '@/components/ui';
+import { useToast } from '@/components/providers/toast-provider';
 import { deleteSupplier } from '@/lib/actions/suppliers';
 
 /**
@@ -26,6 +27,7 @@ export function SupplierActions({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
 
   function remove() {
     if (!window.confirm(`Delete ${name}? This also deletes their whole bill history and cannot be undone.`)) {
@@ -35,10 +37,11 @@ export function SupplierActions({
     startTransition(async () => {
       const result = await deleteSupplier(supplierId);
       if (!result.ok) {
-        window.alert(result.error ?? 'Could not delete the supplier.');
+        toast.error('Supplier not deleted', result.error ?? 'Could not delete the supplier.');
         return;
       }
 
+      toast.success('Supplier deleted', name);
       if (redirectOnDelete) {
         router.replace('/suppliers');
       }

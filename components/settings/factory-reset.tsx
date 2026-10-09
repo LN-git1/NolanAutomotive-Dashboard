@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { Alert, Button, Card, CardBody, CardHeader, Field, Input } from '@/components/ui';
+import { useToast } from '@/components/providers/toast-provider';
 import { factoryReset, type ResetResult } from '@/lib/actions/danger';
 import { RESET_CONFIRMATION_PHRASE } from '@/lib/validation/danger';
 
@@ -30,6 +31,7 @@ export function FactoryReset({ counts }: { counts: ResetCounts }) {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<ResetResult['deleted'] | null>(null);
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
 
   const total =
     counts.jobs +
@@ -48,13 +50,16 @@ export function FactoryReset({ counts }: { counts: ResetCounts }) {
       const result = await factoryReset(phrase);
 
       if (!result.ok) {
-        setError(result.error ?? 'The reset could not be completed.');
+        const message = result.error ?? 'The reset could not be completed.';
+        setError(message);
+        toast.error('Reset failed', message);
         return;
       }
 
       setDone(result.deleted ?? null);
       setArmed(false);
       setPhrase('');
+      toast.success('Dashboard reset', 'All records were removed. Numbering restarts at J-0001.');
       router.refresh();
     });
   }

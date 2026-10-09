@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Alert, Button, Card, CardHeader, Empty, Table, Td, Th } from '@/components/ui';
+import { useToast } from '@/components/providers/toast-provider';
 import { redirectIfUnauthorized } from '@/lib/client/session';
 import { formatDate, numericToEur } from '@/lib/format';
 
@@ -29,6 +30,7 @@ export function InvoiceCard({ invoices }: { invoices: JobInvoiceRow[] }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [voiding, setVoiding] = useState<string | null>(null);
+  const toast = useToast();
 
   async function handleVoid(invoice: JobInvoiceRow) {
     const confirmed = window.confirm(
@@ -52,13 +54,18 @@ export function InvoiceCard({ invoices }: { invoices: JobInvoiceRow[] }) {
       if (!response.ok) {
         redirectIfUnauthorized(response);
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error ?? 'Could not void the invoice.');
+        const message = body?.error ?? 'Could not void the invoice.';
+        setError(message);
+        toast.error('Invoice not voided', message);
         return;
       }
 
+      toast.success(`Invoice ${invoice.invoiceNumber} voided`, 'It no longer counts as money owed.');
       router.refresh();
     } catch {
-      setError('Could not reach the server. The invoice was not voided.');
+      const message = 'Could not reach the server. The invoice was not voided.';
+      setError(message);
+      toast.error('Invoice not voided', message);
     } finally {
       setVoiding(null);
     }

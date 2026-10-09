@@ -6,6 +6,7 @@ import {
   SkeletonField,
   SkeletonPageHeader,
   SkeletonTable,
+  SkeletonTextarea,
 } from '@/components/ui/skeleton';
 
 /**
@@ -23,7 +24,8 @@ export default function SuppliersLoading() {
         <CardBody>
           <div className="flex flex-col gap-2">
             <Skeleton className="h-3 w-40" />
-            <Skeleton className="h-7 w-32" />
+            {/* text-2xl is a 32px line box. */}
+            <Skeleton className="h-8 w-32" />
           </div>
         </CardBody>
       </Card>
@@ -31,14 +33,14 @@ export default function SuppliersLoading() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_22rem]">
         <Card>
           <SkeletonCardHeader />
-          <SkeletonTable columns={4} rows={5} lastColumnRight />
+          <SkeletonTable columns={4} rows={5} rightColumns={[2, 3]} />
         </Card>
 
-        <Card>
+        <Card className="order-first xl:order-none">
           <SkeletonCardHeader />
           <div className="flex flex-col gap-4 p-4">
             <SkeletonField />
-            <SkeletonField />
+            <SkeletonTextarea />
             <Skeleton className="h-9 w-32 rounded-md" />
           </div>
         </Card>

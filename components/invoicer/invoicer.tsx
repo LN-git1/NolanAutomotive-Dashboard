@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Alert, Button, buttonClass, Card, CardBody, CardHeader } from '@/components/ui';
+import { useToast } from '@/components/providers/toast-provider';
 import { redirectIfUnauthorized } from '@/lib/client/session';
 import { Skeleton } from '@/components/ui/skeleton';
 import { JobPicker, type InvoiceableJob } from '@/components/invoicer/job-picker';
@@ -37,6 +38,7 @@ export function Invoicer({
   const [issued, setIssued] = useState<IssuedInvoice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const toast = useToast();
 
   // Object URLs are a leak if not revoked when replaced or unmounted.
   useEffect(() => {
@@ -107,7 +109,9 @@ export function Invoicer({
       if (!response.ok) {
         redirectIfUnauthorized(response);
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error ?? 'Could not generate the invoice.');
+        const message = body?.error ?? 'Could not generate the invoice.';
+        setError(message);
+        toast.error('Invoice not generated', message);
         return;
       }
 
@@ -129,16 +133,24 @@ export function Invoicer({
       // Committed even if the upload failed. Say so plainly rather than letting
       // the owner find a broken link on the job later.
       if (response.headers.get('X-Storage-Failed') === '1') {
-        setError(
+        const message =
           `Invoice ${invoiceNumber} was created, but the PDF could not be saved to storage. ` +
-            `Send it now with the buttons below — the copy on the job page will be missing.`,
+          'Send it now with the buttons below — the copy on the job page will be missing.';
+        setError(message);
+        toast.warning('Invoice created — PDF not saved', message);
+      } else {
+        toast.success(
+          reissued ? `Invoice ${invoiceNumber} updated in place` : `Invoice ${invoiceNumber} created`,
+          reissued ? 'Same number; the stored copy was replaced.' : 'Check it below, then send it.',
         );
       }
 
       // The job is now Invoiced; refresh so the picker and lists agree.
       router.refresh();
     } catch {
-      setError('Could not reach the server. Check your connection and try again.');
+      const message = 'Could not reach the server. Check your connection and try again.';
+      setError(message);
+      toast.error('Invoice not generated', message);
     } finally {
       setGenerating(false);
     }
@@ -160,8 +172,12 @@ export function Invoicer({
     })
       .then(() => router.refresh())
       .catch(() => {
-        // The invoice exists and the customer has it; failing to record HOW it
-        // was sent is not worth interrupting the owner over.
+        // The invoice exists and the customer already has it; this failure only
+        // affects the "sent" stamp, so it is surfaced as a warning, never an error.
+        toast.warning(
+          'Sent — but not recorded',
+          'The invoice was sent; saving its "sent" flag failed.',
+        );
       });
   }
 

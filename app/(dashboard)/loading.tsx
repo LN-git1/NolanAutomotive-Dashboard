@@ -21,8 +21,8 @@ export default function OverviewLoading() {
       <LoadingAnnouncement label="Loading the overview" />
 
       <div className="flex flex-col gap-2">
-        <div className="skeleton h-5 w-28 rounded-md" aria-hidden />
-        <div className="skeleton h-3.5 w-56 max-w-[70vw] rounded-md" aria-hidden />
+        <div className="skeleton h-7 w-28 rounded-md" aria-hidden />
+        <div className="skeleton h-5 w-56 max-w-[70vw] rounded-md" aria-hidden />
       </div>
 
       <SkeletonStatGrid count={3} className="grid grid-cols-3 gap-3" />
