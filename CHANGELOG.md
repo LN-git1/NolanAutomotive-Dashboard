@@ -1,5 +1,25 @@
 # Changelog
 
+## 04/11/2026 @ 19:51:04 IST — "claude-sonnet-5-5"
+
+**Project completion: 93.75%**
+
+Basis: 15 of 16 checklist items done for the assignees feature (the 12 from the previous entry, plus: migration 0017 applied to production — confirmed by the owner adding a person in the live app; code pushed and deployed; Settings-page hang fixed and tested locally). Still open: (16) confirm on the live iOS app that Settings loads and a newly added person appears at once. I could not observe production, so the cause below is established from the code and the database driver's source, not from production logs.
+
+**Goal:** Fix the live Settings page: adding a person did not show them, and after a reload the page stayed on its loading skeleton forever.
+
+### Fixed — Settings page hung once it ran more than 8 queries at once
+
+**Cause.** The database pool is capped at 8 connections (`lib/db/index.ts`, with a long note explaining why). When more than 8 queries are in flight, postgres.js (`index.js` `handler`) stops opening connections and pipelines the extra query down one that is already busy, which Supabase's pooler in transaction mode cannot service — the request hangs instead of failing. Before this feature the Settings page ran exactly 8 reads at once (1 settings, 6 reset-confirmation counts, 1 time-off). The workshop-team read made it 9. The page render never finished, so the refresh after adding a person never updated the list, and a reload sat on `loading.tsx` indefinitely. It only showed on production because the local and embedded databases do not use that pooler. The other pages touched by the feature were checked and sit well below the limit (job pages about 4–5, Earnings about 6).
+
+**Fix.** `getResetCounts` (the factory-reset confirmation counts) now runs as one statement with scalar sub-selects instead of six parallel queries. The Settings page now has 4 reads in flight instead of 9, leaving headroom for future additions. Same numbers returned; soft-deleted jobs are still counted.
+
+**Verification.** New `tests/reset-counts.test.ts` (database-gated) compares the single query with six independent counts, including a soft-deleted job — passes. All assignee tests still pass (17 of 17 on the throwaway database). Browser run: Settings first load 789 ms, a newly added person appears straight after adding, and a reload renders the page. `tsc --noEmit` 0 errors; eslint 0 errors on touched files; 230 tests pass, 62 database-gated skip without a database.
+
+### Files Touched
+
+`lib/db/queries/overview.ts`, `tests/reset-counts.test.ts`
+
 ## 04/11/2026 @ 18:08:43 IST — "claude-sonnet-5-5"
 
 **Project completion: 85.71%**

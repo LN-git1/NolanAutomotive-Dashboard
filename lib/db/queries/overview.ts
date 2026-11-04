@@ -151,27 +151,36 @@ export async function listSuppliersWithTotals() {
  *
  * Counts EVERY row, including soft-deleted jobs — the reset removes those too,
  * so the number shown has to match what actually gets destroyed.
+ *
+ * One statement, not six. The Settings page runs this alongside its other
+ * reads, and the pool is capped at 8 connections (see `lib/db/index.ts`): the
+ * moment a page has more than 8 queries in flight, postgres.js pipelines the
+ * extra one down a busy connection, which Supavisor's transaction mode cannot
+ * service — the page HANGS rather than errors. Six separate counts left
+ * Settings at exactly 8; adding the workshop-team read made it 9 and the page
+ * never finished loading. Scalar sub-selects keep it to a single round trip.
  */
 export async function getResetCounts() {
-  const [jobRows, invoiceRows, attachmentRows, supplierRows, entryRows, paymentRows] =
-    await withDbRetry('overview:reset-counts', () =>
-      Promise.all([
-        db.select({ n: sql<number>`count(*)::int` }).from(jobs),
-        db.select({ n: sql<number>`count(*)::int` }).from(invoices),
-        db.select({ n: sql<number>`count(*)::int` }).from(jobAttachments),
-        db.select({ n: sql<number>`count(*)::int` }).from(suppliers),
-        db.select({ n: sql<number>`count(*)::int` }).from(supplierLedger),
-        db.select({ n: sql<number>`count(*)::int` }).from(payments),
-      ]),
-    );
+  const result = await withDbRetry('overview:reset-counts', () =>
+    db.execute<Record<'jobs' | 'invoices' | 'attachments' | 'suppliers' | 'supplier_entries' | 'payments', number | string>>(sql`
+      SELECT
+        (SELECT count(*) FROM ${jobs})::int AS jobs,
+        (SELECT count(*) FROM ${invoices})::int AS invoices,
+        (SELECT count(*) FROM ${jobAttachments})::int AS attachments,
+        (SELECT count(*) FROM ${suppliers})::int AS suppliers,
+        (SELECT count(*) FROM ${supplierLedger})::int AS supplier_entries,
+        (SELECT count(*) FROM ${payments})::int AS payments
+    `),
+  );
+  const row = (result as unknown as Record<string, number | string>[])[0];
 
   return {
-    jobs: Number(jobRows[0]?.n ?? 0),
-    invoices: Number(invoiceRows[0]?.n ?? 0),
-    attachments: Number(attachmentRows[0]?.n ?? 0),
-    suppliers: Number(supplierRows[0]?.n ?? 0),
-    supplierEntries: Number(entryRows[0]?.n ?? 0),
-    payments: Number(paymentRows[0]?.n ?? 0),
+    jobs: Number(row?.jobs ?? 0),
+    invoices: Number(row?.invoices ?? 0),
+    attachments: Number(row?.attachments ?? 0),
+    suppliers: Number(row?.suppliers ?? 0),
+    supplierEntries: Number(row?.supplier_entries ?? 0),
+    payments: Number(row?.payments ?? 0),
   };
 }
 
