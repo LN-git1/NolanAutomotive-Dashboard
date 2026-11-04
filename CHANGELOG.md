@@ -1,5 +1,45 @@
 # Changelog
 
+## 04/11/2026 @ 18:08:43 IST — "claude-sonnet-5-5"
+
+**Project completion: 85.71%**
+
+Basis: 12 of 14 checklist items done for the assignees feature (schema, migration file, split logic, validation, queries, assignee actions, job create/update wiring, Settings card, job-form picker, Earnings breakdown, automated tests, browser end-to-end test). Still open: (13) applying migration 0017 to the production database, and (14) pushing and verifying the deploy. Item 13 is blocked: the password in `.env.production.local` is rejected by Supabase (Postgres 28P01), so the migrate script cannot connect.
+
+**Goal:** Let the garage record who actually does each job, so work and money can be tracked per person, and so monthly earnings break down by person.
+
+### Added — workshop team in Settings
+
+**Cause.** There was no way to say who in the workshop did a job, so nothing could be reported per person.
+
+**Fix.** New `assignees` table and a "Workshop team" card in Settings to add, rename and remove people. Removing someone with no jobs deletes them; removing someone who has worked jobs archives them (`archived_at`) instead, because their past jobs and earnings must keep a name. The foreign key from `job_assignees` to `assignees` deliberately has no cascade, so a person on a job can never be hard-deleted by accident. Names are unique among current team members, case-insensitively. Assignees are configuration, so they are left alone by Factory reset (the links cascade away with the jobs).
+
+**Verification.** Browser run against a throwaway Postgres: add three people, duplicate name rejected, rename, delete a person with no jobs, archive one with jobs, job counts shown in Settings.
+
+### Added — "Assigned to" on every job
+
+**Cause.** Jobs usually have one person but sometimes several, so a single dropdown would not fit.
+
+**Fix.** New `job_assignees` join table and an always-open "Assigned to" card on the job form with one tick box per person. The form sends an `assigneesPresent` marker so that saving with nobody ticked clears the job's people, while a stale client that never sent the field leaves them untouched. Create writes the links inside the same transaction as the job; update replaces them inside the same transaction as the job update. An archived person already on a job is still shown (marked "former") so re-saving an old job never drops them; new jobs only offer current people. Existing jobs show as Unassigned until edited.
+
+**Verification.** Browser run: create with one person, with two, with none; edit and reload persists; unticking everyone clears; archived person hidden on new jobs, still shown and ticked on their old job, and kept after a re-save.
+
+### Added — "By person" on Earnings & Expenses
+
+**Cause.** The owner wanted to see what each person brought in each month.
+
+**Fix.** New card showing this year per person, then each month expanded per person. It uses the same basis as the existing Monthly card (cash received on live invoices of live jobs, in the month of the job's due date, falling back to the invoice date), so each month adds up to that month's "Money in". A job shared by several people is split equally; leftover cents go one each to the first people so the split always sums exactly. Money on jobs with nobody assigned shows under "Unassigned"; archived people appear marked "(former)".
+
+**Verification.** `tests/assignees.test.ts` (9 unit tests: exact splitting incl. refunds and uneven cents, month totals, order-independence, validation) and `tests/assignees-db.test.ts` (7 database tests, gated on TEST_DATABASE_URL: per-person credit, deleted and voided jobs excluded, per-person month total equals the existing Earnings month total, archived handling, job counts, FK restricts hard delete, cascade on job removal) all pass. Browser check of the card: Lee 1,300.50, Samuel 300.50 (former), Unassigned 70.00, total 1,671.00 for a 1,000 job, a 601 job shared by two, and a 70 unassigned job.
+
+**Verification, overall.** `tsc --noEmit` 0 errors; eslint 0 errors (1 existing warning in `lib/client/session.ts`); 230 tests pass, 61 DB-gated tests skip without a database. All 18 migrations were applied to an embedded throwaway Postgres (PGlite). That server cannot run parallel connections, so the existing books, earnings and counters integration tests fail on it for that reason alone; they are unrelated to this change.
+
+**Rollout note.** Migration `0017_add_assignees.sql` must be applied to production BEFORE this code is pushed: the Settings, job and Earnings pages query the new tables. The migration only creates two tables and an index; it touches no existing data.
+
+### Files Touched
+
+`lib/db/schema.ts`, `drizzle/migrations/0017_add_assignees.sql`, `drizzle/migrations/meta/_journal.json`, `drizzle/migrations/meta/0017_snapshot.json`, `lib/assignees.ts`, `lib/validation/assignee.ts`, `lib/db/queries/assignees.ts`, `lib/actions/assignees.ts`, `lib/actions/jobs.ts`, `components/settings/assignees-card.tsx`, `components/jobs/job-form.tsx`, `components/earnings/earnings-panel.tsx`, `app/(dashboard)/settings/page.tsx`, `app/(dashboard)/jobs/new/page.tsx`, `app/(dashboard)/jobs/[jobId]/page.tsx`, `app/(dashboard)/earnings/page.tsx`, `tests/assignees.test.ts`, `tests/assignees-db.test.ts`
+
 ## 09/10/2026 @ 04:40:00 IST — "muse-spark-1.3"
 
 **Project completion: 100.00%**

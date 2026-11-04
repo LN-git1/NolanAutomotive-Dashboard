@@ -3,6 +3,7 @@ import Link from 'next/link';
 
 import { EarningsPanel } from '@/components/earnings/earnings-panel';
 import { SwipeNav } from '@/components/earnings/swipe-nav';
+import { getAssigneeEarnings } from '@/lib/db/queries/assignees';
 import { getBooksSummary } from '@/lib/db/queries/books';
 
 export const metadata: Metadata = { title: 'Earnings & Expenses' };
@@ -14,7 +15,7 @@ export const dynamic = 'force-dynamic';
  * the way back for anyone who lands here without swiping.
  */
 export default async function EarningsPage() {
-  const summary = await getBooksSummary();
+  const [summary, byPerson] = await Promise.all([getBooksSummary(), getAssigneeEarnings()]);
 
   return (
     <SwipeNav to="/" direction="right">
@@ -27,7 +28,7 @@ export default async function EarningsPage() {
           <p className="text-sm text-muted">Money in, money out, profit — month by month.</p>
         </div>
 
-        <EarningsPanel summary={summary} />
+        <EarningsPanel summary={summary} byPerson={byPerson} />
       </div>
     </SwipeNav>
   );

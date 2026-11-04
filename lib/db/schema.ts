@@ -8,6 +8,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -77,6 +78,25 @@ export const timeOff = pgTable('time_off', {
   label: text('label'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * The people in the workshop who actually do the work. Configuration, like
+ * `settings` and `timeOff` — so deliberately excluded from `factoryReset`.
+ *
+ * Removing someone who has been on a job ARCHIVES them (`archivedAt`) instead of
+ * deleting the row: their past jobs, and the earnings credited to them, must
+ * keep a name. Archived people drop out of the job picker but stay in Earnings.
+ */
+export const assignees = pgTable(
+  'assignees',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('assignees_archived_at_idx').on(table.archivedAt)],
+);
 
 /**
  * One labour line as printed in the template's WORK CARRIED OUT table: a
@@ -186,6 +206,30 @@ export const jobs = pgTable(
     ),
     index('jobs_customer_name_idx').on(table.customerName),
     index('jobs_deleted_at_idx').on(table.deletedAt),
+  ],
+);
+
+/**
+ * Who worked on a job. Usually one row per job; several when a job took more
+ * than one person. A job with no rows is "Unassigned". Earnings credit is split
+ * equally across a job's rows (see `lib/assignees.ts`).
+ *
+ * Cascades from `jobs` (a reset or hard delete takes the links with it) but NOT
+ * from `assignees` — see the archive rule on `assignees`.
+ */
+export const jobAssignees = pgTable(
+  'job_assignees',
+  {
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => jobs.id, { onDelete: 'cascade' }),
+    assigneeId: uuid('assignee_id')
+      .notNull()
+      .references(() => assignees.id),
+  },
+  (table) => [
+    primaryKey({ columns: [table.jobId, table.assigneeId] }),
+    index('job_assignees_assignee_id_idx').on(table.assigneeId),
   ],
 );
 
@@ -471,6 +515,7 @@ export type SupplierEntryKind = (typeof supplierEntryKindEnum.enumValues)[number
 export type Payment = typeof payments.$inferSelect;
 export type Settings = typeof settings.$inferSelect;
 export type TimeOff = typeof timeOff.$inferSelect;
+export type Assignee = typeof assignees.$inferSelect;
 export type Expense = typeof expenses.$inferSelect;
 export type NewExpense = typeof expenses.$inferInsert;
 export type ExpenseCategory = (typeof expenseCategoryEnum.enumValues)[number];

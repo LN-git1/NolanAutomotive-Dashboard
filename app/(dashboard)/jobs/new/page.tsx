@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { JobForm } from '@/components/jobs/job-form';
+import { listActiveAssignees } from '@/lib/db/queries/assignees';
 import { getSettings } from '@/lib/db/queries/settings';
 import { labourRowCapacity, partsRowCapacity } from '@/lib/pdf/stamp';
 
@@ -16,7 +17,7 @@ export const dynamic = 'force-dynamic';
 export default async function NewJobPage() {
   // The owner's usual rate prefills the labour box, so a straightforward job
   // needs only the hours typing in.
-  const settings = await getSettings();
+  const [settings, assignees] = await Promise.all([getSettings(), listActiveAssignees()]);
 
   return (
     <div className="flex max-w-4xl flex-col gap-4">
@@ -28,6 +29,7 @@ export default async function NewJobPage() {
       </div>
 
       <JobForm
+        assignees={assignees.map(({ id, name }) => ({ id, name }))}
         defaultHourlyRate={settings.defaultHourlyRate ?? ''}
         labourCapacity={labourRowCapacity()}
         partsCapacity={partsRowCapacity()}

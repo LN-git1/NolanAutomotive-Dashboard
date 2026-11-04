@@ -7,6 +7,7 @@ import { JobActions } from '@/components/jobs/job-actions';
 import { JobForm } from '@/components/jobs/job-form';
 import { PaymentHistory } from '@/components/jobs/payment-history';
 import { Badge, Card, CardHeader } from '@/components/ui';
+import { listActiveAssignees, listJobAssignees } from '@/lib/db/queries/assignees';
 import { getJobWithAttachments } from '@/lib/db/queries/jobs';
 import { getSettings } from '@/lib/db/queries/settings';
 import { toCents } from '@/lib/money';
@@ -17,9 +18,22 @@ export const dynamic = 'force-dynamic';
 
 export default async function JobDetailPage({ params }: PageProps<'/jobs/[jobId]'>) {
   const { jobId } = await params;
-  const [job, settings] = await Promise.all([getJobWithAttachments(jobId), getSettings()]);
+  const [job, settings, activeAssignees, jobAssignees] = await Promise.all([
+    getJobWithAttachments(jobId),
+    getSettings(),
+    listActiveAssignees(),
+    listJobAssignees(jobId),
+  ]);
 
   if (!job) notFound();
+
+  // Active people, plus any former colleague already on this job.
+  const pickable = [
+    ...activeAssignees.map(({ id, name }) => ({ id, name })),
+    ...jobAssignees
+      .filter((person) => person.archivedAt !== null)
+      .map(({ id, name }) => ({ id, name, archived: true })),
+  ];
 
   /*
     The one non-voided invoice, with what is still owed on it — `JobActions`
@@ -56,6 +70,8 @@ export default async function JobDetailPage({ params }: PageProps<'/jobs/[jobId]
         <div className="min-w-0">
           <JobForm
             job={job}
+            assignees={pickable}
+            assignedIds={jobAssignees.map((person) => person.id)}
             defaultHourlyRate={settings.defaultHourlyRate ?? ''}
             labourCapacity={labourRowCapacity()}
             partsCapacity={partsRowCapacity()}

@@ -1,6 +1,7 @@
 'use client';
 
 import { ChevronRight } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition, type FormEvent, type ReactNode } from 'react';
 
@@ -67,8 +68,17 @@ export function JobForm({
   defaultHourlyRate = '',
   labourCapacity,
   partsCapacity,
+  assignees = [],
+  assignedIds = [],
 }: {
   job?: Job;
+  /**
+   * Everyone who can be picked: the active people, plus any archived person
+   * already on this job (so re-saving an old job never drops them).
+   */
+  assignees?: { id: string; name: string; archived?: boolean }[];
+  /** The people currently on this job. Empty for a new job. */
+  assignedIds?: string[];
   /** The owner's usual rate, so a new job starts pre-filled rather than blank. */
   defaultHourlyRate?: string;
   /**
@@ -214,6 +224,46 @@ export function JobForm({
               <VehicleHistory key={applied.normalizedRegistration} vehicle={applied} />
             </>
           ) : null}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Assigned to"
+          description="Who is doing this job — tick more than one if it takes a team. Earnings are split equally."
+        />
+        <CardBody>
+          {/* Marks the field as present, so a save with nobody ticked clears the
+              job's assignees instead of being read as "form didn't send it". */}
+          <input type="hidden" name="assigneesPresent" value="1" />
+          {assignees.length === 0 ? (
+            <p className="text-sm text-muted">
+              No one added yet.{' '}
+              <Link href="/settings" className="text-brand-dark hover:underline">
+                Add the workshop team in Settings
+              </Link>
+              .
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {assignees.map((person) => (
+                <label
+                  key={person.id}
+                  className="flex cursor-pointer items-center gap-2 rounded-md border border-line px-3 py-2 text-sm text-ink has-[:checked]:border-brand has-[:checked]:bg-info-soft"
+                >
+                  <input
+                    type="checkbox"
+                    name="assigneeIds"
+                    value={person.id}
+                    defaultChecked={assignedIds.includes(person.id)}
+                    className="size-4 accent-brand"
+                  />
+                  {person.name}
+                  {person.archived ? <span className="text-xs text-muted">(former)</span> : null}
+                </label>
+              ))}
+            </div>
+          )}
         </CardBody>
       </Card>
 

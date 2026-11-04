@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 
+import { AssigneesCard } from '@/components/settings/assignees-card';
 import { FactoryReset } from '@/components/settings/factory-reset';
 import { SettingsForm } from '@/components/settings/settings-form';
 import { TimeOffCard } from '@/components/settings/time-off';
 import { Card, CardBody, CardHeader } from '@/components/ui';
+import { listAssigneesWithJobCounts } from '@/lib/db/queries/assignees';
 import { getResetCounts } from '@/lib/db/queries/overview';
 import { getSettings } from '@/lib/db/queries/settings';
 import { listAllTimeOff } from '@/lib/db/queries/time-off';
@@ -25,10 +27,11 @@ const EXPORTS = [
 ] as const;
 
 export default async function SettingsPage() {
-  const [settings, resetCounts, timeOffEntries] = await Promise.all([
+  const [settings, resetCounts, timeOffEntries, team] = await Promise.all([
     getSettings(),
     getResetCounts(),
     listAllTimeOff(),
+    listAssigneesWithJobCounts(),
   ]);
 
   // Shown so the owner can see where the sequence currently stands.
@@ -64,6 +67,8 @@ export default async function SettingsPage() {
           </p>
         </CardBody>
       </Card>
+
+      <AssigneesCard people={team} />
 
       <TimeOffCard entries={timeOffEntries} />
 

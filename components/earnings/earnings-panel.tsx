@@ -12,6 +12,7 @@ import { Alert, Badge, Button, Card, CardBody, CardHeader } from '@/components/u
 import { Skeleton } from '@/components/ui/skeleton';
 import { getBooksMonthDetail } from '@/lib/actions/earnings';
 import { attachExpenseReceipt, reverseExpense } from '@/lib/actions/expenses';
+import type { AssigneeEarning, AssigneeEarningsSummary } from '@/lib/db/queries/assignees';
 import type { BooksMonthDetail, BooksMonthLine, BooksSummary } from '@/lib/db/queries/books';
 import { formatEur } from '@/lib/money';
 import { cn } from '@/lib/utils';
@@ -268,7 +269,77 @@ function MonthRow({
   );
 }
 
-export function EarningsPanel({ summary }: { summary: BooksSummary }) {
+function PersonRow({ person }: { person: AssigneeEarning }) {
+  return (
+    <li className="flex items-center justify-between gap-3">
+      <span className="min-w-0 truncate text-sm text-ink">
+        {person.name}
+        {person.archived ? <span className="ml-1 text-xs text-muted">(former)</span> : null}
+      </span>
+      <span className="shrink-0 text-sm tabular text-ink">{formatEur(person.cents)}</span>
+    </li>
+  );
+}
+
+/**
+ * Cash received, broken down by who did the work. Same basis and months as the
+ * Monthly card above, so each month here adds up to that month's "Money in".
+ * No lazy fetch: the whole breakdown is a handful of rows per month.
+ */
+function ByPersonCard({ data }: { data: AssigneeEarningsSummary }) {
+  if (data.months.length === 0) return null;
+  const yearTotal = data.yearToDate.reduce((sum, person) => sum + person.cents, 0);
+
+  return (
+    <Card>
+      <CardHeader
+        title="By person"
+        description="Cash received, credited to whoever did the job. Shared jobs are split equally."
+      />
+      <div className="flex flex-col divide-y divide-line">
+        <div className="px-4 py-3">
+          <p className="text-xs font-medium text-muted">This year · {formatEur(yearTotal)}</p>
+          {data.yearToDate.length === 0 ? (
+            <p className="mt-2 text-xs text-muted">Nothing received yet this year.</p>
+          ) : (
+            <ul className="mt-2 flex flex-col gap-2">
+              {data.yearToDate.map((person) => (
+                <PersonRow key={person.id} person={person} />
+              ))}
+            </ul>
+          )}
+        </div>
+        {data.months.map((month) => (
+          <details key={month.key} className="group">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 hover:bg-canvas [&::-webkit-details-marker]:hidden">
+              <span className="font-medium text-ink">{month.label}</span>
+              <span className="flex items-center gap-2">
+                <span className="tabular text-ink">{formatEur(month.totalCents)}</span>
+                <ChevronDown
+                  aria-hidden
+                  className="size-4 text-muted transition-transform group-open:rotate-180"
+                />
+              </span>
+            </summary>
+            <ul className="flex flex-col gap-2 border-t border-line px-4 py-3">
+              {month.people.map((person) => (
+                <PersonRow key={person.id} person={person} />
+              ))}
+            </ul>
+          </details>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+export function EarningsPanel({
+  summary,
+  byPerson,
+}: {
+  summary: BooksSummary;
+  byPerson: AssigneeEarningsSummary;
+}) {
   const router = useRouter();
   const [detail, setDetail] = useState<Record<string, MonthState>>({});
   // Latest request per month: rapid edits re-fetch every open month, and an
@@ -350,6 +421,8 @@ export function EarningsPanel({ summary }: { summary: BooksSummary }) {
           </div>
         )}
       </Card>
+
+      <ByPersonCard data={byPerson} />
 
       <ExpenseForm onSaved={handleSaved} />
 

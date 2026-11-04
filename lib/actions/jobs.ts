@@ -14,9 +14,10 @@ import {
   type VehicleHistoryEntry,
   type VehicleMatch,
 } from '@/lib/db/queries/vehicles';
-import { jobAttachments, jobs } from '@/lib/db/schema';
+import { jobAssignees, jobAttachments, jobs } from '@/lib/db/schema';
 import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
 import { removeObject } from '@/lib/storage/signedUrl';
+import { jobAssigneeIdsSchema } from '@/lib/validation/assignee';
 import { uuidString } from '@/lib/validation/common';
 import { jobContentSchema, jobStatusChangeSchema } from '@/lib/validation/job';
 
@@ -40,6 +41,29 @@ class DuplicateSubmission extends Error {
 }
 
 /**
+ * The people ticked on the job form. `null` means the form did not carry the
+ * field at all (a stale client, or a caller that never renders it), which must
+ * leave the job's assignees alone — as opposed to `[]`, "everyone unticked".
+ */
+function readAssigneeIds(formData: FormData): string[] | { error: string } | null {
+  if (!formData.get('assigneesPresent')) return null;
+  const parsed = jobAssigneeIdsSchema.safeParse(formData.getAll('assigneeIds'));
+  return parsed.success ? parsed.data : { error: 'Invalid person selected' };
+}
+
+/** Replace a job's assignees with exactly `ids`. Run inside the caller's transaction. */
+async function setJobAssignees(
+  tx: Pick<typeof db, 'delete' | 'insert'>,
+  jobId: string,
+  ids: string[],
+) {
+  await tx.delete(jobAssignees).where(eq(jobAssignees.jobId, jobId));
+  if (ids.length > 0) {
+    await tx.insert(jobAssignees).values(ids.map((assigneeId) => ({ jobId, assigneeId })));
+  }
+}
+
+/**
  * Create a job, allocating its job number inside the same transaction as the
  * insert. If the insert fails the number is released with it, so the sequence
  * never develops a gap.
@@ -57,6 +81,8 @@ export async function createJob(formData: FormData): Promise<ActionResult> {
   }
 
   const input = parsed.data;
+  const assigneeIds = readAssigneeIds(formData);
+  if (assigneeIds && 'error' in assigneeIds) return { ok: false, error: assigneeIds.error };
   // Minted by the form per "page load". Absent or malformed just means no dedupe.
   const keyParsed = uuidString.safeParse(formData.get('submissionKey'));
   const submissionKey = keyParsed.success ? keyParsed.data : null;
@@ -86,6 +112,7 @@ export async function createJob(formData: FormData): Promise<ActionResult> {
           .returning({ id: jobs.id, jobNumber: jobs.jobNumber });
 
         if (!created) throw new Error('Job insert returned no row');
+        if (assigneeIds && assigneeIds.length > 0) await setJobAssignees(tx, created.id, assigneeIds);
         return { jobId: created.id, jobNumber: created.jobNumber };
       })
       .catch((error: unknown) => {
@@ -119,12 +146,19 @@ export async function updateJob(jobId: string, formData: FormData): Promise<Acti
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid job details' };
   }
 
+  const assigneeIds = readAssigneeIds(formData);
+  if (assigneeIds && 'error' in assigneeIds) return { ok: false, error: assigneeIds.error };
+
   return guardedWrite('updateJob', async () => {
-    const updated = await db
-      .update(jobs)
-      .set({ ...parsed.data, updatedAt: new Date() })
-      .where(and(eq(jobs.id, jobId), isNull(jobs.deletedAt)))
-      .returning({ id: jobs.id });
+    const updated = await db.transaction(async (tx) => {
+      const rows = await tx
+        .update(jobs)
+        .set({ ...parsed.data, updatedAt: new Date() })
+        .where(and(eq(jobs.id, jobId), isNull(jobs.deletedAt)))
+        .returning({ id: jobs.id });
+      if (rows.length > 0 && assigneeIds) await setJobAssignees(tx, jobId, assigneeIds);
+      return rows;
+    });
     if (updated.length === 0) return { ok: false, error: 'This job no longer exists.' };
 
     revalidatePath('/jobs');
@@ -133,7 +167,7 @@ export async function updateJob(jobId: string, formData: FormData): Promise<Acti
     revalidatePath('/awaiting-payments');
     revalidatePath('/');
     // dueDate is the Monthly breakdown's grouping key — editing it moves money
-    // between months.
+    // between months, and the assignees decide who is credited with it.
     revalidatePath('/earnings');
     return { ok: true, jobId };
   });
