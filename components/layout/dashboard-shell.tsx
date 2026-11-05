@@ -44,7 +44,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="pt-safe sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface px-4 py-2 lg:static">
+        <header data-chrome="header" className="pt-safe sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface px-4 py-2 lg:static">
           <NavDrawer />
           <SidebarToggle />
           <span className="truncate text-sm font-semibold text-ink lg:hidden">

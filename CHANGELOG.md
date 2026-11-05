@@ -1,5 +1,58 @@
 # Changelog
 
+## 05/11/2026 @ 12:47:34 IST — "claude-sonnet-5-5"
+
+**Project completion: 25.00%**
+
+Basis: 1 of 4 phases of the "iPhone/iPad-native feel" plan (Option A, polish the existing web app). Phase 1 (look, launch and motion, no new libraries) is built and verified on a local test branch. Still open: phase 2 (bottom sheets, press and spring animation, pull-to-refresh, needs a library choice first), phase 3 (web push notifications, needs a production migration and a decision on which events notify), phase 4 (the same polish for the other Nolan sites). Nothing in this entry is deployed: it lives on branch `test/apple-native-feel`, was never pushed, and production is untouched.
+
+**Goal:** Make the dashboard feel like a native iPhone/iPad app when opened in Safari or from the Home Screen, while Android, Windows and every non-Safari desktop browser stay exactly as they were. A website cannot become SwiftUI code, so this is the web app dressed and behaving like an iOS one; a real Swift app (which needs a Mac and an Apple developer account) is parked.
+
+### Added — an "Apple device" switch that gates every visual change
+
+**Cause.** One codebase serves every device, so any iPhone-specific styling would otherwise leak onto Android and desktop.
+
+**Fix.** A tiny inline script in the page head (`lib/client/apple-detect.ts`, joined to the existing theme script in `app/layout.tsx`) sets `data-apple` on `<html>` before first paint for iPhone, iPad (including iPads that report as Macs, spotted by their touchscreen) and desktop Safari on a Mac, which the owner asked to include. Chrome, Edge, Opera, Brave, Arc and Firefox on a Mac do not match. It also sets `data-standalone` when launched from the Home Screen. It is an inline script, not a server-side User-Agent check, because reading request headers in the root layout would make every page dynamic and cost the app its static prerendering; and not an effect, because that would flash the plain style first. All new CSS is written under `html[data-apple]`.
+
+**Verification.** 10 unit tests run the real script string against fake browsers (iPhone, iPad desktop mode, Mac Safari, Mac Chrome/Edge/Firefox, Android, Windows touch laptop, standalone flags, a throwing `navigator`). Also confirmed in Chrome with real user-agent strings: marker present for iPhone and Mac Safari, absent for Mac Chrome and Windows Chrome.
+
+### Added — translucent header and tab bar (iOS "material")
+
+**Cause.** Solid white bars over scrolling content read as a website; iOS apps use frosted bars.
+
+**Fix.** Under `html[data-apple]` the phone bottom tab bar and the sticky header get an 80% surface tint with a 20px blur (`globals.css`, hooked via new `data-chrome` attributes on `MobileTabBar` and the header). The translucent fill only applies where the browser can blur what is behind it. Bars go back to solid for people who set Reduce Transparency or Increase Contrast. From `lg` up the header is static, so it stays solid there.
+
+**Verification.** Contrast was measured from the rendered pixels behind the labels, not judged by eye: light theme 5.73:1 (inactive labels) and 5.86:1 (active tab), dark theme 6.35:1 and 8.65:1, all above the WCAG AA 4.5:1 floor. Caveat: the Windows WebKit build used for testing does not draw backdrop blur, so the look was checked in Chromium; only a real iPhone confirms how iOS Safari draws it.
+
+### Added — landscape notch safe areas, iOS press feedback, page settle-in
+
+**Cause and fix.** The page already extended under the notch (`viewport-fit=cover`) but only top and bottom were padded, so in landscape content ran under the notch: left and right safe-area padding added (zero in portrait). The tab bar no longer flashes a grey rectangle on press; the icon dips to 88% instantly and eases back, and the bar has no text-selection callout (it is navigation, not content). A visible keyboard focus ring was added for iPads with a hardware keyboard. A 220ms rise-and-fade plays when a page mounts, via a new `app/(dashboard)/template.tsx` (a plain wrapper that is `display: contents`, invisible to layout, everywhere except Apple devices; no motion at all under Reduce Motion). It plays on a change of first-level section (tab switches), not on drilling into a record, because Next only remounts a template when its own segment changes.
+
+**Verification.** Reduce Motion and animation start were checked in Chrome with an iPhone user agent (one `page-enter` start per tab tap, template remounts). There are no nested layouts under `(dashboard)`, and the three `position: fixed` modals all start closed, so nothing fixed exists during the 220ms animation.
+
+### Added — launch screens (no more white flash)
+
+**Cause.** With no launch image, iOS shows a plain white screen between tapping the Home Screen icon and the first frame, a bright flash on a dark-mode phone.
+
+**Fix.** 26 launch images (13 portrait iPhone/iPad sizes, light and dark) in `public/icons/splash/`, flat app-background colour with the app icon centred, wired through the metadata (`lib/pwa/splash.ts`, regenerated with `scripts/generate-splash.cjs`). They sit under `/icons/`, which the login gate already leaves public, because iOS fetches them before any session exists. Every light entry carries an explicit `prefers-color-scheme: light` so a dark-mode phone can never match both. An iPad launched in landscape gets iOS's default blank launch, as before.
+
+**Verification.** 5 tests: every listed image exists, no two sizes share a filename (414x896 exists at 2x and 3x), each image has exactly one colour scheme, light and dark media are mutually exclusive per size, all paths are under `/icons/`. Served with a 200 and no login.
+
+### Verified — nothing changed for other devices
+
+Full-page screenshots of 7 pages (Overview, Jobs, a job's detail page, Schedule, Invoicer, Earnings, Settings) were taken with the new code and with it stashed, on Android phone, Windows desktop, and desktop Safari-on-Mac user agents: 21 pairs, 0 differing pixels. Typecheck clean, lint 0 errors (2 existing warnings in files not touched), 246 tests passed (62 skipped need a test-database variable).
+
+### Not done, deliberately
+
+- No View Transitions API: a CSS settle-in was used instead, to keep non-Apple devices untouched (View Transitions run on Chrome/Android too).
+- Overscroll left alone so iOS keeps its native bounce. The Home Screen icon was not changed.
+- Not testable here: standalone launch, the splash on a real device, and iOS Safari's handling of Reduce Transparency. Increase Contrast is the fallback that definitely works.
+- Testing used a throwaway local Postgres with fake rows and dummy storage and webhook values; `.env.local` and production were never used.
+
+### Files Touched
+
+`app/layout.tsx`, `app/globals.css`, `app/(dashboard)/template.tsx` (new), `components/layout/sidebar.tsx`, `components/layout/dashboard-shell.tsx`, `lib/client/apple-detect.ts` (new), `lib/pwa/splash.ts` (new), `scripts/generate-splash.cjs` (new), `public/icons/splash/` (26 new images), `tests/apple-detect.test.ts` (new), `tests/splash.test.ts` (new), `CHANGELOG.md`
+
 ## 05/11/2026 @ 02:20:02 IST — "claude-sonnet-5-5"
 
 **Project completion: 100.00%**

@@ -369,6 +369,7 @@ export function MobileTabBar() {
   return (
     <nav
       aria-label="Primary"
+      data-chrome="tabbar"
       className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface lg:hidden"
     >
       <ul className="flex">

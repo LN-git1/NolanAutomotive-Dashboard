@@ -4,6 +4,8 @@ import type { Metadata, Viewport } from 'next';
 
 import { ToastProvider } from '@/components/providers/toast-provider';
 import { ServiceWorker } from '@/components/pwa/service-worker';
+import { APPLE_DETECT_SCRIPT } from '@/lib/client/apple-detect';
+import { splashStartupImages } from '@/lib/pwa/splash';
 
 import './globals.css';
 
@@ -29,6 +31,9 @@ export const metadata: Metadata = {
     // The status bar sits over the page, so the header must respect the safe
     // area inset (handled in globals.css).
     statusBarStyle: 'black-translucent',
+    // Launch screens, so iOS shows the app's own background instead of a white
+    // flash while it starts. Per-device and light/dark: see lib/pwa/splash.ts.
+    startupImage: splashStartupImages(),
   },
 
   icons: {
@@ -79,7 +84,9 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="en-IE" className="h-full" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* Theme first, then the Apple-device marker (see lib/client/apple-detect.ts).
+            One blocking script so neither can flash after first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT + APPLE_DETECT_SCRIPT }} />
       </head>
       <body className="min-h-full">
         <ToastProvider>
