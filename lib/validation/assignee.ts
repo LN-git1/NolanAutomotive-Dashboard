@@ -8,8 +8,15 @@ export const assigneeInputSchema = z.object({
 
 export const assigneeIdSchema = uuidString;
 
-/** The ids ticked on the job form. Duplicates are collapsed. */
-export const jobAssigneeIdsSchema = z
-  .array(uuidString)
-  .max(50, 'Too many people on one job')
-  .transform((ids) => [...new Set(ids)]);
+/**
+ * The ids picked on the job form. A dropdown left on "Unassigned" posts an empty
+ * string, which means "nobody" rather than a bad id, so blanks are dropped first.
+ * Duplicates are collapsed.
+ */
+export const jobAssigneeIdsSchema = z.preprocess(
+  (value) => (Array.isArray(value) ? value.filter((id) => id !== '') : value),
+  z
+    .array(uuidString)
+    .max(50, 'Too many people on one job')
+    .transform((ids) => [...new Set(ids)]),
+);

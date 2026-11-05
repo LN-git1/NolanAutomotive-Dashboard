@@ -1,5 +1,27 @@
 # Changelog
 
+## 05/11/2026 @ 02:20:02 IST — "claude-sonnet-5-5"
+
+**Project completion: 100.00%**
+
+Basis: 17 of 17 checklist items done for the assignees feature (the 15 from the previous entry; item 16, confirming Settings on the live iOS app, which the owner reported as "works perfect"; item 17, the compact dropdown below). Nothing open on this feature. Not yet confirmed on the live app: the new dropdown itself, which is only tested locally.
+
+**Goal:** Make "Assigned to" compact. The owner found the row of tick boxes took a whole card, and asked for a dropdown inside the scheduling section next to priority.
+
+### Changed — "Assigned to" is now a dropdown beside Priority
+
+**Cause.** The tick-box chips sat in their own full-width card above Customer, taking a screen's worth of space on a phone for what is usually a single person.
+
+**Fix.** The card is gone. A dropdown labelled "Assigned to" now sits in "Scheduling and notes", on the same row as Priority (the same two-column pattern the due date and due time already use). It starts on "Unassigned". Most jobs have one person, so one dropdown shows; a small "+ person" link adds a second dropdown for the occasional team job (earnings still split equally), and choosing "Remove" in an extra dropdown drops that person. People already picked are left out of the other dropdowns so nobody can be added twice. A job that already has several people opens with a dropdown each, so re-saving never drops anyone, and an archived person already on a job still shows as "(former)". The server treats an empty dropdown value as "nobody" (`jobAssigneeIdsSchema` now drops blank entries before checking ids), so leaving a dropdown on "Unassigned" saves cleanly. Built from the existing `Select` and `Field` components, no new styling.
+
+**Verification.** Unit test added for the blank-value case (10 of 10 assignee unit tests pass). Browser run against a throwaway database, phone width: no leftover Assigned card, default Unassigned, "+ person" appears after a pick, second dropdown excludes the first person, a two-person job reopens with both, Remove then save then reload leaves one, choosing Unassigned clears the job, a job created with nobody saves. 10 of 10 checks pass. `tsc --noEmit` 0 errors; eslint 0 errors on the changed files.
+
+**Note.** The scheduling section is collapsed by default like the other sections, so the assignee is one tap away rather than always showing.
+
+### Files Touched
+
+`components/jobs/job-form.tsx`, `lib/validation/assignee.ts`, `tests/assignees.test.ts`
+
 ## 04/11/2026 @ 19:51:04 IST — "claude-sonnet-5-5"
 
 **Project completion: 93.75%**

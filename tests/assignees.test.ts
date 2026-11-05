@@ -68,4 +68,10 @@ describe('assignee validation', () => {
     expect(ok.success && ok.data).toEqual([id]);
     expect(jobAssigneeIdsSchema.safeParse(['nope']).success).toBe(false);
   });
+
+  it('treats a dropdown left on "Unassigned" (empty string) as nobody', () => {
+    const id = '3f2b8c1e-6d0a-4c52-9a7e-1b2c3d4e5f60';
+    expect(jobAssigneeIdsSchema.safeParse(['']).success && jobAssigneeIdsSchema.parse([''])).toEqual([]);
+    expect(jobAssigneeIdsSchema.parse([id, ''])).toEqual([id]);
+  });
 });

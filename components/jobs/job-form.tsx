@@ -63,6 +63,83 @@ function Section({
   );
 }
 
+/**
+ * "Assigned to" as a dropdown. Most jobs have one person, so one dropdown is
+ * shown; a small "+ person" link adds another for the occasional team job
+ * (earnings are then split equally). A job that already has several people
+ * opens with a dropdown each, so re-saving never drops anyone.
+ */
+function AssigneePicker({
+  people,
+  initialIds,
+}: {
+  people: { id: string; name: string; archived?: boolean }[];
+  initialIds: string[];
+}) {
+  const [picks, setPicks] = useState<string[]>(initialIds.length > 0 ? initialIds : ['']);
+
+  if (people.length === 0) {
+    return (
+      <Field label="Assigned to" htmlFor="assigneeIds-0">
+        <Link
+          href="/settings"
+          className="flex h-10 items-center text-sm text-brand-dark hover:underline"
+        >
+          Add the team in Settings
+        </Link>
+      </Field>
+    );
+  }
+
+  const canAddMore = picks[picks.length - 1] !== '' && picks.length < people.length;
+
+  function setPick(index: number, value: string) {
+    setPicks((current) =>
+      value === '' && index > 0
+        ? current.filter((_, i) => i !== index)
+        : current.map((id, i) => (i === index ? value : id)),
+    );
+  }
+
+  return (
+    <Field label="Assigned to" htmlFor="assigneeIds-0">
+      {/* Marks the field as present, so a save with nobody picked clears the
+          job's assignees instead of being read as "form didn't send it". */}
+      <input type="hidden" name="assigneesPresent" value="1" />
+      <div className="flex flex-col gap-2">
+        {picks.map((pick, index) => (
+          <Select
+            key={index}
+            id={`assigneeIds-${index}`}
+            name="assigneeIds"
+            value={pick}
+            onChange={(event) => setPick(index, event.target.value)}
+          >
+            <option value="">{index === 0 ? 'Unassigned' : 'Remove'}</option>
+            {people
+              .filter((person) => person.id === pick || !picks.includes(person.id))
+              .map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.name}
+                  {person.archived ? ' (former)' : ''}
+                </option>
+              ))}
+          </Select>
+        ))}
+        {canAddMore ? (
+          <button
+            type="button"
+            onClick={() => setPicks((current) => [...current, ''])}
+            className="self-start text-xs text-brand-dark hover:underline"
+          >
+            + person
+          </button>
+        ) : null}
+      </div>
+    </Field>
+  );
+}
+
 export function JobForm({
   job,
   defaultHourlyRate = '',
@@ -224,46 +301,6 @@ export function JobForm({
               <VehicleHistory key={applied.normalizedRegistration} vehicle={applied} />
             </>
           ) : null}
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="Assigned to"
-          description="Who is doing this job — tick more than one if it takes a team. Earnings are split equally."
-        />
-        <CardBody>
-          {/* Marks the field as present, so a save with nobody ticked clears the
-              job's assignees instead of being read as "form didn't send it". */}
-          <input type="hidden" name="assigneesPresent" value="1" />
-          {assignees.length === 0 ? (
-            <p className="text-sm text-muted">
-              No one added yet.{' '}
-              <Link href="/settings" className="text-brand-dark hover:underline">
-                Add the workshop team in Settings
-              </Link>
-              .
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {assignees.map((person) => (
-                <label
-                  key={person.id}
-                  className="flex cursor-pointer items-center gap-2 rounded-md border border-line px-3 py-2 text-sm text-ink has-[:checked]:border-brand has-[:checked]:bg-info-soft"
-                >
-                  <input
-                    type="checkbox"
-                    name="assigneeIds"
-                    value={person.id}
-                    defaultChecked={assignedIds.includes(person.id)}
-                    className="size-4 accent-brand"
-                  />
-                  {person.name}
-                  {person.archived ? <span className="text-xs text-muted">(former)</span> : null}
-                </label>
-              ))}
-            </div>
-          )}
         </CardBody>
       </Card>
 
@@ -471,15 +508,21 @@ export function JobForm({
           nothing to choose, since a job that exists is active.
         */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Priority" htmlFor="priority">
-            <Select id="priority" name="priority" defaultValue={job?.priority ?? 'medium'}>
-              {JOB_PRIORITIES.map((priority) => (
-                <option key={priority} value={priority} className="capitalize">
-                  {priority}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {/* Priority and who-does-it share one grid slot, like date and time
+              below: two short dropdowns, one row. */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Priority" htmlFor="priority">
+              <Select id="priority" name="priority" defaultValue={job?.priority ?? 'medium'}>
+                {JOB_PRIORITIES.map((priority) => (
+                  <option key={priority} value={priority} className="capitalize">
+                    {priority}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <AssigneePicker people={assignees} initialIds={assignedIds} />
+          </div>
 
           {/* Date and time share one grid slot, split evenly, rather than each
               taking a full column — they're one decision ("when"), not two. */}
