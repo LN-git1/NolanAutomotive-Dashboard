@@ -1,5 +1,23 @@
 # Changelog
 
+## 06/11/2026 @ 00:44:04 IST — "claude-sonnet-5-5"
+
+**Project completion: 25.00%**
+
+Basis: unchanged, 1 of 4 phases of the "iPhone/iPad-native feel" plan. This is a one-line markup fix found during the iPhone test, not a new phase. Still open: phase 2, phase 3, phase 4. Nothing is deployed: branch `test/apple-native-feel`, never pushed, production untouched.
+
+**Goal:** Remove the "`<div>` cannot be a descendant of `<p>`" React warning on the job page.
+
+### Fixed — invalid HTML in the job page's loading skeleton
+
+**Cause.** `app/(dashboard)/jobs/[jobId]/loading.tsx` wrapped a skeleton bar (which renders a `<div>`) in a `<p>`. A paragraph may not contain a block element, so React logged a hydration warning every time a job opened and showed its loading state. It was present before this branch.
+
+**Fix.** The `<p>` became a `<div>` with the same classes, so the layout is identical. It was the only place in the app where a `<p>` wraps a skeleton.
+
+**Verification.** Opened three jobs from the list on an iPhone user agent and captured the console. Old markup: 2 warnings (the descendant and nested-element messages). New markup: 0. The old markup was put back temporarily to prove the check could see the problem, then the fix was restored.
+
+**Files touched:** `app/(dashboard)/jobs/[jobId]/loading.tsx`, `CHANGELOG.md`.
+
 ## 06/11/2026 @ 00:37:49 IST — "claude-sonnet-5-5"
 
 **Project completion: 25.00%**

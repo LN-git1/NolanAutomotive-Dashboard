@@ -77,9 +77,9 @@ export default function JobLoading() {
           {/* Invoices — header and the empty state it usually shows. */}
           <Card>
             <SkeletonCardHeader />
-            <p className="px-4 py-8 text-center">
+            <div className="px-4 py-8 text-center">
               <Skeleton className="mx-auto h-3.5 w-48" />
-            </p>
+            </div>
           </Card>
 
           {/* Payments — date/amount rows. */}
