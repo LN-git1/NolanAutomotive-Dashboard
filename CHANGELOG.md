@@ -1,5 +1,25 @@
 # Changelog
 
+## 06/11/2026 @ 16:51:13 IST — "claude-sonnet-5-5"
+
+**Project completion: 25.00%**
+
+Basis: unchanged, 1 of 4 phases of the "iPhone/iPad-native feel" plan is shipped (phase 3 is on the live site but switched off until the owner adds the push keys and applies migration 0018). This entry is a security upgrade, not a new phase. It is on local branch `test/next-zod-upgrade`, NOT pushed, and needs the owner's OK before it goes live.
+
+**Goal:** Close the published security advisories on the framework the live dashboard runs on.
+
+### Changed — Next.js 16.3.8 to 16.4.5, eslint-config-next to match, zod 4.4.3 to 4.6.7
+
+**Cause.** A dependency audit during the phase 3 security review found four advisories in the live app, already present on `main` before phase 3: two critical in Next.js (unauthenticated remote code execution through the SVG image optimiser, and through `use cache` functions that return typed arrays; both fixed in 16.4.1), one high in Next.js (denial of service in the App Router through Server Actions, fixed in 16.4.1) and one high in zod (memory exhaustion validating oversized collections, fixed in 4.6.6). This app does not use `next/image` or `use cache`, so the two critical ones were not reachable in practice, but the denial of service touches Server Actions, which this app uses for every save.
+
+**Fix.** Only `package.json` and the lockfile changed (plus one heading in `AGENTS.md`, see below): `next` 16.4.5 (the newest 16.4 release, which includes the 16.4.1 fixes), `eslint-config-next` 16.4.5 (these two must move together), `zod` ^4.6.7. React 19.2.8 is unchanged and within Next's supported range. No application code was edited.
+
+**Verification.** `pnpm audit --prod`: before, 4 vulnerabilities (2 critical, 2 high); after, "No known vulnerabilities found". Typecheck clean, lint 0 errors (same 2 warnings), full test suite with the database tests switched on: 446 of 446 pass. A production build was NOT run (it crashes this machine; standing rule), so the app was exercised in the running dev server instead, on both an iPhone user agent and a desktop browser: signed out, every page is sent to the login page, the push key route is refused, the scheduler answers 404 without its secret, the manifest and launch screen are public, security headers are present; signed in, all 13 screens load with no console errors, page errors or hydration warnings; and two Server Actions were exercised through the real forms, creating a job (which the database confirms was saved with the right customer and registration) and saving a supplier balance limit (saved as 200,000 cents). 44 checks, 44 pass in substance (one assertion in the click-through script looked for form values in page text, where they sit inside input boxes; the database check above covers it).
+
+**Not verified, and why it matters.** The dev server and the production build are not the same program, so a problem that only appears in a production build would not show here. If Vercel's build fails, Vercel keeps serving the previous version (a failed build is never promoted), so the risk is a behaviour difference at runtime, not an outage. The deploy check added in phase 3 runs after the deploy and will report if the login page, login gate, security headers, manifest, service worker or database stop answering.
+
+**Files touched:** `package.json`, `pnpm-lock.yaml`, `AGENTS.md` (Next.js 16.4.5's own installer rewrote one heading inside the block it manages, `#` to `##`; harmless and it is rewritten on every install, so it is kept), `CHANGELOG.md`.
+
 ## 06/11/2026 @ 05:57:30 IST — "claude-sonnet-5-5"
 
 **Project completion: 25.00%**
