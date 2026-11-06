@@ -3,11 +3,13 @@ import { notFound } from 'next/navigation';
 
 import { EntryActions } from '@/components/suppliers/entry-actions';
 import { SupplierAccountActions } from '@/components/suppliers/supplier-account-actions';
+import { SupplierLimitCard } from '@/components/suppliers/limit-card';
 import { SupplierActions } from '@/components/suppliers/supplier-actions';
 import { Card, CardBody, CardHeader, Empty, Table, Td, Th } from '@/components/ui';
 import { getSupplierWithEntries } from '@/lib/db/queries/overview';
 import { formatDate, numericToEur } from '@/lib/format';
 import { formatEur, toCents } from '@/lib/money';
+import { getSupplierLimit } from '@/lib/push/supplier-limits';
 
 export const metadata: Metadata = { title: 'Supplier' };
 export const dynamic = 'force-dynamic';
@@ -19,6 +21,10 @@ export default async function SupplierDetailPage({
   const supplier = await getSupplierWithEntries(supplierId);
 
   if (!supplier) notFound();
+
+  // Never allowed to fail the page: if the limits table is not there yet this says
+  // "unavailable" and the card is simply not shown.
+  const limit = await getSupplierLimit(supplier.id);
 
   /*
     The account is one running total, so the three figures below come from one
@@ -79,6 +85,14 @@ export default async function SupplierDetailPage({
           />
         </CardBody>
       </Card>
+
+      {limit.available ? (
+        <SupplierLimitCard
+          supplierId={supplier.id}
+          limitCents={limit.limitCents}
+          balanceCents={balanceCents}
+        />
+      ) : null}
 
       <Card>
         <CardHeader title="History" />

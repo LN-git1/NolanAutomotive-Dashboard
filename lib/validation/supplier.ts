@@ -35,3 +35,12 @@ export const supplierPaymentAmountSchema = decimalString({
 
 export const supplierEntryIdSchema = z.object({ entryId: uuidString });
 export const supplierIdSchema = z.object({ supplierId: uuidString });
+
+/**
+ * How much the garage is willing to owe one supplier, in euro. 7 integer digits
+ * keeps the figure in cents inside a 32-bit integer column with room to spare.
+ */
+export const supplierLimitSchema = decimalString({ label: 'Limit', maxIntegerDigits: 7 }).refine(
+  (value) => Number(value) > 0,
+  'The limit must be more than zero',
+);

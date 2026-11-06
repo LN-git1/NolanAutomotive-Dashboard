@@ -6,7 +6,8 @@ import { revalidatePath } from 'next/cache';
 import { requireSession } from '@/lib/auth/require-session';
 import { db } from '@/lib/db';
 import { applySupplierPayment } from '@/lib/db/queries/supplier-ledger';
-import { supplierLedger, suppliers } from '@/lib/db/schema';
+import { supplierLedger, supplierLimits, suppliers } from '@/lib/db/schema';
+import { runAfterResponse } from '@/lib/push/after';
 import { toCents } from '@/lib/money';
 import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
 import { removeObject, removeObjects } from '@/lib/storage/signedUrl';
@@ -15,6 +16,7 @@ import {
   supplierEntryIdSchema,
   supplierIdSchema,
   supplierInputSchema,
+  supplierLimitSchema,
   supplierPaymentAmountSchema,
 } from '@/lib/validation/supplier';
 
@@ -30,6 +32,19 @@ function revalidateSupplier(supplierId: string) {
   revalidatePath(`/suppliers/${supplierId}`);
   revalidatePath('/suppliers');
   revalidatePath('/');
+}
+
+/**
+ * After anything that can move a supplier's balance, check it against that
+ * supplier's limit and send the alert that is due. Runs after the response has
+ * gone, swallows every failure, and loads the push code only when it runs, so
+ * it cannot slow down or break recording a purchase or a payment.
+ */
+function checkSupplierLimitAfterResponse(supplierId: string) {
+  runAfterResponse(async () => {
+    const { evaluateSupplierLimit } = await import('@/lib/push/supplier-limits');
+    await evaluateSupplierLimit(supplierId);
+  });
 }
 
 export async function createSupplier(formData: FormData): Promise<ActionResult> {
@@ -72,6 +87,7 @@ export async function addSupplierCharge(formData: FormData): Promise<ActionResul
   }
 
   revalidateSupplier(supplierId);
+  checkSupplierLimitAfterResponse(supplierId);
   return { ok: true };
 }
 
@@ -110,6 +126,7 @@ export async function recordSupplierPayment(
   if (!result.ok) return result;
 
   revalidateSupplier(supplierId);
+  checkSupplierLimitAfterResponse(supplierId);
   return { ok: true };
 }
 
@@ -163,7 +180,10 @@ export async function deleteSupplierEntry(entryId: string): Promise<ActionResult
       .returning({ supplierId: supplierLedger.supplierId });
 
     const supplierId = rows[0]?.supplierId;
-    if (supplierId) revalidatePath(`/suppliers/${supplierId}`);
+    if (supplierId) {
+      revalidatePath(`/suppliers/${supplierId}`);
+      checkSupplierLimitAfterResponse(supplierId);
+    }
   } catch (error) {
     return {
       ok: false,
@@ -224,3 +244,67 @@ export async function deleteSupplier(supplierId: string): Promise<ActionResult> 
   return { ok: true };
 }
 
+
+/**
+ * Set how much the garage is willing to owe this supplier. Alerts then fire at
+ * 80% of it and again at the limit itself.
+ *
+ * Saving always resets the alert markers: a new limit is a new line, so if the
+ * balance is already past it the owner hears about it straight away instead of
+ * silently inheriting "already told" from the old limit.
+ */
+export async function setSupplierLimit(supplierId: string, limit: string): Promise<ActionResult> {
+  await requireSession();
+
+  const parsedId = supplierIdSchema.safeParse({ supplierId });
+  if (!parsedId.success) return { ok: false, error: 'Invalid supplier' };
+
+  const parsed = supplierLimitSchema.safeParse(limit);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid limit' };
+  }
+
+  const limitCents = toCents(parsed.data);
+
+  try {
+    const [supplier] = await db
+      .select({ id: suppliers.id })
+      .from(suppliers)
+      .where(eq(suppliers.id, supplierId))
+      .limit(1);
+    if (!supplier) return { ok: false, error: 'That supplier no longer exists.' };
+
+    await db
+      .insert(supplierLimits)
+      .values({ supplierId, limitCents })
+      .onConflictDoUpdate({
+        target: supplierLimits.supplierId,
+        set: { limitCents, alert80At: null, alert100At: null, updatedAt: new Date() },
+      });
+  } catch (error) {
+    console.error('[action:setSupplierLimit] failed', error);
+    return { ok: false, error: 'Could not save the limit just now — please try again.' };
+  }
+
+  revalidatePath(`/suppliers/${supplierId}`);
+  checkSupplierLimitAfterResponse(supplierId);
+  return { ok: true };
+}
+
+/** Stop alerting for this supplier. */
+export async function clearSupplierLimit(supplierId: string): Promise<ActionResult> {
+  await requireSession();
+
+  const parsedId = supplierIdSchema.safeParse({ supplierId });
+  if (!parsedId.success) return { ok: false, error: 'Invalid supplier' };
+
+  try {
+    await db.delete(supplierLimits).where(eq(supplierLimits.supplierId, supplierId));
+  } catch (error) {
+    console.error('[action:clearSupplierLimit] failed', error);
+    return { ok: false, error: 'Could not remove the limit just now — please try again.' };
+  }
+
+  revalidatePath(`/suppliers/${supplierId}`);
+  return { ok: true };
+}

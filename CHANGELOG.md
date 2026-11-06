@@ -1,5 +1,23 @@
 # Changelog
 
+## 06/11/2026 @ 05:10:54 IST — "claude-sonnet-5-5"
+
+**Project completion: 25.00%**
+
+Basis: unchanged, 1 of 4 phases of the "iPhone/iPad-native feel" plan is shipped. Phase 3 (web push) is in progress on local branch `test/web-push`: this is slice 3 of 5 (supplier balance alerts). Still to build: system and new-build alerts, and the missing-receipts view. Not deployed, not pushed.
+
+**Goal:** Let the owner set how much the garage is willing to owe each supplier, and be notified at 80% of it and again when it is reached.
+
+### Added — per-supplier balance limit and its two alerts
+
+**What it does.** Each supplier's page has a "Balance limit" card (existing card, field, input and button components only): type a euro figure, Set limit; Save limit to change it; Remove limit to stop alerts. Once a limit exists, a notification goes out when the bill reaches 80% of it and a second one when it reaches the limit, to every device with "Supplier balances" on. The check runs after anything that can move a balance: a purchase, a payment, an entry deleted, and the limit itself being changed (a new limit resets the alert markers, so a bill already past a newly entered limit is reported straight away rather than staying silent). Each alert fires once, then stays quiet while the bill sits in the same band, and fires again after the bill has been paid down below its line and climbs back. Jumping straight from comfortable to over the limit sends only the limit alert, not both. Per supplier, as asked: each supplier has its own limit and its own alerts. The 80% line is fixed (not adjustable).
+
+**Why it is built this way.** The limit and the "already told you" markers live in the new `supplier_limits` table keyed by supplier, not as columns on `suppliers`, so shipping the code before the database change cannot break the supplier screens that work today: the supplier page reads the limit through `getSupplierLimit`, which answers "unavailable" instead of throwing when the table cannot be read, and the card is then simply not shown. Each alert is claimed with a conditional `UPDATE ... WHERE alert_80_at IS NULL RETURNING`, so two purchases saved at the same moment send one alert, not two. The checks go through `runAfterResponse` and load the push code lazily, so they cannot slow down or fail a purchase or payment. The threshold maths uses integers (`balance * 5 >= limit * 4` for 80%), so no rounding can tip it either way.
+
+**Verification.** 6 tests of the threshold boundaries (79,999 / 80,000 / 99,999 / 100,000 cents, credit, no limit, awkward limits). 9 real-database tests of the once-only behaviour (silent without a limit and under 80%; the 80% alert once however often it is checked; then the limit alert once as a second notification; a straight jump past the limit sends only that one; fires again after pay-down and re-climb; drop from the limit to the 80% band then back fires again; three checks at the same instant send exactly one alert; the page lookup reports "unavailable" when the table cannot be read). 10 real-database tests of the actual actions (a purchase, a payment and an entry deletion each trigger the check; a failed payment does not; a throwing check never fails a purchase or payment; a limit is stored in cents and resets the markers; zero, negative, text, empty, 8-digit and "1e5" limits are refused and change nothing; an unknown supplier is refused; remove deletes; deleting a supplier removes its limit). Driven through the browser as a user would on an iPhone user agent: an invalid figure shows an error, 1000 saves and the card reads "Limit €1,000.00. The bill is at 85% of it", the value survives a reload, Remove limit resets it, 0 console errors. Typecheck clean, lint 0 errors (same 2 warnings). Full suite with the database tests switched on: 388 of 388 pass.
+
+**Files touched:** `lib/push/supplier-level.ts`, `lib/push/supplier-limits.ts`, `lib/actions/suppliers.ts` (limit check hooks and the two new actions), `lib/validation/supplier.ts`, `components/suppliers/limit-card.tsx`, `app/(dashboard)/suppliers/[supplierId]/page.tsx`, `tests/supplier-limit.test.ts`, `tests/supplier-limit-actions-db.test.ts`, `CHANGELOG.md`.
+
 ## 06/11/2026 @ 04:59:35 IST — "claude-sonnet-5-5"
 
 **Project completion: 25.00%**
