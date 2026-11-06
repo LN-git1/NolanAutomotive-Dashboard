@@ -15,6 +15,8 @@ import {
   type VehicleMatch,
 } from '@/lib/db/queries/vehicles';
 import { jobAssignees, jobAttachments, jobs } from '@/lib/db/schema';
+import { runAfterResponse } from '@/lib/push/after';
+import { newlyAdded } from '@/lib/push/diff';
 import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
 import { removeObject } from '@/lib/storage/signedUrl';
 import { jobAssigneeIdsSchema } from '@/lib/validation/assignee';
@@ -61,6 +63,18 @@ async function setJobAssignees(
   if (ids.length > 0) {
     await tx.insert(jobAssignees).values(ids.map((assigneeId) => ({ jobId, assigneeId })));
   }
+}
+
+/**
+ * Tell the devices that want to know that people were added to a job. Runs after
+ * the response has gone, swallows every failure, and loads the push code only
+ * when there is something to send, so it can never slow down or break a save.
+ */
+function notifyAssignedAfterResponse(jobId: string, addedIds: string[]) {
+  runAfterResponse(async () => {
+    const { notifyAssigned } = await import('@/lib/push/assigned');
+    await notifyAssigned(jobId, addedIds);
+  });
 }
 
 /**
@@ -124,6 +138,12 @@ export async function createJob(formData: FormData): Promise<ActionResult> {
 
     revalidatePath('/jobs');
     revalidatePath('/');
+
+    // Everyone ticked on a new job has just been assigned to it. Skipped for a
+    // repeated submission, which returns the job that already exists.
+    if (!('duplicate' in createdJob) && assigneeIds && assigneeIds.length > 0) {
+      notifyAssignedAfterResponse(createdJob.jobId, assigneeIds);
+    }
     return { ok: true, ...createdJob };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Could not create job' };
@@ -150,16 +170,30 @@ export async function updateJob(jobId: string, formData: FormData): Promise<Acti
   if (assigneeIds && 'error' in assigneeIds) return { ok: false, error: assigneeIds.error };
 
   return guardedWrite('updateJob', async () => {
+    let added: string[] = [];
     const updated = await db.transaction(async (tx) => {
       const rows = await tx
         .update(jobs)
         .set({ ...parsed.data, updatedAt: new Date() })
         .where(and(eq(jobs.id, jobId), isNull(jobs.deletedAt)))
         .returning({ id: jobs.id });
-      if (rows.length > 0 && assigneeIds) await setJobAssignees(tx, jobId, assigneeIds);
+      if (rows.length > 0 && assigneeIds) {
+        // Who was on the job before this save decides who has just been added.
+        const before = await tx
+          .select({ id: jobAssignees.assigneeId })
+          .from(jobAssignees)
+          .where(eq(jobAssignees.jobId, jobId));
+        added = newlyAdded(
+          before.map((row) => row.id),
+          assigneeIds,
+        );
+        await setJobAssignees(tx, jobId, assigneeIds);
+      }
       return rows;
     });
     if (updated.length === 0) return { ok: false, error: 'This job no longer exists.' };
+
+    if (added.length > 0) notifyAssignedAfterResponse(jobId, added);
 
     revalidatePath('/jobs');
     revalidatePath(`/jobs/${jobId}`);

@@ -1,5 +1,23 @@
 # Changelog
 
+## 06/11/2026 @ 04:59:35 IST — "claude-sonnet-5-5"
+
+**Project completion: 25.00%**
+
+Basis: unchanged, 1 of 4 phases of the "iPhone/iPad-native feel" plan is shipped. Phase 3 (web push) is in progress on local branch `test/web-push`: this is slice 2 of 5 (job assigned). Still to build: supplier balance alerts, system and new-build alerts, the missing-receipts view. Not deployed, not pushed.
+
+**Goal:** Notify "Job NA-0042 was assigned to Mick" when someone is added to a job.
+
+### Added — "Job assigned" notification, in the live save path without being able to break it
+
+**What it does.** `createJob` notifies about everyone ticked on a brand-new job; `updateJob` compares who was on the job before the save with who is on it after, inside the same transaction as the write, and notifies only about people newly added. Re-saving without changing the team sends nothing, removing someone sends nothing, and an edit that does not carry the people field (an old page) leaves the team and the notifications alone. A repeated submission of the same form (double tap) returns the existing job and does not notify. It goes to every device with "Job assigned" on, the phone that made the change included, because there is one owner login and the app cannot tell whose phone is whose.
+
+**Why it cannot break a save.** The hook is `runAfterResponse`: it runs after the response has gone out, catches every failure, and loads the push code (`import()` inside the task) only when there is something to send, so a page that merely contains the job actions does not load the push library. Only two tiny files are imported by the action at load: `lib/push/after.ts` and `lib/push/diff.ts`. Missing keys, a missing table or a push-service outage therefore cannot fail or slow creating or editing a job.
+
+**Verification.** Typecheck clean. 11 unit tests (who counts as newly added, the after-response guard swallows a throwing task, a failing lazy import and a synchronous throw, the message names one, two or three people in plain English, nothing is sent when nobody was added or the job cannot be found). 7 tests against a real Postgres through the real `createJob` and `updateJob`: a new job notifies all ticked people, nobody ticked notifies nobody, an edit notifies only the new person and the team really is saved, an unchanged save and a removal send nothing, a stale edit without the people field changes nothing, and a notification that throws does not fail the create or the edit (both still succeed, both rows saved). With the 62 database tests switched on against that database, 361 of 362 tests pass; the one failure is the `job-status-guard` cold-start timeout described in the previous entry (passes alone in about 3 seconds, on this branch and on unchanged main).
+
+**Files touched:** `lib/actions/jobs.ts` (35 added lines: two imports, one helper, the create and update hooks), `lib/push/assigned.ts`, `lib/push/diff.ts`, `tests/push-assigned.test.ts`, `tests/job-assignment-notify-db.test.ts`, `CHANGELOG.md`.
+
 ## 06/11/2026 @ 04:50:12 IST — "claude-sonnet-5-5"
 
 **Project completion: 25.00%**
