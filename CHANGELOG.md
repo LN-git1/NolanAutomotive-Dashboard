@@ -1,5 +1,27 @@
 # Changelog
 
+## 06/11/2026 @ 04:50:12 IST — "claude-sonnet-5-5"
+
+**Project completion: 25.00%**
+
+Basis: 1 of 4 phases of the "iPhone/iPad-native feel" plan is shipped. Phase 3 (web push notifications) is in progress on local branch `test/web-push`: this is slice 1 of 5 (foundation and the 9am summary). Slices still to build: job assigned, supplier balance alerts, system and new-build alerts, and the missing-receipts view. Phases 2 and 4 are untouched. NOTHING in this entry is deployed or pushed, and it cannot reach the live site until the owner (a) adds the push keys to Vercel, (b) applies migration 0018, and (c) approves a push.
+
+**Goal:** Let a phone or computer receive a notification at 9am every day, with a Settings card to switch it on, built so it cannot break anything that exists today.
+
+### Added — notification foundation (`lib/push/`, `app/api/push/*`)
+
+**Design rules, and why.** (1) Three new tables, no change to any existing table: every existing table is read with a plain `select()` that lists all columns, so adding a column to a live table before or after the matching code ships would break unrelated screens. (2) Notifications never run inside a save: they go through `runAfterResponse` and never throw, so missing keys, a missing table or a push-service outage cannot fail creating a job. (3) Each notification is claimed in `push_claims` before sending, so two schedulers or two taps cannot send it twice. (4) No customer details in any message: job numbers, counts and supplier names only (tested). (5) A device is a subscription, not a person, because there is one owner login; each device chooses its own topics.
+
+**What was built.** Tables `push_subscriptions`, `push_claims`, `supplier_limits` (the last is for slice 3), with row-level security on so Supabase's public REST API cannot read push keys. Routes: `GET /api/push/key`, `POST/DELETE /api/push/subscribe`, `POST /api/push/status`, `POST /api/push/test` (all behind the login), and `POST /api/push/scheduled?job=morning` which answers 404 without the scheduler secret (timing-safe check) and is the only path `proxy.ts` leaves outside the login gate. Only real push services are accepted as endpoints (Apple, Google, Mozilla, Microsoft, https only), because sending means our server calls that address. Service worker `public/sw.js` gained `push` and `notificationclick`: a notification is shown on every push even if the message is empty or unreadable (iOS cancels subscriptions that receive silent pushes), and a tap only ever opens a page on this site. Settings has a Notifications card built from existing card, button, alert and checkbox styles; it asks the server nothing while Settings renders, so Settings cannot break if notifications are not set up; it handles not-on-the-Home-Screen, blocked, unsupported and not-set-up states. Signing out removes the device from the list first (capped at 1.5 seconds, never blocks sign-out).
+
+**The 9am summary.** Every day of the week, from 9:00 to before midday Europe/Dublin time (a window, because GitHub can start a run late). It always sends: on a day with nothing booked it says "Nothing booked in today." (owner's choice), and it adds "N jobs are overdue" when relevant. GitHub runs at 08:05 and 09:05 UTC (summer and winter) plus two later safety runs; the once-a-day claim makes the extras do nothing. If the keys are not set up the claim is handed back so a later run can still send.
+
+**Verification.** 32 new tests (endpoint allowlist, the Dublin window in winter and summer, Saturday and Sunday, no customer data in any message, secret handling, service worker behaviour, the scheduler route: 404, window, once per day, claim handed back). Migration 0018 applied to a throwaway Postgres through `drizzle-kit migrate`, then run a second time by hand (a harmless "already exists, skipping"), and row-level security confirmed on all three tables. End to end against that database: 21 of 21 checks (every push route refuses without a session, the scheduler answers 404 without the secret, a real subscription saved, updated, read back and removed, "not set up" is a 503 not a crash, Settings renders). The generated VAPID keys produce a valid encrypted aes128gcm request with the right signature, built offline. Typecheck clean, lint 0 errors (same 2 warnings), 282 tests pass (62 skipped need a test database). The `job-status-guard` test is intermittently slow on a cold full-suite run (passes 3 of 3 in about 3 seconds alone, on this branch and on unchanged main); not caused by this work.
+
+**Not verified here.** An actual notification reaching a phone: iOS only allows it from the installed app on the live HTTPS site, so the first real test is the owner switching it on in Settings and tapping "Send a test" after deploy. This machine's own check of the Dublin window uses fixed dates, not a live scheduler run.
+
+**Files touched:** `lib/db/schema.ts`, `drizzle/migrations/0018_add_web_push.sql`, `drizzle/migrations/meta/_journal.json`, `lib/push/*` (11 files), `app/api/push/*` (5 routes), `lib/client/push.ts`, `components/settings/notifications-card.tsx`, `app/(dashboard)/settings/page.tsx`, `components/layout/logout-button.tsx`, `public/sw.js`, `proxy.ts`, `.github/workflows/push-morning.yml`, `package.json`, `pnpm-lock.yaml`, `tests/push-*.test.ts` (3 files), `CHANGELOG.md`.
+
 ## 06/11/2026 @ 03:59:29 IST — "claude-opus-5-5"
 
 **Project completion: 25.00%**

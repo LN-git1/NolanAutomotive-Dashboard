@@ -1,0 +1,35 @@
+name: Morning summary notification
+
+# Sends the 9am "jobs booked in today" notification, every day of the week.
+#
+# GitHub schedules in UTC and Ireland changes clocks, so 9am Dublin is 09:00 UTC
+# in winter and 08:00 UTC in summer. Rather than guess the season, this runs at
+# both times, plus two later runs as a safety net for GitHub starting a run late.
+# That is safe: the endpoint only sends from 9am to midday Dublin time, and it
+# claims "today" before sending, so every run after the first one finds the day
+# already done and does nothing.
+#
+# Scheduled workflows only run from the default branch. GitHub also pauses them
+# after 60 days without repository activity — push anything to re-enable.
+on:
+  schedule:
+    - cron: '5 8 * * *'
+    - cron: '5 9 * * *'
+    - cron: '35 9 * * *'
+    - cron: '35 10 * * *'
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger morning summary
+        env:
+          DIGEST_SECRET: ${{ secrets.DIGEST_SECRET }}
+        run: |
+          curl --fail-with-body -sS -m 90 \
+            --retry 3 --retry-delay 20 --retry-all-errors \
+            -X POST \
+            -H "Authorization: Bearer $DIGEST_SECRET" \
+            "https://dashboard.nolanautomotive.ie/api/push/scheduled?job=morning"

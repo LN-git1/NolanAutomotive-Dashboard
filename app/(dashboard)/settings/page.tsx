@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 
 import { AssigneesCard } from '@/components/settings/assignees-card';
 import { FactoryReset } from '@/components/settings/factory-reset';
+import { NotificationsCard } from '@/components/settings/notifications-card';
 import { SettingsForm } from '@/components/settings/settings-form';
 import { TimeOffCard } from '@/components/settings/time-off';
 import { Card, CardBody, CardHeader } from '@/components/ui';
@@ -51,6 +52,8 @@ export default async function SettingsPage() {
       </div>
 
       <SettingsForm settings={settings} />
+
+      <NotificationsCard />
 
       <Card>
         <CardHeader

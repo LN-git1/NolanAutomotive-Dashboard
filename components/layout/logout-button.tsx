@@ -6,6 +6,7 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui';
 import { useToast } from '@/components/providers/toast-provider';
+import { unsubscribeThisDevice } from '@/lib/client/push';
 
 export function LogoutButton() {
   const router = useRouter();
@@ -14,6 +15,10 @@ export function LogoutButton() {
 
   async function handleLogout() {
     setPending(true);
+    // First, while the session is still valid: stop this device receiving the
+    // garage's notifications. Capped at a second and a half and never throws,
+    // so it can only ever delay signing out by that much.
+    await unsubscribeThisDevice();
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch {

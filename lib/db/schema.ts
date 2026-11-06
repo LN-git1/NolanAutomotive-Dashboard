@@ -519,3 +519,60 @@ export type Assignee = typeof assignees.$inferSelect;
 export type Expense = typeof expenses.$inferSelect;
 export type NewExpense = typeof expenses.$inferInsert;
 export type ExpenseCategory = (typeof expenseCategoryEnum.enumValues)[number];
+
+/**
+ * Phones (and other browsers) that have switched notifications on. There is one
+ * owner login, so a subscription is a device, not a person: nothing here says
+ * who is holding the phone. `topics` is that device's own on/off list, so one
+ * phone can get system alerts while another only gets the morning summary.
+ *
+ * New tables only, deliberately: every existing table is read with a plain
+ * `select()` that lists every column, so adding a column to a live table before
+ * the code that expects it is deployed (or the other way round) would break
+ * screens that have nothing to do with notifications.
+ */
+export const pushSubscriptions = pgTable('push_subscriptions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** The push service's address for this device. Unique: one row per device. */
+  endpoint: text('endpoint').notNull().unique(),
+  p256dh: text('p256dh').notNull(),
+  auth: text('auth').notNull(),
+  topics: text('topics')
+    .array()
+    .notNull()
+    .default(sql`ARRAY[]::text[]`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  /** Bumped each time the app opens and re-confirms the subscription. */
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * "This notification has been sent" markers. Inserting the key is the claim:
+ * the one writer whose insert succeeds sends, the other does nothing, so two
+ * schedulers (or two taps) can never send the same notification twice. Same
+ * idea as `digest_runs`.
+ */
+export const pushClaims = pgTable('push_claims', {
+  key: text('key').primaryKey(),
+  claimedAt: timestamp('claimed_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * How much the garage is willing to owe one supplier, and where the account
+ * stands against it. A separate table keyed by supplier rather than columns on
+ * `suppliers`, for the reason on `pushSubscriptions`. No row means no limit and
+ * no alerts. `alert80At` / `alert100At` are set when that alert is sent and
+ * cleared when the balance falls back below the line, so each can fire again.
+ */
+export const supplierLimits = pgTable('supplier_limits', {
+  supplierId: uuid('supplier_id')
+    .primaryKey()
+    .references(() => suppliers.id, { onDelete: 'cascade' }),
+  limitCents: integer('limit_cents').notNull(),
+  alert80At: timestamp('alert_80_at', { withTimezone: true }),
+  alert100At: timestamp('alert_100_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+export type SupplierLimit = typeof supplierLimits.$inferSelect;

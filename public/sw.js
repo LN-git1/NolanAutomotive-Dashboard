@@ -144,3 +144,70 @@ self.addEventListener('message', (event) => {
     );
   }
 });
+
+/**
+ * Push notifications.
+ *
+ * Safari on iPhone is strict: a push that does not end in a visible
+ * notification counts against the site, and after a few such pushes iOS cancels
+ * the subscription. So `showNotification` is called on EVERY push, inside
+ * `waitUntil`, even when the message is empty or cannot be read: a plain
+ * fallback is better than silence.
+ *
+ * The message carries a title, a body, a tag and a same-origin path. It never
+ * carries customer details (see `lib/push/payload.ts`).
+ */
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = {};
+  }
+
+  const title = typeof data.title === 'string' && data.title ? data.title : 'Nolan Automotive';
+  const body = typeof data.body === 'string' ? data.body : 'Open the dashboard for an update.';
+  const url = typeof data.url === 'string' ? data.url : '/';
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      // The same tag replaces the earlier notification instead of stacking.
+      tag: typeof data.tag === 'string' && data.tag ? data.tag : undefined,
+      data: { url },
+    }),
+  );
+});
+
+/** Only ever open a path on this site, whatever a message asks for. */
+function safeTarget(value) {
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return '/';
+  return value;
+}
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(safeTarget(event.notification.data && event.notification.data.url), self.location.origin).href;
+
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const client of windows) {
+        if (new URL(client.url).origin === self.location.origin && 'focus' in client) {
+          await client.focus();
+          if ('navigate' in client) {
+            try {
+              await client.navigate(target);
+            } catch {
+              // A client that cannot navigate is still focused: good enough.
+            }
+          }
+          return;
+        }
+      }
+      await self.clients.openWindow(target);
+    })(),
+  );
+});
