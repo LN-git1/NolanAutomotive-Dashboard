@@ -92,6 +92,17 @@ describe('service worker: tapping a notification', () => {
     expect(worker.opened).toEqual(['https://dashboard.test/schedule']);
   });
 
+  it('keeps the path, query and fragment of a page on this site, written either way', async () => {
+    for (const [given, expected] of [
+      ['/jobs?status=active#top', 'https://dashboard.test/jobs?status=active#top'],
+      ['https://dashboard.test/schedule', 'https://dashboard.test/schedule'],
+    ]) {
+      const worker = loadWorker();
+      await fire(worker.handlers.notificationclick, click(given));
+      expect(worker.opened, given).toEqual([expected]);
+    }
+  });
+
   it('reuses an open window of the app instead of opening a second one', async () => {
     const worker = loadWorker([{ url: 'https://dashboard.test/jobs' }]);
     await fire(worker.handlers.notificationclick, click('/schedule'));
@@ -101,7 +112,21 @@ describe('service worker: tapping a notification', () => {
   });
 
   it('only ever opens a page on this site, whatever the message asks for', async () => {
-    for (const url of ['https://evil.example.com/x', '//evil.example.com/x', 'javascript:alert(1)', '', 5, undefined]) {
+    for (const url of [
+      'https://evil.example.com/x',
+      '//evil.example.com/x',
+      'javascript:alert(1)',
+      '/\t/evil.example.com/x', // the URL parser strips the tab, leaving //evil.example.com/x
+      '/\n/evil.example.com/x',
+      '/\\evil.example.com/x', // a backslash is a slash to the URL parser
+      '\\\\evil.example.com/x',
+      'data:text/html,<script>alert(1)</script>',
+      'https://dashboard.test.evil.example.com/x',
+      'https://dashboard.test@evil.example.com/x',
+      '',
+      5,
+      undefined,
+    ]) {
       const worker = loadWorker();
       await fire(worker.handlers.notificationclick, click(url));
       expect(worker.opened, String(url)).toEqual(['https://dashboard.test/']);

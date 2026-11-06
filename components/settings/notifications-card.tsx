@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Alert, Button, Card, CardBody, CardHeader } from '@/components/ui';
 import {
@@ -8,6 +8,7 @@ import {
   isInstalledApp,
   isIosDevice,
   pushIsSupported,
+  rememberTopics,
   urlBase64ToUint8Array,
 } from '@/lib/client/push';
 import { PUSH_TOPICS, PUSH_TOPIC_INFO, type PushTopic } from '@/lib/push/topics';
@@ -41,6 +42,9 @@ export function NotificationsCard() {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'danger'; text: string } | null>(null);
+  // Fetched ahead of the tap, so the only thing between Allow and subscribing is the prompt.
+  const keyRef = useRef<string | null>(null);
+  const registrationRef = useRef<ServiceWorkerRegistration | null>(null);
 
   const load = useCallback(async () => {
     if (!pushIsSupported()) {
@@ -62,9 +66,17 @@ export function NotificationsCard() {
       setState({ kind: 'unavailable' });
       return;
     }
+    registrationRef.current = registration;
 
     const subscription = await registration.pushManager.getSubscription();
     if (!subscription) {
+      // About to offer the switch: have the key ready for the tap.
+      try {
+        const keyResponse = await fetch('/api/push/key');
+        if (keyResponse.ok) keyRef.current = ((await keyResponse.json()) as { publicKey: string }).publicKey;
+      } catch {
+        // The tap falls back to fetching it.
+      }
       setState({ kind: 'off' });
       return;
     }
@@ -99,25 +111,31 @@ export function NotificationsCard() {
         return;
       }
 
-      const keyResponse = await fetch('/api/push/key');
-      if (!keyResponse.ok) {
-        setState({ kind: 'unavailable' });
-        return;
+      // Normally both are already in hand (fetched when the card loaded), so
+      // subscribing follows the permission prompt with nothing in between. The
+      // fetches below are only a fallback for a card that was opened very fast.
+      let publicKey = keyRef.current;
+      if (!publicKey) {
+        const keyResponse = await fetch('/api/push/key');
+        if (!keyResponse.ok) {
+          setState({ kind: 'unavailable' });
+          return;
+        }
+        publicKey = ((await keyResponse.json()) as { publicKey: string }).publicKey;
       }
-      const { publicKey } = (await keyResponse.json()) as { publicKey: string };
 
-      const registration = await getRegistration();
+      const registration = registrationRef.current ?? (await getRegistration());
       if (!registration) {
         setState({ kind: 'unavailable' });
         return;
       }
 
-      const subscription =
-        (await registration.pushManager.getSubscription()) ??
-        (await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
-        }));
+      // subscribe() hands back the existing subscription if this device already
+      // has one for the same key, so no separate lookup is needed first.
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
 
       const json = subscription.toJSON();
       const topics = [...PUSH_TOPICS];
@@ -128,6 +146,7 @@ export function NotificationsCard() {
       });
       if (!response.ok) throw new Error('save failed');
 
+      rememberTopics(topics);
       setState({ kind: 'on', topics });
       setMessage({ tone: 'ok', text: 'Notifications are on for this device.' });
     } catch {
@@ -172,6 +191,7 @@ export function NotificationsCard() {
         topics,
       });
       if (!response.ok) throw new Error('save failed');
+      rememberTopics(topics);
     } catch {
       setState(previous);
       setMessage({ tone: 'danger', text: 'Could not save that change. Try again.' });

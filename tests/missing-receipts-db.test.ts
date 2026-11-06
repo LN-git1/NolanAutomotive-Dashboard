@@ -145,6 +145,30 @@ describe.skipIf(!TEST_DATABASE_URL)('missing receipts (real database)', () => {
     expect((await actions.attachSupplierReceipt('not-a-uuid', `suppliers/${supplierA}/x.pdf`)).ok).toBe(false);
   });
 
+  it('a new purchase can only be added with a receipt that is this supplier’s own file', async () => {
+    const form = (path: string) => {
+      const f = new FormData();
+      f.set('supplierId', supplierA);
+      f.set('amount', '10.00');
+      f.set('entryDate', '2031-04-20');
+      f.set('reference', 'PATH-TEST');
+      f.set('attachmentStoragePath', path);
+      return f;
+    };
+
+    for (const bad of [`jobs/${randomUUID()}/photo.jpg`, `suppliers/${supplierB}/x.pdf`, `suppliers/${supplierA}/../${supplierB}/x.pdf`, `expenses/${randomUUID()}/r.pdf`]) {
+      const result = await actions.addSupplierCharge(form(bad));
+      expect(result.ok, bad).toBe(false);
+    }
+    const none = await db.select().from(s.supplierLedger).where(eq(s.supplierLedger.reference, 'PATH-TEST'));
+    expect(none).toHaveLength(0);
+
+    const own = `suppliers/${supplierA}/${randomUUID()}-invoice..pdf`;
+    expect((await actions.addSupplierCharge(form(own))).ok).toBe(true);
+    const [saved] = await db.select().from(s.supplierLedger).where(eq(s.supplierLedger.reference, 'PATH-TEST'));
+    expect(saved.attachmentStoragePath).toBe(own);
+  });
+
   it('never replaces a receipt that is already there', async () => {
     const result = await actions.attachSupplierReceipt(ids.hasReceipt, `suppliers/${supplierA}/replacement.pdf`);
     expect(result.ok).toBe(false);

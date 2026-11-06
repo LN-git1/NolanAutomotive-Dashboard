@@ -9,6 +9,7 @@ import { db } from '@/lib/db';
 import { applySupplierPayment } from '@/lib/db/queries/supplier-ledger';
 import { supplierLedger, supplierLimits, suppliers } from '@/lib/db/schema';
 import { runAfterResponse } from '@/lib/push/after';
+import { isOwnSupplierReceiptPath } from '@/lib/storage/receipt-path';
 import { toCents } from '@/lib/money';
 import { ATTACHMENTS_BUCKET } from '@/lib/storage/r2';
 import { removeObject, removeObjects } from '@/lib/storage/signedUrl';
@@ -77,6 +78,12 @@ export async function addSupplierCharge(formData: FormData): Promise<ActionResul
   }
 
   const { supplierId, ...charge } = parsed.data;
+
+  // The receipt path arrives from the browser. It is later used to sign a download
+  // and to delete the file, so it must be this supplier's own and nobody else's.
+  if (charge.attachmentStoragePath && !isOwnSupplierReceiptPath(charge.attachmentStoragePath, supplierId)) {
+    return { ok: false, error: 'Invalid receipt path' };
+  }
 
   try {
     await db.insert(supplierLedger).values({ supplierId, kind: 'charge', ...charge });
@@ -342,7 +349,7 @@ export async function attachSupplierReceipt(entryId: string, storagePath: string
     if (!entry) return { ok: false, error: 'That purchase no longer exists.' };
     if (entry.kind !== 'charge') return { ok: false, error: 'Only a purchase can have a receipt.' };
     if (entry.attachmentStoragePath) return { ok: false, error: 'This purchase already has a receipt.' };
-    if (!storagePath.startsWith(`suppliers/${entry.supplierId}/`) || storagePath.includes('..')) {
+    if (!isOwnSupplierReceiptPath(storagePath, entry.supplierId)) {
       return { ok: false, error: 'Invalid receipt path' };
     }
 

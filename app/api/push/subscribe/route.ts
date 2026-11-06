@@ -2,6 +2,7 @@ import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { requireApiSession } from '@/lib/auth/require-session';
+import { readSmallJson } from '@/lib/push/body';
 import { db } from '@/lib/db';
 import { pushSubscriptions } from '@/lib/db/schema';
 import { isAllowedPushEndpoint } from '@/lib/push/endpoints';
@@ -19,7 +20,7 @@ const subscribeSchema = z.object({
     p256dh: z.string().min(1).max(256),
     auth: z.string().min(1).max(64),
   }),
-  topics: z.array(z.string()).max(20),
+  topics: z.array(z.string().max(30)).max(20),
 });
 
 const unsubscribeSchema = z.object({ endpoint: z.string().max(2048) });
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
   const denied = await requireApiSession();
   if (denied) return denied;
 
-  const parsed = subscribeSchema.safeParse(await request.json().catch(() => null));
+  const parsed = subscribeSchema.safeParse(await readSmallJson(request));
   if (!parsed.success) {
     return Response.json({ error: 'Invalid subscription' }, { status: 400 });
   }
@@ -74,7 +75,7 @@ export async function DELETE(request: Request) {
   const denied = await requireApiSession();
   if (denied) return denied;
 
-  const parsed = unsubscribeSchema.safeParse(await request.json().catch(() => null));
+  const parsed = unsubscribeSchema.safeParse(await readSmallJson(request));
   if (!parsed.success) {
     return Response.json({ error: 'Invalid request' }, { status: 400 });
   }

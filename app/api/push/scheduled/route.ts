@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-import { claimPush, releasePush } from '@/lib/push/claims';
+import { readSmallJson } from '@/lib/push/body';
+import { claimPush, prunePushClaims, releasePush } from '@/lib/push/claims';
 import { dublinClock, isMorningWindow } from '@/lib/push/dublin';
 import { collectMorningFacts } from '@/lib/push/morning';
 import { buildPayload, morningPayload } from '@/lib/push/payload';
@@ -22,8 +23,7 @@ export const maxDuration = 60;
  *   POST ?job=deploy             the result of the checks run after a new version
  *                                goes live (.github/workflows/deploy-check.yml)
  *
- * It answers 404 to anything without the secret, so the path is not even
- * confirmed to exist. The same secret as the activity email is used on purpose:
+ * It answers 404 to a request without the secret, before reading anything else. The same secret as the activity email is used on purpose:
  * it already lives in both GitHub and Vercel, so there is one fewer thing to set
  * up, and both endpoints are "a scheduler may call me".
  */
@@ -57,7 +57,17 @@ export async function POST(request: Request) {
   }
 
   const key = `morning:${clock.date}`;
-  if (!(await claimPush(key))) {
+
+  let won: boolean;
+  try {
+    won = await claimPush(key);
+  } catch {
+    // The notification tables are not there yet (the code was deployed before
+    // the database change) or the database is struggling. Say so plainly rather
+    // than failing with a bare 500, so the scheduler's log explains itself.
+    return Response.json({ sent: false, error: 'notification tables are not ready' }, { status: 503 });
+  }
+  if (!won) {
     return Response.json({ sent: false, skipped: 'already sent today', date: clock.date });
   }
 
@@ -69,6 +79,8 @@ export async function POST(request: Request) {
   if (!result.configured || (result.attempted > 0 && result.delivered === 0)) {
     await releasePush(key);
   }
+
+  await prunePushClaims();
 
   return Response.json({ sent: result.delivered > 0, date: clock.date, ...result });
 }
@@ -85,7 +97,7 @@ const deploySchema = z.object({
  * problem is looked at without anyone having to notice it first.
  */
 async function handleDeploy(request: Request, dryRun: boolean) {
-  const parsed = deploySchema.safeParse(await request.json().catch(() => null));
+  const parsed = deploySchema.safeParse(await readSmallJson(request));
   if (!parsed.success) {
     return Response.json({ error: 'Invalid deploy result' }, { status: 400 });
   }
@@ -95,9 +107,16 @@ async function handleDeploy(request: Request, dryRun: boolean) {
 
   if (dryRun) return Response.json({ dryRun: true, payload });
 
-  const result = await sendBuildResult({ sha, failures });
+  // If the notification tables are not ready, the devices cannot be told, but a
+  // failed check must still reach ZB Automations: that is the whole point.
+  let result: 'sent' | 'duplicate' | 'unavailable';
+  try {
+    result = await sendBuildResult({ sha, failures });
+  } catch {
+    result = 'unavailable';
+  }
 
-  if (failures.length > 0 && result === 'sent') {
+  if (failures.length > 0 && result !== 'duplicate') {
     await notifyBuilder({
       title: `New version failed its checks — nolan-automotive/dashboard (${sha.slice(0, 7)})`,
       body:
@@ -108,5 +127,5 @@ async function handleDeploy(request: Request, dryRun: boolean) {
     });
   }
 
-  return Response.json({ ok: true, result, failed: failures.length });
+  return Response.json({ ok: result !== 'unavailable', result, failed: failures.length }, { status: result === 'unavailable' ? 503 : 200 });
 }

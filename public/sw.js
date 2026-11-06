@@ -181,10 +181,21 @@ self.addEventListener('push', (event) => {
   );
 });
 
-/** Only ever open a path on this site, whatever a message asks for. */
+/**
+ * Only ever open a page on this site, whatever a message asks for.
+ *
+ * Decided by where the address actually resolves, not by what it looks like:
+ * the URL parser strips tabs and treats a backslash as a slash, so strings that
+ * look like "/path" can still resolve to another site.
+ */
 function safeTarget(value) {
-  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return '/';
-  return value;
+  if (typeof value !== 'string') return '/';
+  try {
+    const url = new URL(value, self.location.origin);
+    return url.origin === self.location.origin ? url.pathname + url.search + url.hash : '/';
+  } catch {
+    return '/';
+  }
 }
 
 self.addEventListener('notificationclick', (event) => {

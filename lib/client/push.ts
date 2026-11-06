@@ -79,3 +79,63 @@ export async function unsubscribeThisDevice(timeoutMs = 1500): Promise<void> {
     // Best effort only.
   }
 }
+
+const TOPICS_KEY = 'nolan-push-topics';
+
+/** Remember which notification kinds this device chose, so a dropped subscription can be restored. */
+export function rememberTopics(topics: readonly string[]): void {
+  try {
+    localStorage.setItem(TOPICS_KEY, JSON.stringify(topics));
+  } catch {
+    // Storage can be blocked (private mode); restoring is a convenience, not a need.
+  }
+}
+
+function readRememberedTopics(): string[] | null {
+  try {
+    const raw = localStorage.getItem(TOPICS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === 'string') : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Run when the app opens. Safari has no event for "your subscription changed",
+ * so this is how a device stays on the list: if it holds a subscription the
+ * server has forgotten (cleaned up after a failed delivery, say), register it
+ * again with the kinds this device chose. If the server already knows it, this
+ * just refreshes its "last seen" time. Never throws, never prompts, and does
+ * nothing for a device that never switched notifications on.
+ */
+export async function resyncPushSubscription(): Promise<void> {
+  try {
+    if (!pushIsSupported() || Notification.permission !== 'granted') return;
+
+    const registration = await getRegistration(3000);
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) return;
+
+    const statusResponse = await fetch('/api/push/status', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ endpoint: subscription.endpoint }),
+    });
+    if (!statusResponse.ok) return; // signed out, or the server is struggling: try next time
+    const status = (await statusResponse.json()) as { subscribed?: boolean; unavailable?: boolean };
+    if (status.subscribed || status.unavailable) return;
+
+    const topics = readRememberedTopics();
+    if (!topics) return;
+
+    const json = subscription.toJSON();
+    await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, topics }),
+    });
+  } catch {
+    // Best effort only.
+  }
+}

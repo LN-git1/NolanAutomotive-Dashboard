@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const claimPush = vi.fn();
 const releasePush = vi.fn();
+const prunePushClaims = vi.fn();
 const sendPush = vi.fn();
 const collectMorningFacts = vi.fn();
 
-vi.mock('@/lib/push/claims', () => ({ claimPush, releasePush }));
+vi.mock('@/lib/push/claims', () => ({ claimPush, releasePush, prunePushClaims }));
 vi.mock('@/lib/push/send', () => ({ sendPush }));
 vi.mock('@/lib/push/morning', () => ({ collectMorningFacts }));
 
@@ -29,6 +30,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-01-17T09:30:00Z'));
   claimPush.mockReset().mockResolvedValue(true);
   releasePush.mockReset().mockResolvedValue(undefined);
+  prunePushClaims.mockReset().mockResolvedValue(undefined);
   sendPush.mockReset().mockResolvedValue({ configured: true, attempted: 2, delivered: 2, removed: 0, failed: 0 });
   collectMorningFacts.mockReset().mockResolvedValue({ bookedToday: 0, overdue: 0, jobNumbers: [] });
 });
@@ -103,6 +105,28 @@ describe('POST /api/push/scheduled', { timeout: 20_000 }, () => {
     sendPush.mockResolvedValue({ configured: true, attempted: 0, delivered: 0, removed: 0, failed: 0 });
     await call('?job=morning');
     expect(releasePush).not.toHaveBeenCalled();
+  });
+
+  it('answers 503 with a clear reason, not a bare 500, when the notification tables are not there yet', async () => {
+    claimPush.mockRejectedValue(new Error('relation "push_claims" does not exist'));
+    const response = await call('?job=morning');
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error).toMatch(/not ready/);
+    expect(sendPush).not.toHaveBeenCalled();
+  });
+
+  it('tidies old claims after a send', async () => {
+    await call('?job=morning');
+    expect(prunePushClaims).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not tidy anything on a dry run or when the day was already sent', async () => {
+    await call('?job=morning&dryRun=1');
+    claimPush.mockResolvedValue(false);
+    await call('?job=morning');
+    expect(prunePushClaims).not.toHaveBeenCalled();
   });
 
   it('dryRun shows the message without claiming or sending, at any hour', async () => {

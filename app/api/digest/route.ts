@@ -7,6 +7,7 @@ import { renderDigest, renderDigestDbDown } from '@/lib/digest/render';
 import { alignedWindow, trailingWindow } from '@/lib/digest/window';
 import { sendDigestEmail } from '@/lib/email/resend';
 import { alertAfterResponse } from '@/lib/push/alert';
+import { hasValidBearer } from '@/lib/push/secret';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,7 +32,7 @@ export const maxDuration = 60;
  */
 async function handle(request: Request) {
   const secret = process.env.DIGEST_SECRET;
-  if (!secret || request.headers.get('authorization') !== `Bearer ${secret}`) {
+  if (!hasValidBearer(request, secret)) {
     return new Response('Not found', { status: 404 });
   }
 

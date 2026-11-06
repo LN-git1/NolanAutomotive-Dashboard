@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { requireApiSession } from '@/lib/auth/require-session';
+import { readSmallJson } from '@/lib/push/body';
 import { sendPushToEndpoint } from '@/lib/push/send';
 
 export const runtime = 'nodejs';
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   const denied = await requireApiSession();
   if (denied) return denied;
 
-  const parsed = schema.safeParse(await request.json().catch(() => null));
+  const parsed = schema.safeParse(await readSmallJson(request));
   if (!parsed.success) {
     return Response.json({ error: 'Invalid request' }, { status: 400 });
   }

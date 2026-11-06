@@ -19,6 +19,8 @@ on:
     - cron: '35 10 * * *'
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   send:
     runs-on: ubuntu-latest

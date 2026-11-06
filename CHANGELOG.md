@@ -1,5 +1,41 @@
 # Changelog
 
+## 06/11/2026 @ 05:57:30 IST — "claude-sonnet-5-5"
+
+**Project completion: 25.00%**
+
+Basis: unchanged, 1 of 4 phases of the "iPhone/iPad-native feel" plan is shipped. Phase 3 (web push) and its extras are built on local branch `test/web-push` and now hardened after a security review and an advisor review. Not deployed, not pushed. Still needed before any of it can go live: the owner adds the push keys to Vercel, migration 0018 is applied, and a push is approved.
+
+**Goal:** Fix what the reviews found, before anything goes near the live site.
+
+### Fixed — a receipt could be pointed at another supplier's or a job's file (an existing weakness, found in review)
+
+**Cause.** `addSupplierCharge` accepted the receipt path straight from the browser and saved it. That path is later used to sign a download link and, when the purchase is deleted, to DELETE that file from storage. So someone signed in could have saved a purchase whose "receipt" was a job photo or an invoice, then deleted the purchase to delete that file. (Needs a signed-in session, so exposure is small; it is still a real data-loss route.) **Fix.** One shared rule, `isOwnSupplierReceiptPath`: a receipt must sit under that supplier's own folder, checked segment by segment (a segment that is exactly `..`, `.` or empty, a backslash or a control character is refused, but a file named `invoice..pdf` is fine). Used by both the new "add receipt later" action and, now, by adding a purchase with a receipt. **Verification.** Unit tests for the rule (own folder accepted incl. odd file names; another supplier, other kinds of file, climbing out, control characters, empty and over-long names refused), and real-database tests that a purchase with another supplier's, a job's, an expense's or a climbing path is refused and saves nothing, while its own file is saved.
+
+### Fixed — notification tap could open another website
+
+**Cause.** The service worker only refused addresses that started with `//`. The URL parser strips tabs and treats a backslash as a slash, so `/<tab>/evil.example/x` slipped through and resolved to another site (shown directly: the old check opened `evil.example.com`, the new one opens the home page). Notification contents are written by our own server, so this needed our keys to exploit; it was fixed as defence in depth. **Fix.** The address is resolved first and accepted only if it lands on this site's own origin. **Verification.** Tests with tabs, newlines, backslashes, `javascript:`, `data:`, look-alike hosts and `@` tricks all open the home page; real same-site addresses keep their path, query and fragment.
+
+### Fixed — things the advisor review found
+
+- **First tap on iPhone.** Switching notifications on fetched the key and the registration after the permission prompt, which might cost the browser's "this came from a tap" allowance. The card now fetches both when it opens, so the only wait between Allow and subscribing is the prompt itself (the fetches remain as a fallback). Cannot be proven off a real iPhone; the first live test is the check.
+- **Stays on the list.** Safari has no event for a changed subscription, so a device that the server forgot would silently stop getting the 9am summary. When the app opens (not on the login page), a device that holds a subscription the server does not know is registered again with the kinds it chose; one the server knows just refreshes its "last seen". Never prompts, never throws, does nothing for a device that never switched notifications on (10 tests).
+- **Scheduler survives a missing table.** If the code ships before migration 0018, the 9am job now answers 503 "notification tables are not ready" instead of a bare 500, and a failed post-deploy check still reaches ZB Automations. Old claim rows (older than 60 days) are deleted after each morning send.
+- **Request bodies are capped.** The push routes read at most 16 KB and topic names at most 30 characters.
+- **Constant-time secret check on the activity-email route**, the same as the new scheduler route (it used a plain comparison).
+- **Migration 0018** also takes the default database-API grants away from the Supabase `anon` and `authenticated` roles on the three new tables (only if those roles exist), and its comment no longer overstates what the stored keys allow.
+- **Workflows** run with the least access they need (`contents: read` and none).
+
+### Found by the review but NOT changed here (the owner's decision)
+
+- **`next` 16.3.8 and `zod` 4.4.3 on the live app have published security advisories** (two critical and one high in Next.js, fixed in 16.4.1; one high in zod, fixed in 4.6.6). Already on `main` today, not caused by this branch. The two critical ones are in features this app does not use (the SVG image optimiser and `use cache`); the high Next.js one is a denial of service via server actions. A framework upgrade on a live app needs its own tested change and the owner's say-so.
+- `deploy-check.yml` runs the workflow file from the deployed commit and holds the scheduler secret; moving that secret into a GitHub Environment limited to `main` would tighten it (manual GitHub setting).
+- `/api/health` skips its secret check when `CRON_SECRET` is not set; confirm it is set in Vercel production.
+
+**Verification.** 15 new tests (client re-sync 10, request bodies and receipt paths 9, the scheduler's 503 and pruning, builder still told when tables are missing, 3 more service worker cases, 1 database test for adding a purchase with a foreign receipt). Typecheck clean, lint 0 errors (same 2 warnings), full suite with database tests on: 446 of 446 pass. A secrets scan of every commit on the branch: clean.
+
+**Files touched:** `lib/storage/receipt-path.ts`, `lib/actions/suppliers.ts`, `public/sw.js`, `lib/push/body.ts`, `lib/push/claims.ts`, `app/api/push/{subscribe,status,test,scheduled}/route.ts`, `app/api/digest/route.ts`, `lib/client/push.ts`, `components/pwa/service-worker.tsx`, `components/settings/notifications-card.tsx`, `drizzle/migrations/0018_add_web_push.sql`, `.github/workflows/{deploy-check,push-morning}.yml`, `tests/push-security.test.ts`, `tests/push-client.test.ts`, `tests/push-service-worker.test.ts`, `tests/push-scheduled-route.test.ts`, `tests/push-system.test.ts`, `tests/missing-receipts-db.test.ts`, `CHANGELOG.md`.
+
 ## 06/11/2026 @ 05:43:26 IST — "claude-sonnet-5-5"
 
 **Project completion: 25.00%**

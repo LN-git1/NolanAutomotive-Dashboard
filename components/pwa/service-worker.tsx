@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react';
 
+import { resyncPushSubscription } from '@/lib/client/push';
+
 /**
  * Registers the service worker in `public/sw.js`.
  *
@@ -22,9 +24,16 @@ export function ServiceWorker() {
     // After load, so registration never competes with the first paint it exists
     // to speed up.
     const register = () => {
-      navigator.serviceWorker.register('/sw.js').catch(() => {
-        // A failed registration is not worth surfacing to the owner.
-      });
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then(() => {
+          // Keep this device on the notification list (see resyncPushSubscription).
+          // Not on the login page: there is no session to ask the server with.
+          if (!window.location.pathname.startsWith('/login')) void resyncPushSubscription();
+        })
+        .catch(() => {
+          // A failed registration is not worth surfacing to the owner.
+        });
     };
 
     if (document.readyState === 'complete') {

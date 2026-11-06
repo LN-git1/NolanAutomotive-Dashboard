@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { requireApiSession } from '@/lib/auth/require-session';
+import { readSmallJson } from '@/lib/push/body';
 import { db } from '@/lib/db';
 import { pushSubscriptions } from '@/lib/db/schema';
 import { cleanTopics } from '@/lib/push/topics';
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
   const denied = await requireApiSession();
   if (denied) return denied;
 
-  const parsed = schema.safeParse(await request.json().catch(() => null));
+  const parsed = schema.safeParse(await readSmallJson(request));
   if (!parsed.success) {
     return Response.json({ error: 'Invalid request' }, { status: 400 });
   }

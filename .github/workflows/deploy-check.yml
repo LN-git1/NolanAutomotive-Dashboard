@@ -10,6 +10,9 @@ name: Deploy check
 on:
   deployment_status:
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production'

@@ -32,12 +32,22 @@ EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;
 --> statement-breakpoint
--- These hold push keys that let anyone who has them send to the owner's phone.
--- Supabase exposes every table in the public schema through its REST API; with
--- row-level security on and no policy, that API sees nothing. The app connects
--- directly as the database owner, which row-level security does not apply to.
+-- These hold the keys a device registered with, which are not for the public to
+-- read. Supabase exposes every table in the public schema through its REST API;
+-- with row-level security on and no policy, that API sees nothing. The app
+-- connects directly as the database owner, which row-level security does not
+-- apply to. The grants are also taken away from the API roles, as a second layer.
 ALTER TABLE "push_subscriptions" ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE "push_claims" ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE "supplier_limits" ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+  EXECUTE 'REVOKE ALL ON TABLE "push_subscriptions", "push_claims", "supplier_limits" FROM anon';
+ END IF;
+ IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+  EXECUTE 'REVOKE ALL ON TABLE "push_subscriptions", "push_claims", "supplier_limits" FROM authenticated';
+ END IF;
+END $$;

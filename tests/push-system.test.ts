@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const claimPush = vi.fn();
 const releasePush = vi.fn();
+const prunePushClaims = vi.fn();
 const sendPush = vi.fn();
 
-vi.mock('@/lib/push/claims', () => ({ claimPush, releasePush }));
+vi.mock('@/lib/push/claims', () => ({ claimPush, releasePush, prunePushClaims }));
 vi.mock('@/lib/push/send', () => ({ sendPush }));
 // The scheduler route also imports the morning-summary query; it needs no database here.
 vi.mock('@/lib/push/morning', () => ({ collectMorningFacts: vi.fn() }));
@@ -193,6 +194,24 @@ describe('POST /api/push/scheduled?job=deploy', { timeout: 20_000 }, () => {
     expect(message.kind).toBe('error');
     expect(message.title).toContain('abcdef1');
     expect(message.body).toContain('login page returned 500; manifest returned 404');
+  });
+
+  it('a failed check still reaches the builder when the notification tables are not ready', async () => {
+    sendBuildResult.mockRejectedValue(new Error('relation "push_claims" does not exist'));
+
+    const response = await post({ sha: 'abcdef1', failures: ['login page returned 500'] });
+
+    expect(response.status).toBe(503);
+    expect(notifyBuilder).toHaveBeenCalledTimes(1);
+  });
+
+  it('a healthy version with the tables not ready is reported as unavailable and bothers nobody', async () => {
+    sendBuildResult.mockRejectedValue(new Error('relation "push_claims" does not exist'));
+
+    const response = await post({ sha: 'abcdef1', failures: [] });
+
+    expect(response.status).toBe(503);
+    expect(notifyBuilder).not.toHaveBeenCalled();
   });
 
   it('a re-run for a version already reported does not message the builder again', async () => {
