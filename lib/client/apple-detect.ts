@@ -28,7 +28,13 @@
  * "installed app" apart from "a tab in Safari" (for example, to hide hints that
  * only make sense in a browser tab).
  *
+ * It also registers an empty, passive `touchstart` listener. iOS Safari only
+ * applies `:active` styles to a tap when a touch listener exists on the element
+ * or an ancestor; without one the tab bar's press feedback (the icon dip) never
+ * shows on a real iPhone, though it works with a mouse. Passive, so it can never
+ * delay scrolling.
+ *
  * Written as ES5 inside try/catch: it runs on the critical path of every load
  * and must never be the reason a page fails to render.
  */
-export const APPLE_DETECT_SCRIPT = `(function(){try{var d=document.documentElement,n=navigator,ua=n.userAgent||'';var macSafari=/Macintosh/.test(ua)&&!/Chrome|Chromium|CriOS|Edg|OPR|Firefox|FxiOS/.test(ua);if(/iPhone|iPad|iPod/.test(ua)||macSafari||(n.platform==='MacIntel'&&n.maxTouchPoints>1)){d.dataset.apple='1';if(n.standalone||(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)){d.dataset.standalone='1';}}}catch(e){}})();`;
+export const APPLE_DETECT_SCRIPT = `(function(){try{var d=document.documentElement,n=navigator,ua=n.userAgent||'';var macSafari=/Macintosh/.test(ua)&&!/Chrome|Chromium|CriOS|Edg|OPR|Firefox|FxiOS/.test(ua);if(/iPhone|iPad|iPod/.test(ua)||macSafari||(n.platform==='MacIntel'&&n.maxTouchPoints>1)){d.dataset.apple='1';if(n.standalone||(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)){d.dataset.standalone='1';}d.addEventListener('touchstart',function(){},{passive:true});}}catch(e){}})();`;

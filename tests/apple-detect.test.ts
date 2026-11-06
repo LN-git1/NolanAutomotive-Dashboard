@@ -16,7 +16,14 @@ function run(opts: {
   throwOnNavigator?: boolean;
 }) {
   const dataset: Record<string, string> = {};
-  const document = { documentElement: { dataset } };
+  const listeners: { type: string; passive: boolean }[] = [];
+  const document = {
+    documentElement: {
+      dataset,
+      addEventListener: (type: string, _fn: unknown, options?: { passive?: boolean }) =>
+        listeners.push({ type, passive: Boolean(options?.passive) }),
+    },
+  };
   const navigator = opts.throwOnNavigator
     ? new Proxy(
         {},
@@ -41,7 +48,9 @@ function run(opts: {
     navigator,
     window,
   );
-  return dataset;
+  return { ...dataset, listeners } as Record<string, string | undefined> & {
+    listeners: typeof listeners;
+  };
 }
 
 const IPHONE =
@@ -100,6 +109,15 @@ describe('apple detection script', () => {
 
   it('does not flag standalone for a Safari tab', () => {
     expect(run({ userAgent: IPHONE }).standalone).toBeUndefined();
+  });
+
+  it('adds a passive touchstart listener on Apple devices so :active press feedback works on iOS', () => {
+    expect(run({ userAgent: IPHONE }).listeners).toEqual([{ type: 'touchstart', passive: true }]);
+  });
+
+  it('adds no listener on other devices', () => {
+    expect(run({ userAgent: ANDROID, platform: 'Linux armv81', maxTouchPoints: 5 }).listeners).toEqual([]);
+    expect(run({ userAgent: WINDOWS, platform: 'Win32' }).listeners).toEqual([]);
   });
 
   it('never throws, even if navigator is unavailable', () => {

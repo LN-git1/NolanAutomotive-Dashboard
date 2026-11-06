@@ -1,5 +1,35 @@
 # Changelog
 
+## 06/11/2026 @ 02:12:48 IST — "claude-opus-5-5"
+
+**Project completion: 25.00%**
+
+Basis: unchanged, 1 of 4 phases of the "iPhone/iPad-native feel" plan; this round fixes phase 1 after the owner tested it on his iPhone. Still open: phase 2 (sheets, press and spring motion, pull-to-refresh), phase 3 (web push), phase 4 (other Nolan sites); also open from this test: the launch screen showing an "N" instead of the app icon (needs the iPhone model and iOS version) and a landscape blur near the notch (needs a screenshot). Local branch `test/apple-fixes-2`, not pushed.
+
+**Goal:** Fix what the owner found on a real iPhone: bars not see-through enough, the top bar and menu crowding the Dynamic Island, no visible page animation, and press feedback not working.
+
+### Changed — bars are more see-through (80% to 50% tint)
+
+**Cause.** The owner asked for 40-60%; at 80% the frosting was barely visible over the light page. **Fix.** Tab bar and header background layer now 50% surface tint, same 20px blur. **Verification.** Label contrast measured from rendered pixels with the glass forced on: over the real Jobs list 5.68:1 (light) and 6.39:1 (dark), above the 4.5:1 AA minimum. Over deliberately extreme black/white stripes 50% falls to about 1.5:1 (80% also failed there, 3.7:1): that is the limit of any see-through bar, and Reduce Transparency / Increase Contrast still switch to solid bars.
+
+### Fixed — top bar and slide-out menu sat against the Dynamic Island
+
+**Cause.** `.pt-safe` is plain (unlayered) CSS, so it beats Tailwind's layered `py-2` / `p-3` and *replaced* their top padding instead of adding to it. The header's buttons started exactly at the edge of the status-bar area, and the menu's close button, pulled up 4px by `-mt-1`, sat partly under it. **Fix.** On Apple devices below `lg`, header top padding is the safe-area inset plus 0.5rem, and the menu gets inset plus 0.75rem at the top and bottom and the left inset plus 0.75rem (landscape notch). `env()` gives each iPhone model its own inset, so one rule fits notch, Dynamic Island and no-notch phones. Desktop Safari is unaffected (rule is below 1024px). **Verification.** Chrome with a 59px top inset emulated (Dynamic Island size): header padding 67px, Menu button top edge at 70px, menu close button at 71px, all below the 59px area; menu still full height.
+
+### Fixed — page animation could play on the loading skeleton instead of the page
+
+**Cause.** Every dashboard page has a loading skeleton. The animation ran on the wrapper, so whenever the wrapper mounted with the skeleton (a real database round trip), the page then replaced the skeleton with no motion. **Fix.** The animation now runs on each element placed inside the wrapper, so it plays when the skeleton appears and again when the real page arrives; 260ms instead of 220ms. **Verification.** With navigation requests delayed 900ms, a tab tap now logs the animation on the skeletons and then on the page content ("Schedule..."). Caveat: in that same Chromium setup the old version also animated once, so this is a robustness fix; the owner's "no animation" on the iPhone is not reproduced here and needs his re-test.
+
+### Fixed — tab bar press feedback did nothing on a real iPhone
+
+**Cause.** iOS Safari only applies `:active` styles to a tap when a touch listener exists on the element or an ancestor; the icon dip is an `:active` style, so it worked with a mouse and never on the phone. **Fix.** The Apple-detect head script registers an empty, passive `touchstart` listener (Apple devices only, cannot delay scrolling). **Verification.** 2 new tests: the listener is added (passive) on an iPhone and not on Android or Windows. Real-device confirmation needed.
+
+### Gates
+
+Typecheck clean; lint 0 errors (2 existing warnings). Unit tests: 250 passed, 62 skipped, 2 failed in `tests/job-status-guard.test.ts`, which times out at 5s on its first cold import of `lib/actions/jobs`. It fails identically on unchanged `main` with nothing else running, so it is pre-existing and unrelated; left untouched pending the owner's say.
+
+**Files touched:** `app/globals.css`, `lib/client/apple-detect.ts`, `tests/apple-detect.test.ts`, `CHANGELOG.md`.
+
 ## 06/11/2026 @ 01:17:45 IST — "claude-sonnet-5-5"
 
 **Project completion: 25.00%**

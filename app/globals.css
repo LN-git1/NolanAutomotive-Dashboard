@@ -387,9 +387,17 @@ html[data-apple] .page-enter {
   }
 }
 
+/* Runs on each element placed directly inside the wrapper, not on the wrapper.
+   Every dashboard page has a loading skeleton, so on a real connection the
+   wrapper mounts with the skeleton and the page arrives a moment later as a new
+   element. Animating the wrapper played the motion on the skeleton and then the
+   page popped in with none, which is why it was invisible on the live site.
+   A newly inserted element starts its own CSS animation, so the page now
+   settles in when it actually appears. Re-renders reuse the element and do
+   not replay it. */
 @media (prefers-reduced-motion: no-preference) {
-  html[data-apple] .page-enter {
-    animation: page-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  html[data-apple] .page-enter > * {
+    animation: page-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
   }
 }
 
@@ -403,7 +411,7 @@ html[data-apple] .page-enter {
  */
 @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   html[data-apple] [data-chrome="tabbar"] {
-    background-color: color-mix(in srgb, var(--surface) 80%, transparent);
+    background-color: color-mix(in srgb, var(--surface) 50%, transparent);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
     backdrop-filter: saturate(180%) blur(20px);
   }
@@ -424,7 +432,7 @@ html[data-apple] .page-enter {
       inset: 0;
       z-index: -1;
       pointer-events: none;
-      background-color: color-mix(in srgb, var(--surface) 80%, transparent);
+      background-color: color-mix(in srgb, var(--surface) 50%, transparent);
       -webkit-backdrop-filter: saturate(180%) blur(20px);
       backdrop-filter: saturate(180%) blur(20px);
     }
@@ -456,6 +464,28 @@ html[data-apple] body {
 html[data-apple] [data-chrome="tabbar"] {
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
+}
+
+/**
+ * Top bar and slide-out menu clear of the Dynamic Island / notch, with room to
+ * spare. `.pt-safe` is unlayered CSS, so it beats Tailwind's layered `py-2` and
+ * `p-3` and *replaced* their top padding: the header's buttons started exactly
+ * at the edge of the status-bar area, and the menu's close button (pulled up
+ * 4px by `-mt-1`) sat partly under it. Here the safe area is added on top of
+ * the normal padding instead. `env()` gives each iPhone model its own inset
+ * (notch, Dynamic Island, none), so one rule fits them all. The menu also gets
+ * the left inset so in landscape it is not drawn under the notch.
+ */
+@media (max-width: 1023px) {
+  html[data-apple] [data-chrome="header"] {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+  }
+}
+
+html[data-apple] #main-nav-drawer {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+  padding-left: calc(env(safe-area-inset-left, 0px) + 0.75rem);
 }
 
 /* Tab bar touch behaviour: no text-selection or long-press callout on the
