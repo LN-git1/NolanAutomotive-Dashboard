@@ -1,5 +1,23 @@
 # Changelog
 
+## 06/11/2026 @ 01:17:45 IST — "claude-sonnet-5-5"
+
+**Project completion: 25.00%**
+
+Basis: unchanged, 1 of 4 phases of the "iPhone/iPad-native feel" plan; this is a test-only correction after a review of what shipped. Still open: phase 2, phase 3, phase 4. This commit is on local branch `test/chrome-glass-regex` and is NOT pushed; production is unaffected by it.
+
+**Goal:** Make the guard test for the header blur correct.
+
+### Fixed — the guard test's pattern could flag a harmless `backdrop-filter: none`
+
+**Cause.** `tests/chrome-glass.test.ts` used `/backdrop-filter:\s*(?!none)/`. Because `\s*` can match fewer spaces, the look-ahead is satisfied one space early, so `backdrop-filter: none` matched and would have been reported as a blur on the header. It never failed today because no such rule exists, but it would have failed the first time someone legitimately wrote `none`.
+
+**Fix.** Pattern is now `/backdrop-filter:\s*(?!none)\S/`. Checked directly: `none` no longer matches, a real blur still does, and the old pattern is shown to have matched `none`.
+
+**Also verified in this review (no code change).** The header still renders its blur after the move to a background layer: old layout (blur on the header) against the new one differ by 0 of 87,360 pixels in light and dark, and the new header differs from the solid fallback, so the tint is drawn. Page-level modals are `position: fixed` but start closed, and the page settle-in transform lasts 220ms on mount, so neither can trap them. Chromium only: whether iOS WebKit draws a blur on a `z-index: -1` pseudo-element needs a look on a real iPhone.
+
+**Files touched:** `tests/chrome-glass.test.ts`, `CHANGELOG.md`.
+
 ## 06/11/2026 @ 00:44:04 IST — "claude-sonnet-5-5"
 
 **Project completion: 25.00%**

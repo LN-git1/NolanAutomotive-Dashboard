@@ -25,7 +25,7 @@ describe('translucent bars', () => {
       ({ selector, body }) =>
         selector.includes('[data-chrome="header"]') &&
         !selector.includes('::before') &&
-        /backdrop-filter:\s*(?!none)/.test(body),
+        /backdrop-filter:\s*(?!none)\S/.test(body),
     );
 
     expect(offenders).toEqual([]);
