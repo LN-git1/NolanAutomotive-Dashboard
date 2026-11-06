@@ -1,5 +1,25 @@
 # Changelog
 
+## 06/11/2026 @ 00:27:20 IST — "claude-sonnet-5-5"
+
+**Project completion: 25.00%**
+
+Basis: unchanged, 1 of 4 phases of the "iPhone/iPad-native feel" plan. This entry fixes a bug in phase 1 found on a real iPhone; it does not add a phase. Still open: phase 2 (bottom sheets, press and spring animation, pull-to-refresh), phase 3 (web push), phase 4 (other Nolan sites). Nothing is deployed: branch `test/apple-native-feel`, never pushed, production untouched.
+
+**Goal:** Make the "Menu" slide-out navigation work again on iPhone and Mac Safari.
+
+### Fixed — the slide-out menu collapsed into the header bar on Apple devices
+
+**Cause.** Phase 1 put the frosted-glass blur (`backdrop-filter`) on the sticky header. A `backdrop-filter` makes the element it sits on the containing block for every `position: fixed` descendant, and the menu (`NavDrawer`, with its dim backdrop) is `position: fixed` and rendered inside that header. So on Apple devices the menu and its backdrop were sized to the header (48px tall) instead of the screen. It opened as a sliver, which looked like a sidebar that does not work. It only happens where the blur is drawn, so it was invisible in my earlier checks: the Windows test browser reports "reduce transparency" and so falls back to a solid header, and my before/after comparison never opened the menu. The owner found it on a real iPhone.
+
+**Fix.** The blur and tint moved off the header onto a background layer (`[data-chrome="header"]::before`, absolutely positioned, `z-index: -1`, `pointer-events: none`) inside the header. The header itself is transparent. Nothing but the header's own look changes, and the Reduce Transparency / Increase Contrast fallback covers the layer too. Only `app/globals.css` changed.
+
+**Verification.** With the blur forced on (needed here, see Cause): old layout gave a 48px-tall menu and backdrop, new layout gives 844px (the full screen) for both, and tapping a link in the menu navigates and closes it. The layer is 390px wide, `pointer-events: none`, and the Menu button is the element hit at its centre once the sign-in toast has gone. A new test (`tests/chrome-glass.test.ts`) fails if a blur is ever put back on the header element itself. Typecheck clean, lint 0 errors (same 2 existing warnings).
+
+**Also seen in the same iPhone session, not caused by this branch.** `crypto.randomUUID is not a function` on the new-job and expense forms: that browser function exists only on HTTPS or localhost, and the iPhone test page is plain `http://` on the Wi-Fi, so it does not occur on the real HTTPS site. A React warning about a `<div>` inside a `<p>` in the job page's loading skeleton exists in code this branch does not touch.
+
+**Files touched:** `app/globals.css`, `tests/chrome-glass.test.ts`, `CHANGELOG.md`.
+
 ## 05/11/2026 @ 12:47:34 IST — "claude-sonnet-5-5"
 
 **Project completion: 25.00%**

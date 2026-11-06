@@ -408,8 +408,22 @@ html[data-apple] .page-enter {
     backdrop-filter: saturate(180%) blur(20px);
   }
 
+  /* The header's blur lives on a background layer, not on the header itself.
+     A backdrop-filter on an element makes it the containing block for every
+     position:fixed descendant, and the slide-out menu (NavDrawer) is fixed and
+     lives inside the header: with the blur on the header the menu was clipped
+     to the header's height. The header is sticky, so it is already a stacking
+     context and the layer at z-index -1 sits behind its content. */
   @media (max-width: 1023px) {
     html[data-apple] [data-chrome="header"] {
+      background-color: transparent;
+    }
+    html[data-apple] [data-chrome="header"]::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
       background-color: color-mix(in srgb, var(--surface) 80%, transparent);
       -webkit-backdrop-filter: saturate(180%) blur(20px);
       backdrop-filter: saturate(180%) blur(20px);
@@ -421,7 +435,8 @@ html[data-apple] .page-enter {
    comes after the rules above on purpose: equal specificity, later wins. */
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   html[data-apple] [data-chrome="tabbar"],
-  html[data-apple] [data-chrome="header"] {
+  html[data-apple] [data-chrome="header"],
+  html[data-apple] [data-chrome="header"]::before {
     background-color: var(--surface);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
