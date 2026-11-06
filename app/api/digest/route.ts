@@ -6,6 +6,7 @@ import { collectDigest } from '@/lib/digest/collect';
 import { renderDigest, renderDigestDbDown } from '@/lib/digest/render';
 import { alignedWindow, trailingWindow } from '@/lib/digest/window';
 import { sendDigestEmail } from '@/lib/email/resend';
+import { alertAfterResponse } from '@/lib/push/alert';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -97,6 +98,7 @@ async function handle(request: Request) {
     await sendDigestEmail(rendered);
   } catch (error) {
     console.error('[digest] send failed:', error);
+    alertAfterResponse('digest-failed', 180);
     if (claimed) {
       // Release the claim so the other scheduler (or the retry) can try again.
       await db.delete(digestRuns).where(eq(digestRuns.windowEnd, window.end)).catch(() => {});

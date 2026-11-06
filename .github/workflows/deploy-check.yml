@@ -1,0 +1,27 @@
+name: Deploy check
+
+# After every successful Production deployment (Vercel reports these to GitHub),
+# check that the new version really works, then tell the owner's devices, and
+# message ZB Automations if anything is wrong. The checks and the reporting are in
+# scripts/deploy-check.sh so they can be tried on a developer machine first.
+#
+# Never logs in, never changes any data: it only fetches public pages and asks
+# the scheduler endpoint (protected by DIGEST_SECRET) for a harmless dry run.
+on:
+  deployment_status:
+
+jobs:
+  verify:
+    if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/deploy-check.sh
+          sparse-checkout-cone-mode: false
+      - name: Check the new version and report
+        env:
+          DIGEST_SECRET: ${{ secrets.DIGEST_SECRET }}
+          SHA: ${{ github.event.deployment.sha }}
+        run: bash scripts/deploy-check.sh

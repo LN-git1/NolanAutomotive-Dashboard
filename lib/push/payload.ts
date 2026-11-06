@@ -80,26 +80,29 @@ export function supplierBalancePayload(input: {
   };
 }
 
+/**
+ * Problems with the app itself. Only the ones a phone can honestly be told:
+ * the notification list lives in the database, so when the database is fully
+ * unreachable the app cannot look up whose phones to notify. That case is
+ * covered by the e-mail and the message to ZB Automations that already exist;
+ * "database-down" here only gets through when the database is struggling
+ * rather than gone (for example a connection pool that has run out).
+ */
 export type SystemAlertKind =
   | 'database-down'
-  | 'database-recovered'
+  | 'database-slow'
   | 'save-failed'
   | 'page-crashed'
-  | 'database-slow'
-  | 'digest-failed'
-  | 'storage-failed'
-  | 'push-failing'
-  | 'build-live'
-  | 'build-check-failed';
+  | 'digest-failed';
 
 const SYSTEM_TEXT: Record<SystemAlertKind, { title: string; body: string }> = {
   'database-down': {
     title: 'App problem: database unreachable',
-    body: 'The dashboard cannot reach its database. ZB Automations has been told.',
+    body: 'The dashboard could not reach its database. ZB Automations has been told.',
   },
-  'database-recovered': {
-    title: 'Database is back',
-    body: 'The dashboard can reach its database again.',
+  'database-slow': {
+    title: 'App is running slowly',
+    body: 'The database is taking a long time to answer. ZB Automations has been told.',
   },
   'save-failed': {
     title: 'A save failed',
@@ -109,33 +112,39 @@ const SYSTEM_TEXT: Record<SystemAlertKind, { title: string; body: string }> = {
     title: 'A page crashed',
     body: 'A screen in the app hit an error. ZB Automations has been told.',
   },
-  'database-slow': {
-    title: 'App is running slowly',
-    body: 'The database is taking several tries to answer. ZB Automations has been told.',
-  },
   'digest-failed': {
     title: 'Activity email failed',
     body: 'The 3-hourly activity email could not be sent.',
-  },
-  'storage-failed': {
-    title: 'File storage problem',
-    body: 'Receipts or invoice files could not be saved or opened.',
-  },
-  'push-failing': {
-    title: 'Notifications are failing',
-    body: 'Notifications could not be delivered to any device.',
-  },
-  'build-live': {
-    title: 'New version is live',
-    body: 'A new version of the dashboard is live and passed its checks. Please have a quick look at it.',
-  },
-  'build-check-failed': {
-    title: 'New version needs attention',
-    body: 'A new version went live but a check failed. ZB Automations has been told. Contact us if anything looks wrong.',
   },
 };
 
 export function systemPayload(kind: SystemAlertKind): PushPayload {
   const text = SYSTEM_TEXT[kind];
   return { title: text.title, body: text.body, url: '/', tag: `system-${kind}` };
+}
+
+/**
+ * The note that follows every new version going live. `failures` are the checks
+ * that did not pass; none means everything did. Names the business, not the
+ * owner (the public voice rule), and only ever carries the version and counts.
+ */
+export function buildPayload(input: { sha: string; failures: readonly string[] }): PushPayload {
+  const version = input.sha.slice(0, 7);
+
+  if (input.failures.length === 0) {
+    return {
+      title: 'New version is live',
+      body: `Version ${version} is live and passed all its checks. Have a quick look to make sure it works.`,
+      url: '/',
+      tag: 'system-build',
+    };
+  }
+
+  const count = input.failures.length;
+  return {
+    title: 'New version needs attention',
+    body: `Version ${version} went live but ${count} ${count === 1 ? 'check' : 'checks'} failed. ZB Automations has been told. Contact us if anything looks wrong.`,
+    url: '/',
+    tag: 'system-build',
+  };
 }

@@ -1,4 +1,5 @@
 import { recordError } from '@/lib/errors/log';
+import { alertAfterResponse } from '@/lib/push/alert';
 
 export const runtime = 'nodejs';
 
@@ -15,6 +16,8 @@ export async function POST(req: Request) {
   } catch {
     // Best-effort.
   }
+
+  alertAfterResponse('page-crashed');
 
   const url = process.env.MATRIX_DASH_WEBHOOK_URL;
   const token = process.env.MATRIX_DASH_WEBHOOK_TOKEN;

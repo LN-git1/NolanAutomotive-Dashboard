@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { recordError } from '@/lib/errors/log';
+import { alertAfterResponse } from '@/lib/push/alert';
 
 /**
  * Run a mutation and turn a thrown failure into `{ ok: false, error }`.
@@ -30,6 +31,7 @@ export async function guardedWrite<T extends { ok: boolean; error?: string }>(
       notifyWriteFailure(label, message),
       recordError({ source: 'action', label, message }),
     ]);
+    alertAfterResponse('save-failed');
     return { ok: false, error: 'Could not save that just now — please try again.' };
   }
 }

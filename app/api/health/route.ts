@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 import { withDbRetry } from '@/lib/db/retry';
 import { sendDbDownAlert } from '@/lib/email/resend';
 import { recordError } from '@/lib/errors/log';
+import { alertAfterResponse } from '@/lib/push/alert';
 
 export const runtime = 'nodejs';
 
@@ -41,6 +42,7 @@ export async function GET(request: Request) {
     const dbMs = Date.now() - started;
     if (dbMs > 5000) {
       console.error(`[db] health check slow: SELECT 1 took ${dbMs}ms`);
+      alertAfterResponse('database-slow', 120);
       // Slow-query webhook to matrix-dash: kind=warning (not error) since DB still
       // responds; this is the leading indicator of a stall before it breaks.
       try {
@@ -75,6 +77,9 @@ export async function GET(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Database unreachable';
     await recordError({ source: 'health', label: 'health:select-1', message });
+    // Only gets through if the database is struggling rather than gone: the
+    // notification list lives in it. The e-mail below covers a full outage.
+    alertAfterResponse('database-down', 120);
 
     // Send webhook notification to matrix-dash (replaces Resend email with
     // push + in-app alert via the webhook endpoint). Never blocks the 503.

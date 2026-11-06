@@ -1,5 +1,29 @@
 # Changelog
 
+## 06/11/2026 @ 05:28:25 IST — "claude-sonnet-5-5"
+
+**Project completion: 25.00%**
+
+Basis: unchanged, 1 of 4 phases of the "iPhone/iPad-native feel" plan is shipped. Phase 3 (web push) is in progress on local branch `test/web-push`: this is slice 4 of 5 (app alerts and the check after each new version). Still to build: the missing-receipts view. Not deployed, not pushed.
+
+**Goal:** Tell the owner's devices when the app has a problem, and after every new version goes live, check that it works and tell the owner (and ZB Automations if it does not).
+
+### Added — five app alerts, throttled
+
+**What they are.** "A save failed" (any guarded write that throws), "A page crashed" (the dashboard error screen reports it), "App is running slowly" and "database unreachable" (the daily health check), "Activity email failed" (the 3-hourly digest could not be sent). They go to devices with "App alerts" on. Each kind is claimed per 30-minute window (2 or 3 hours for the daily and 3-hourly ones), so one bad moment cannot send a notification per failure and bury the phone. They run after the response, load the push code only when sending, and swallow every failure, so an alert can never change what a failing action returns (tested: a failed write still returns the same friendly error).
+
+**What a phone cannot be told, and why.** The list of devices lives in the database. When the database is fully unreachable the app cannot look up whose phones to notify, so "database unreachable" only gets through when the database is struggling rather than gone. A full outage is still reported by the e-mail and the message to ZB Automations that already exist. The original idea of ten alert types was cut to the five that can honestly work: "database back up", "file storage problem" and "notifications failing" were dropped because they need the database or a separate monitor to be reliable. A free external uptime monitor would cover a full outage on a phone and can be added later.
+
+### Added — check after every new version, and tell the owner
+
+**What happens.** Vercel reports each Production deployment to GitHub (confirmed: the last three deployments, by the Vercel bot, each with a success status). A new workflow, `.github/workflows/deploy-check.yml`, runs when one succeeds and calls `scripts/deploy-check.sh`, which checks: the login page loads; a page without a session is still sent to the login page; the security headers are still sent; the manifest and the up-to-date service worker are served; the notification routes exist and refuse without a login; and the server and its database answer (a dry run of the morning summary, which reads the jobs table and sends nothing). It then reports to `POST /api/push/scheduled?job=deploy`: devices get "New version is live" (names the version, says all checks passed, asks for a quick look) or "New version needs attention" (a check failed, ZB Automations has been told), once per version and outcome. When a check failed, ZB Automations is also messaged through the existing matrix-dash webhook with the failing checks listed. The check never logs in and never changes data.
+
+**Verification.** The script, run locally: healthy server gives an empty failure list and exit 0; a wrong secret, no secret and a dead server each fail with exact reasons and exit 1. The route: 404 without the secret; a bad commit id, a non-list, an over-long message, 21 failures or a body that is not JSON are all refused; dry run shows the message for both outcomes; a real report works. 18 unit tests (the throttle claims per kind and per time bucket; the claim is handed back when notifications are not set up; one notification per version and outcome; the webhook URL gets the token substituted and a placeholder URL is never called; a dead webhook never throws; the builder is told only on the first failing report; a failing write raises the alert but returns the same error). Existing health and error routes still answer normally. The three workflow files parse. Typecheck clean, lint 0 errors (same 2 warnings), full suite with database tests on: 407 of 407 pass.
+
+**Not verified.** The GitHub workflow itself has not run: it only runs on GitHub after a Production deployment of a commit that contains it. The script it calls is what was tested. A real notification to a phone is still untested for the same reason as before (live HTTPS site, installed app).
+
+**Files touched:** `lib/push/system.ts`, `lib/push/alert.ts`, `lib/push/payload.ts`, `lib/actions/safe.ts`, `app/api/notify/route.ts`, `app/api/health/route.ts`, `app/api/digest/route.ts`, `app/api/push/scheduled/route.ts`, `scripts/deploy-check.sh`, `.github/workflows/deploy-check.yml`, `tests/push-system.test.ts`, `tests/push-core.test.ts`, `CHANGELOG.md`.
+
 ## 06/11/2026 @ 05:10:54 IST — "claude-sonnet-5-5"
 
 **Project completion: 25.00%**

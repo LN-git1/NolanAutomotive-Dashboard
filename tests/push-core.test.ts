@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { dublinClock, isMorningWindow } from '@/lib/push/dublin';
 import { isAllowedPushEndpoint } from '@/lib/push/endpoints';
-import { assignedPayload, morningPayload, supplierBalancePayload, systemPayload } from '@/lib/push/payload';
+import { assignedPayload, buildPayload, morningPayload, supplierBalancePayload, systemPayload } from '@/lib/push/payload';
 import type { SystemAlertKind } from '@/lib/push/payload';
 import { hasValidBearer } from '@/lib/push/secret';
 import { readVapidConfig } from '@/lib/push/send';
@@ -92,15 +92,14 @@ describe('notification text', () => {
     // Every payload builder takes only the fields below, so there is nowhere for
     // a customer name, phone, email or registration to enter. Spot-check the
     // output of each against the kinds of text a customer record contains.
-    const kinds: SystemAlertKind[] = [
-      'database-down', 'database-recovered', 'save-failed', 'page-crashed', 'database-slow',
-      'digest-failed', 'storage-failed', 'push-failing', 'build-live', 'build-check-failed',
-    ];
+    const kinds: SystemAlertKind[] = ['database-down', 'database-slow', 'save-failed', 'page-crashed', 'digest-failed'];
     const all = [
       morningPayload({ bookedToday: 2, overdue: 1, jobNumbers: ['NA-001', 'NA-002'] }),
       assignedPayload({ jobNumber: 'NA-001', assigneeName: 'Mick' }),
       supplierBalancePayload({ supplierName: 'Parts Ltd', supplierId: 'abc', level: 80, balanceCents: 80000, limitCents: 100000 }),
       ...kinds.map((kind) => systemPayload(kind)),
+      buildPayload({ sha: '346800b3d2674bd35b48d196beb64fc86b39cbc9', failures: [] }),
+      buildPayload({ sha: '346800b3d2674bd35b48d196beb64fc86b39cbc9', failures: ['login page'] }),
     ];
 
     for (const payload of all) {
@@ -122,11 +121,21 @@ describe('notification text', () => {
     expect(at100.tag).not.toBe(at80.tag);
   });
 
-  it('names the business, never the owner, in the build notices', () => {
-    for (const kind of ['build-live', 'build-check-failed'] as const) {
-      const { title, body } = systemPayload(kind);
-      expect(`${title} ${body}`).not.toMatch(/Zach/);
-    }
+  it('names the business, never the owner, in the app alerts and build notices', () => {
+    const all = [
+      ...(['database-down', 'database-slow', 'save-failed', 'page-crashed', 'digest-failed'] as const).map((kind) => systemPayload(kind)),
+      buildPayload({ sha: 'abcdef1234567', failures: [] }),
+      buildPayload({ sha: 'abcdef1234567', failures: ['a'] }),
+    ];
+    for (const { title, body } of all) expect(`${title} ${body}`).not.toMatch(/Zach/);
+  });
+
+  it('the build notice reports the short version and how many checks failed', () => {
+    expect(buildPayload({ sha: '346800b3d2674bd35b48d196beb64fc86b39cbc9', failures: [] }).body).toContain('Version 346800b is live and passed all its checks');
+    const one = buildPayload({ sha: '346800b3d2674bd35b48d196beb64fc86b39cbc9', failures: ['login page'] });
+    expect(one.title).toBe('New version needs attention');
+    expect(one.body).toContain('1 check failed');
+    expect(buildPayload({ sha: '346800b', failures: ['a', 'b', 'c'] }).body).toContain('3 checks failed');
   });
 });
 
