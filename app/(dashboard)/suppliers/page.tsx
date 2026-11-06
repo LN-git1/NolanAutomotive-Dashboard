@@ -3,7 +3,8 @@ import Link from 'next/link';
 
 import { SupplierActions } from '@/components/suppliers/supplier-actions';
 import { SupplierForm } from '@/components/suppliers/supplier-form';
-import { Card, CardBody, CardHeader, Empty, Table, Td, Th } from '@/components/ui';
+import { Card, CardBody, CardHeader, Empty, LinkButton, Table, Td, Th } from '@/components/ui';
+import { countChargesMissingReceipts } from '@/lib/db/queries/missing-receipts';
 import { listSuppliersWithTotals } from '@/lib/db/queries/overview';
 import { formatDate } from '@/lib/format';
 import { formatEur } from '@/lib/money';
@@ -12,7 +13,10 @@ export const metadata: Metadata = { title: 'Owed to others' };
 export const dynamic = 'force-dynamic';
 
 export default async function SuppliersPage() {
-  const suppliers = await listSuppliersWithTotals();
+  const [suppliers, missingReceipts] = await Promise.all([
+    listSuppliersWithTotals(),
+    countChargesMissingReceipts(),
+  ]);
 
   /*
     Each account is floored at zero before the accounts are added up, matching
@@ -27,11 +31,16 @@ export default async function SuppliersPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold text-ink">Owed to others</h1>
-        <p className="text-sm text-muted">
-          One running bill per supplier. Open one to add purchases or pay money off it.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-ink">Owed to others</h1>
+          <p className="text-sm text-muted">
+            One running bill per supplier. Open one to add purchases or pay money off it.
+          </p>
+        </div>
+        <LinkButton href="/suppliers/missing-receipts" variant="secondary" size="sm">
+          {missingReceipts > 0 ? `Missing receipts (${missingReceipts})` : 'Missing receipts'}
+        </LinkButton>
       </div>
 
       <Card>

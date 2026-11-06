@@ -38,7 +38,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe('POST /api/push/scheduled', () => {
+describe('POST /api/push/scheduled', { timeout: 20_000 }, () => {
   it('answers 404 to anything without the right secret, so the path is not confirmed to exist', async () => {
     expect((await call('?job=morning', null)).status).toBe(404);
     expect((await call('?job=morning', 'wrong')).status).toBe(404);

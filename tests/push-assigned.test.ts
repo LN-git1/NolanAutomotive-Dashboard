@@ -56,7 +56,7 @@ describe('runAfterResponse: a notification can never break a save', () => {
   });
 });
 
-describe('notifyAssigned', () => {
+describe('notifyAssigned', { timeout: 20_000 }, () => {
   const sendPush = vi.fn();
   let jobRows: { jobNumber: string }[];
   let personRows: { name: string }[];

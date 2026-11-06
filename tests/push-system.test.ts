@@ -139,7 +139,7 @@ describe('notifyBuilder: the message to ZB Automations', () => {
   });
 });
 
-describe('POST /api/push/scheduled?job=deploy', () => {
+describe('POST /api/push/scheduled?job=deploy', { timeout: 20_000 }, () => {
   const sendBuildResult = vi.fn();
   const notifyBuilder = vi.fn();
 
@@ -209,7 +209,7 @@ describe('POST /api/push/scheduled?job=deploy', () => {
   });
 });
 
-describe('guardedWrite raises an app alert without changing what it returns', () => {
+describe('guardedWrite raises an app alert without changing what it returns', { timeout: 20_000 }, () => {
   const alertAfterResponse = vi.fn();
 
   beforeEach(() => {

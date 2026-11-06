@@ -1,5 +1,27 @@
 # Changelog
 
+## 06/11/2026 @ 05:43:26 IST — "claude-sonnet-5-5"
+
+**Project completion: 25.00%**
+
+Basis: unchanged, 1 of 4 phases of the "iPhone/iPad-native feel" plan is shipped. Phase 3 (web push) is now fully built on local branch `test/web-push`: this is slice 5 of 5 (missing receipts), though it is not a notification. Still needed before any of phase 3 can go live: the owner adds the push keys to Vercel, migration 0018 is applied, and a push is approved. Not deployed, not pushed.
+
+**Goal:** Let the accountant see every supplier purchase that has no receipt, match them to the paper receipts, and let the garage attach a missing receipt later.
+
+### Added — "Missing receipts" list, accountant's CSV, and add a receipt afterwards
+
+**What it does.** A "Missing receipts (N)" button on the Owed to others page opens a list of every supplier purchase recorded without a receipt: supplier, purchase date, when it was entered into the app (date and time, Irish time, 12 or 24 hour clock following Settings), reference and notes, the exact amount, and an "Add receipt" control. At the top it shows how many there are and what they are worth in total. "Download list (CSV)" gives the accountant the same list (`/api/export/supplier-bills?missing=1`, saved as `nolan-supplier-missing-receipts-<date>.csv`). The full supplier export gained a final "Receipt" column ("On file", "Missing", or blank for a payment) without moving any existing column. A supplier's own history shows "Add receipt" on a purchase that has none, next to "View receipt" on ones that do. Payments never appear: money paid to a supplier has no docket.
+
+**No new data is recorded.** The amount, purchase date, supplier and the moment it was typed in were already stored on every entry; a missing receipt is an empty receipt path. This feature is a view over what is already there, so it works for every past purchase too, not only new ones.
+
+**Attaching is safe.** The file goes straight to storage with a signed URL as before, then `attachSupplierReceipt` records where it is. It refuses a path outside that purchase's own supplier folder or one that climbs out of it, refuses a payment or an unknown purchase, and only ever fills an empty slot: the update is conditional on there being no receipt yet, so two people attaching at once cannot overwrite each other (tested), and an existing receipt is never silently replaced.
+
+**Time shown correctly.** The app's existing date-time formatter reads the server's clock, which on Vercel is UTC; it would show an entry made at 9pm on a summer evening as 8pm. A new `formatRecordedAt` always uses Europe/Dublin, in the same style as the rest of the app (tested for summer, winter and just after midnight).
+
+**Verification.** 14 tests, 11 of them against a real Postgres: the list contains only purchases without a receipt (not payments, not ones that have one), carries supplier, exact amount, dates, reference and notes, is newest first, and shrinks when a receipt is attached; every bad path is refused; two simultaneous attaches leave exactly one winner; the full CSV has the new column last with "Missing", "On file" and blank cells in the right rows; `?missing=1` contains only missing purchases under its own file name. Driven through the browser on an iPhone user agent: the button shows "Missing receipts (2)"; the page lists the two purchases without a receipt and not the one with a receipt or the payment; the CSV downloads with the right name and rows; choosing a file with a dummy storage backend shows an error and changes nothing; the supplier history shows both "View receipt" and "Add receipt". A real upload to storage cannot be tried here (no storage credentials by design). Typecheck clean, lint 0 errors (same 2 warnings). Full suite with database tests on: 421 of 421 pass. Three of my own tests that load the heavy database module for the first time were given a 20 second limit, because under a full parallel run the default 5 seconds was occasionally not enough.
+
+**Files touched:** `lib/db/queries/missing-receipts.ts`, `lib/actions/suppliers.ts`, `lib/format-recorded.ts`, `components/suppliers/add-receipt.tsx`, `app/(dashboard)/suppliers/missing-receipts/page.tsx`, `app/(dashboard)/suppliers/page.tsx`, `app/(dashboard)/suppliers/[supplierId]/page.tsx`, `app/api/export/supplier-bills/route.ts`, `tests/missing-receipts-db.test.ts`, `tests/push-assigned.test.ts`, `tests/push-system.test.ts`, `tests/push-scheduled-route.test.ts`, `CHANGELOG.md`.
+
 ## 06/11/2026 @ 05:28:25 IST — "claude-sonnet-5-5"
 
 **Project completion: 25.00%**

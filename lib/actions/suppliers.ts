@@ -1,8 +1,9 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
+import { guardedWrite } from '@/lib/actions/safe';
 import { requireSession } from '@/lib/auth/require-session';
 import { db } from '@/lib/db';
 import { applySupplierPayment } from '@/lib/db/queries/supplier-ledger';
@@ -307,4 +308,55 @@ export async function clearSupplierLimit(supplierId: string): Promise<ActionResu
 
   revalidatePath(`/suppliers/${supplierId}`);
   return { ok: true };
+}
+
+/**
+ * Put a receipt on a purchase that was recorded without one.
+ *
+ * The browser has already sent the file straight to storage; this records where
+ * it is. Three rules keep it safe:
+ *   - the file must sit under THIS purchase's own supplier folder, so a receipt
+ *     can never be pointed at another supplier's file or anything else in storage;
+ *   - only a purchase can carry a receipt (not a payment);
+ *   - it only ever fills an empty slot. The update is conditional on there being
+ *     no receipt yet, so two people attaching at the same moment cannot replace
+ *     each other's file, and an existing receipt is never silently overwritten.
+ */
+export async function attachSupplierReceipt(entryId: string, storagePath: string): Promise<ActionResult> {
+  await requireSession();
+
+  const parsedId = supplierEntryIdSchema.safeParse({ entryId });
+  if (!parsedId.success) return { ok: false, error: 'Invalid entry' };
+
+  return guardedWrite('attachSupplierReceipt', async () => {
+    const [entry] = await db
+      .select({
+        supplierId: supplierLedger.supplierId,
+        kind: supplierLedger.kind,
+        attachmentStoragePath: supplierLedger.attachmentStoragePath,
+      })
+      .from(supplierLedger)
+      .where(eq(supplierLedger.id, entryId))
+      .limit(1);
+
+    if (!entry) return { ok: false, error: 'That purchase no longer exists.' };
+    if (entry.kind !== 'charge') return { ok: false, error: 'Only a purchase can have a receipt.' };
+    if (entry.attachmentStoragePath) return { ok: false, error: 'This purchase already has a receipt.' };
+    if (!storagePath.startsWith(`suppliers/${entry.supplierId}/`) || storagePath.includes('..')) {
+      return { ok: false, error: 'Invalid receipt path' };
+    }
+
+    const updated = await db
+      .update(supplierLedger)
+      .set({ attachmentStoragePath: storagePath })
+      .where(and(eq(supplierLedger.id, entryId), isNull(supplierLedger.attachmentStoragePath)))
+      .returning({ id: supplierLedger.id });
+
+    if (updated.length === 0) return { ok: false, error: 'This purchase already has a receipt.' };
+
+    revalidatePath(`/suppliers/${entry.supplierId}`);
+    revalidatePath('/suppliers');
+    revalidatePath('/suppliers/missing-receipts');
+    return { ok: true };
+  });
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
+import { AddReceipt } from '@/components/suppliers/add-receipt';
 import { EntryActions } from '@/components/suppliers/entry-actions';
 import { SupplierAccountActions } from '@/components/suppliers/supplier-account-actions';
 import { SupplierLimitCard } from '@/components/suppliers/limit-card';
@@ -138,6 +139,11 @@ export default async function SupplierDetailPage({
                         >
                           View receipt
                         </a>
+                      ) : null}
+                      {!isPayment && !entry.attachmentStoragePath ? (
+                        <div className="mt-1">
+                          <AddReceipt entryId={entry.id} supplierId={supplier.id} />
+                        </div>
                       ) : null}
                     </Td>
                     <Td label="Added" className="text-right tabular">
