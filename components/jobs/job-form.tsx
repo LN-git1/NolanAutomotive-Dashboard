@@ -10,6 +10,7 @@ import { LABOUR_COLUMNS, LineEditor, PARTS_COLUMNS } from '@/components/jobs/lin
 import { RegistrationField } from '@/components/jobs/registration-field';
 import { VehicleFields } from '@/components/jobs/vehicle-fields';
 import { VehicleHistory } from '@/components/jobs/vehicle-history';
+import { randomId } from '@/lib/client/uuid';
 import { createJob, updateJob } from '@/lib/actions/jobs';
 import { applyQuantity, formatEur, formatHours, sumLabourHours, toCents } from '@/lib/money';
 import { useTimeFormat } from '@/components/providers/time-format-provider';
@@ -172,7 +173,7 @@ export function JobForm({
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   // One key per form instance: a double tap or retried submit creates one job.
-  const [submissionKey] = useState(() => crypto.randomUUID());
+  const [submissionKey] = useState(() => randomId());
   const [pending, startTransition] = useTransition();
 
   const isNew = !job;

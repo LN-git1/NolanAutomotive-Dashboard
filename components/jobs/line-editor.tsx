@@ -4,6 +4,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
 
 import { Button, Field, Input } from '@/components/ui';
+import { randomId } from '@/lib/client/uuid';
 import { cn } from '@/lib/utils';
 
 /**
@@ -36,9 +37,9 @@ export interface EditorRow {
 
 function newRow(columns: EditorColumn[], defaults: Record<string, string>): EditorRow {
   return {
-    // crypto.randomUUID keeps keys stable without a date/random pair that would
+    // randomId keeps keys stable without a date/random pair that would
     // collide when two rows are added inside the same millisecond.
-    key: crypto.randomUUID(),
+    key: randomId(),
     values: Object.fromEntries(columns.map((c) => [c.key, defaults[c.key] ?? ''])),
   };
 }
@@ -95,7 +96,7 @@ export function LineEditor({
   const fieldId = useId();
   const [rows, setRows] = useState<EditorRow[]>(() =>
     initial.map((values) => ({
-      key: crypto.randomUUID(),
+      key: randomId(),
       values: Object.fromEntries(columns.map((c) => [c.key, values[c.key] ?? ''])),
     })),
   );

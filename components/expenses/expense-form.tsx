@@ -5,6 +5,7 @@ import { useRef, useState, useTransition } from 'react';
 import { Alert, Button, Card, CardBody, Field, Input, Select, Textarea } from '@/components/ui';
 import { useToast } from '@/components/providers/toast-provider';
 import { addExpense } from '@/lib/actions/expenses';
+import { randomId } from '@/lib/client/uuid';
 import { todayIsoDate } from '@/lib/format';
 import { EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS } from '@/lib/validation/expense';
 
@@ -22,7 +23,7 @@ export function ExpenseForm({ onSaved }: { onSaved?: () => void }) {
   const [pending, startTransition] = useTransition();
   // Minted once per mount, refreshed after each save — never per render, or a
   // re-render between taps would defeat the server-side dedupe.
-  const [submissionKey, setSubmissionKey] = useState(() => crypto.randomUUID());
+  const [submissionKey, setSubmissionKey] = useState(() => randomId());
   const toast = useToast();
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -40,7 +41,7 @@ export function ExpenseForm({ onSaved }: { onSaved?: () => void }) {
       }
       toast.success('Expense recorded');
       formRef.current?.reset();
-      setSubmissionKey(crypto.randomUUID());
+      setSubmissionKey(randomId());
       onSaved?.();
     });
   }

@@ -1,5 +1,23 @@
 # Changelog
 
+## 06/11/2026 @ 00:37:49 IST — "claude-sonnet-5-5"
+
+**Project completion: 25.00%**
+
+Basis: unchanged, 1 of 4 phases of the "iPhone/iPad-native feel" plan. This is a small robustness fix found during the iPhone test, not a new phase. Still open: phase 2, phase 3, phase 4. Nothing is deployed: branch `test/apple-native-feel`, never pushed, production untouched.
+
+**Goal:** Let the new-job form and the expense form work on a page served over plain `http://`, so they can be tested from a phone on the Wi-Fi.
+
+### Fixed — job and expense forms crashed on a non-HTTPS page
+
+**Cause.** The forms called `crypto.randomUUID()` while rendering, to make a one-per-form key that stops a double tap creating two records. That browser function exists only on HTTPS or localhost. On the iPhone test page (`http://192.168.0.102:3100`) it is undefined, so the forms threw and the page broke. The live site is HTTPS, so users never saw it; only testing over plain http did.
+
+**Fix.** A small helper `randomId()` (`lib/client/uuid.ts`) uses `crypto.randomUUID()` when it exists and otherwise builds a version-4 UUID from `crypto.getRandomValues()`, which works on every page. Both paths are cryptographically random. The three callers (`job-form.tsx`, `expense-form.tsx`, `line-editor.tsx`) now use it. On the real HTTPS site the first path runs, so behaviour is unchanged there.
+
+**Verification.** Reproduced first: on the LAN address `window.isSecureContext` is false and `crypto.randomUUID` is undefined. After the change the new-job page and the page holding the expense form render with 0 console or page errors. 2 new tests (`tests/uuid.test.ts`): uses the native function when present; otherwise returns valid v4 UUIDs (50 generated, all unique). Typecheck clean, lint 0 errors (same 2 existing warnings).
+
+**Files touched:** `lib/client/uuid.ts`, `tests/uuid.test.ts`, `components/jobs/job-form.tsx`, `components/jobs/line-editor.tsx`, `components/expenses/expense-form.tsx`, `CHANGELOG.md`.
+
 ## 06/11/2026 @ 00:27:20 IST — "claude-sonnet-5-5"
 
 **Project completion: 25.00%**
