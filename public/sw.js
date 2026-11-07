@@ -22,7 +22,7 @@
  * immediately rather than showing a blank screen while Vercel wakes up.
  */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const STATIC_CACHE = `nolan-static-${VERSION}`;
 const OFFLINE_URL = '/offline';
 
@@ -31,7 +31,7 @@ const OFFLINE_URL = '/offline';
  * requested — the build assets have hashed filenames that are only knowable at
  * build time, and precaching them would need exactly the build step this avoids.
  */
-const PRECACHE_URLS = [OFFLINE_URL, '/icons/icon-192.png', '/manifest.webmanifest'];
+const PRECACHE_URLS = [OFFLINE_URL, '/icons/v2/icon-192.png', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -172,8 +172,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      icon: '/icons/v2/icon-192.png',
+      badge: '/icons/v2/icon-192.png',
       // The same tag replaces the earlier notification instead of stacking.
       tag: typeof data.tag === 'string' && data.tag ? data.tag : undefined,
       data: { url },

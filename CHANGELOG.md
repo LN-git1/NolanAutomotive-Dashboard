@@ -1,5 +1,25 @@
 # Changelog
 
+## 07/11/2026 @ 01:18:00 IST — "claude-sonnet-5-5"
+
+**Project completion: 50.00%**
+
+Basis: 2 of 4 phases of the "iPhone/iPad-native feel" plan are live (phase 1 Apple look-and-feel, phase 3 web push; the migration and push keys went in on 06/11/2026 and the post-deploy check passed). Still open: phase 2 (bottom sheets, press feel, pull-to-refresh) and phase 4 (other Nolan sites). The earlier 25.00% figure was written while phase 3 was still switched off. Phase 3 has not yet been tried on a physical phone, so the honest label is "live, device test pending".
+
+**Goal:** Give Nolan Automotive a real logo, and fix the iPhone Home Screen showing a plain white "N" instead of an icon.
+
+### Changed — new logo (steering wheel, white on brand blue), served from a new versioned path
+
+**Cause.** On the owner's iPhone 13 (Safari), "Add to Home Screen" produced a plain letter tile, not the icon. That tile is what iOS makes when it cannot get a usable icon, so a new design alone would have shown the same letter. Checks against the live site found three delivery faults, any of which can cause it: (1) iOS also asks for `/apple-touch-icon.png` and `/apple-touch-icon-precomposed.png` at the site root, and `proxy.ts` redirected both to the login page, so iOS received HTML; (2) the service worker served everything under `/icons/` cache-first at fixed filenames, so a device could keep an old or failed copy for ever; (3) there was no version in any icon filename. The old "NA" tile was also only a placeholder letter pair, with nothing that said "garage".
+
+**Fix.** The mark is a steering wheel (ring, crossbar, stem, hub) in white on the dashboard's existing brand blue `#3F7FB3`, chosen by the owner from three rounds of mock-ups. All icons now live under `/icons/v2/` (Home Screen icon 180, app icons 192/512, maskable 512, 26 regenerated launch screens). Real copies of the Home Screen icon sit at the site root and are excluded from the login gate in `proxy.ts`. The service worker cache name moved from `v1` to `v2` and precaches the new icon, so no device keeps the old files. `app/favicon.ico` now holds 16, 32 and 48 pixel versions, and `public/favicon-32.png` is replaced. The old `/icons/*.png` files and the old splash folder are deleted so nothing can still point at them. Icons are opaque full-bleed squares (iOS rounds the corners itself, and a transparent corner turns black). The app's colours and `theme_color` are unchanged: this is an icon change, not a re-theme. The source artwork and build scripts live in the parent repo's `brand/` folder.
+
+**Verification.** New `tests/brand-icons.test.ts` (7 tests): the Home Screen icon is an opaque 180x180 PNG, the app icons are opaque and the right size, every manifest icon exists, the folder is versioned and the old path is gone, the root icon files exist, they are outside the login gate while `/jobs` is still gated, and the service worker is on `v2` with the new precache. Typecheck clean, lint 0 errors (same 2 warnings), full suite 353 passed with the 100 database tests skipped (no test database running for this change). Against a local dev server with no login: `/apple-touch-icon.png`, `/apple-touch-icon-precomposed.png`, `/icons/v2/*`, a launch screen and `/favicon.ico` all return 200 with the right type, the old `/icons/apple-touch-icon.png` returns 404, `/jobs` still redirects to login, and the page head names the `/icons/v2/` files.
+
+**Not verified, and why it matters.** I could not reproduce the iPhone problem on a real iPhone from here, so I have not proven which of the three faults caused the letter tile. All three are fixed, and the test above locks them in, but the real proof is the owner deleting the Home Screen icon and adding it again from Safari after this is live. Also not yet seen: the new icon rendering on a real Home Screen, and the launch screen at each iPhone size.
+
+**Files touched:** `app/favicon.ico`, `app/layout.tsx`, `app/manifest.ts`, `lib/pwa/splash.ts`, `proxy.ts`, `public/sw.js`, `public/favicon-32.png`, `public/apple-touch-icon.png`, `public/apple-touch-icon-precomposed.png`, `public/icons/v2/` (icons and 26 launch screens), `scripts/generate-splash.cjs`, `tests/brand-icons.test.ts`, `CHANGELOG.md`; deleted `public/icons/*.png` and `public/icons/splash/`.
+
 ## 06/11/2026 @ 16:51:13 IST — "claude-sonnet-5-5"
 
 **Project completion: 25.00%**

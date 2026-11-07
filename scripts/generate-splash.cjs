@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- a standalone CommonJS script, run directly with node */
 /**
- * Generates the iOS launch screens in public/icons/splash/.
+ * Generates the iOS launch screens in public/icons/v2/splash/.
  *
  *   node scripts/generate-splash.cjs
  *
@@ -45,8 +45,8 @@ const ICON_SHARE = 0.24;
 const CORNER_SHARE = 0.2237; // iOS app-icon corner radius ratio
 
 const root = path.join(__dirname, '..');
-const iconPath = path.join(root, 'public', 'icons', 'icon-512.png');
-const outDir = path.join(root, 'public', 'icons', 'splash');
+const iconPath = path.join(root, 'public', 'icons', 'v2', 'icon-512.png');
+const outDir = path.join(root, 'public', 'icons', 'v2', 'splash');
 
 async function main() {
   fs.mkdirSync(outDir, { recursive: true });
