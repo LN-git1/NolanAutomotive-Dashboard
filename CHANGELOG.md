@@ -1,6 +1,6 @@
 # Changelog
 
-## 07/11/2026 @ 23:52:00 IST — "claude-sonnet-5-5"
+## 07/11/2026 @ 23:45:36 IST — "claude-sonnet-5-5"
 
 **Project completion: 50.00%**
 
@@ -22,7 +22,7 @@ Under each supplier that has a limit, a thin bar with the percentage at the end:
 
 **Files touched:** `app/(dashboard)/settings/page.tsx`, `app/(dashboard)/suppliers/page.tsx`, `app/(dashboard)/suppliers/[supplierId]/page.tsx`, `components/settings/supplier-limits-card.tsx` (new), `components/suppliers/limit-bar.tsx` (new), `components/suppliers/limit-card.tsx` (deleted), `lib/supplier-limit-progress.ts` (new), `lib/db/queries/supplier-limits.ts` (new), `lib/actions/suppliers.ts`, `tests/supplier-limit-progress.test.ts` (new), `CHANGELOG.md`
 
-## 07/11/2026 @ 23:46:00 IST — "claude-sonnet-5-5"
+## 07/11/2026 @ 23:45:24 IST — "claude-sonnet-5-5"
 
 **Project completion: 50.00%**
 
