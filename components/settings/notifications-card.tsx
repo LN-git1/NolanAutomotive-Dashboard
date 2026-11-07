@@ -1,5 +1,6 @@
 'use client';
 
+import { ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Alert, Button, Card, CardBody, CardHeader } from '@/components/ui';
@@ -21,6 +22,60 @@ type State =
   | { kind: 'denied' }
   | { kind: 'off' }
   | { kind: 'on'; topics: PushTopic[] };
+
+/**
+ * One row with a title, a line of help and an on/off switch.
+ *
+ * A real `<button role="switch">` so it works with a keyboard and a screen
+ * reader, and the whole switch is a 44px-tall tap target on a phone. Colours
+ * come from the existing brand and line tokens; the card has no other switch,
+ * so this lives here rather than in the shared UI barrel.
+ */
+function SwitchRow({
+  title,
+  description,
+  checked,
+  disabled,
+  label,
+  onChange,
+}: {
+  title: string;
+  description: string;
+  checked: boolean;
+  disabled?: boolean;
+  label: string;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0 text-sm">
+        <span className="font-medium text-ink">{title}</span>
+        <span className="block text-muted">{description}</span>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className="-my-2 flex min-h-11 shrink-0 items-center px-1 disabled:opacity-50"
+      >
+        <span
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+            checked ? 'bg-brand' : 'bg-line'
+          }`}
+        >
+          <span
+            className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
+              checked ? 'translate-x-[22px]' : 'translate-x-0.5'
+            }`}
+          />
+        </span>
+      </button>
+    </div>
+  );
+}
 
 async function postJson(url: string, body: unknown, method = 'POST') {
   return fetch(url, {
@@ -252,39 +307,55 @@ export function NotificationsCard() {
           </Alert>
         ) : null}
 
-        {state.kind === 'off' ? (
-          <div>
-            <Button onClick={() => void turnOn()} disabled={busy}>
-              {busy ? 'Switching on…' : 'Turn on notifications'}
-            </Button>
-          </div>
+        {state.kind === 'off' || state.kind === 'on' ? (
+          <SwitchRow
+            title="Notifications on this device"
+            description={
+              busy
+                ? state.kind === 'on'
+                  ? 'Switching off…'
+                  : 'Switching on…'
+                : state.kind === 'on'
+                  ? 'On. Choose which alerts below.'
+                  : 'Off. Switch on to get alerts here.'
+            }
+            checked={state.kind === 'on'}
+            disabled={busy}
+            label="Notifications on this device"
+            onChange={(next) => void (next ? turnOn() : turnOff())}
+          />
         ) : null}
 
         {state.kind === 'on' ? (
           <>
-            <div className="flex flex-col gap-3">
-              {PUSH_TOPICS.map((topic) => (
-                <label key={topic} className="flex items-start gap-2 text-sm">
-                  <input
-                    type="checkbox"
+            <details className="group rounded-md border border-line">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm transition-colors active:bg-info-soft [&::-webkit-details-marker]:hidden">
+                <ChevronRight
+                  aria-hidden
+                  className="size-4 shrink-0 text-muted transition-transform group-open:rotate-90"
+                />
+                <span className="flex-1 font-medium text-ink">Choose which alerts</span>
+                <span className="text-xs text-muted">
+                  {state.topics.length} of {PUSH_TOPICS.length} on
+                </span>
+              </summary>
+              <div className="flex flex-col gap-3 border-t border-line px-3 py-3">
+                {PUSH_TOPICS.map((topic) => (
+                  <SwitchRow
+                    key={topic}
+                    title={PUSH_TOPIC_INFO[topic].label}
+                    description={PUSH_TOPIC_INFO[topic].description}
                     checked={state.topics.includes(topic)}
-                    onChange={(event) => void toggleTopic(topic, event.target.checked)}
-                    className="mt-0.5 size-4"
+                    label={PUSH_TOPIC_INFO[topic].label}
+                    onChange={(next) => void toggleTopic(topic, next)}
                   />
-                  <span>
-                    <span className="font-medium text-ink">{PUSH_TOPIC_INFO[topic].label}</span>
-                    <span className="block text-muted">{PUSH_TOPIC_INFO[topic].description}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
+                ))}
+              </div>
+            </details>
 
-            <div className="flex flex-wrap gap-2">
+            <div>
               <Button variant="secondary" onClick={() => void sendTest()} disabled={busy}>
                 Send a test
-              </Button>
-              <Button variant="ghost" onClick={() => void turnOff()} disabled={busy}>
-                Turn off on this device
               </Button>
             </div>
           </>

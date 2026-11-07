@@ -1,5 +1,27 @@
 # Changelog
 
+## 07/11/2026 @ 23:46:00 IST — "claude-sonnet-5-5"
+
+**Project completion: 50.00%**
+
+Basis: 2 of 4 phases of the "iPhone/iPad-native feel" plan are live (phase 1 Apple look-and-feel, phase 3 web push; the owner has now confirmed push works on his phone). Still open: phase 2 (bottom sheets, press feel, pull-to-refresh; needs a library choice and a preview first) and phase 4 (the other Nolan sites). This entry is a Settings change inside phase 3, so the figure does not move.
+
+**Goal:** Make the notification options in Settings simpler: one master on/off switch for the phone, with the individual alerts tucked into a fold-out list.
+
+### Changed — Notifications card in Settings
+
+**Why.** The card showed four checkboxes, a "Turn on notifications" button when off and a separate "Turn off on this device" button when on. The owner asked for "a master on/off, click a dropdown to individually on/off each notification". No new alerts were wanted; he was offered 20 ideas and turned them all down.
+
+**What changed.** A single "Notifications on this device" switch replaces the two buttons: turning it on asks iOS for permission exactly as before (the permission request still happens first in the tap, before any await, which iOS requires), turning it off removes this device's subscription. When on, a "Choose which alerts" fold-out (a native `<details>`, the same pattern as the app's other collapsible cards) shows a switch for each of the four existing alerts, with a count such as "4 of 4 on" on its header. "Send a test" stays. The switches are real `<button role="switch">` elements with a 44px tap target, built from the existing brand and line colour tokens; no new library.
+
+**Verification.** `pnpm typecheck` clean, eslint clean on the file, the 27 push client/core tests pass. Not verified: I have not seen the card rendered, because it only shows its switch layout on an installed phone with notifications on, and no test covers the new switches.
+
+### Found, not changed — the Home Screen letter tile was a phone problem, not the site
+
+After the logo work the owner's iPhone still saved a plain "N" tile (the preview showed the steering wheel). It stayed "N" with web-app mode off, on both `dashboard.nolanautomotive.ie` and the `.vercel.app` address, and after clearing Safari data; adding github.com gave a blank white box. So that iPhone fails to save any site's icon. Every icon URL was checked from outside and serves correctly. The earlier icon changes are still correct and tested; nothing here needs changing on the site. To be tested on another device by the owner.
+
+**Files touched:** `components/settings/notifications-card.tsx`, `CHANGELOG.md`
+
 ## 07/11/2026 @ 01:18:00 IST — "claude-sonnet-5-5"
 
 **Project completion: 50.00%**
