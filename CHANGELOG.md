@@ -1,5 +1,27 @@
 # Changelog
 
+## 07/11/2026 @ 23:52:00 IST — "claude-sonnet-5-5"
+
+**Project completion: 50.00%**
+
+Basis: unchanged, 2 of 4 phases of the "iPhone/iPad-native feel" plan are live. This is an owner-requested feature on the supplier accounts, outside the four phases, so the figure does not move. Still open: phase 2 and phase 4.
+
+**Goal:** Let the owner set a rough spending limit for each supplier in one place, and see at a glance on the suppliers page how close each bill is to its limit.
+
+### Added — "Supplier Balance Limit" section in Settings
+
+**Why.** The limit already existed but was easy to miss: a card on each supplier's own page, below the balance, and nowhere else. The owner said there was "nowhere to add a supplier limit", and described what he wants: a rough boundary that tells him roughly when to stop spending with a supplier. It can be exceeded and must never block a purchase.
+
+**What.** A new card in Settings lists every supplier with its balance and an editable limit (Set limit, Save limit, Remove limit). The list is read from the database on every visit, so a supplier added or deleted on the suppliers page appears or disappears here; the supplier create, delete, balance and limit actions now also refresh `/settings`. If the limits table cannot be read the card is simply hidden, as the old card was. The old per-supplier "Balance limit" card was removed, since limits are now set only in Settings (`limit-card.tsx` deleted).
+
+### Added — progress bar on the suppliers page
+
+Under each supplier that has a limit, a thin bar with the percentage at the end: green below 80%, orange from 80%, red at the limit or past it. The lines are the same 80% and 100% the phone alerts use (`supplierLevel`), so a bar turning orange and the "balance at 80%" alert always happen together. Going over is shown (e.g. "112%", red; Settings adds "Over the limit by €400") and nothing is blocked. A credit shows an empty bar. Suppliers with no limit show no bar. The bar is a plain `div` with `role="progressbar"` using the existing ok and danger colour tokens plus Tailwind orange, since the app's own "warn" token is a dark amber that does not read as orange.
+
+**Verification.** `pnpm typecheck` clean, eslint clean on the changed folders, full unit suite 358 passed (5 new in `tests/supplier-limit-progress.test.ts`: no bar without a limit, green below 80%, orange from exactly 80%, red at 100%, 112% over with the bar capped at full width, a credit as an empty bar), 100 database tests skipped as before. Not verified: I have not seen either screen rendered, because they need the live database, and saving a limit through the new Settings form has not been tried against the real database. The server actions it calls are the existing, already-tested ones.
+
+**Files touched:** `app/(dashboard)/settings/page.tsx`, `app/(dashboard)/suppliers/page.tsx`, `app/(dashboard)/suppliers/[supplierId]/page.tsx`, `components/settings/supplier-limits-card.tsx` (new), `components/suppliers/limit-bar.tsx` (new), `components/suppliers/limit-card.tsx` (deleted), `lib/supplier-limit-progress.ts` (new), `lib/db/queries/supplier-limits.ts` (new), `lib/actions/suppliers.ts`, `tests/supplier-limit-progress.test.ts` (new), `CHANGELOG.md`
+
 ## 07/11/2026 @ 23:46:00 IST — "claude-sonnet-5-5"
 
 **Project completion: 50.00%**

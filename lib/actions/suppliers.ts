@@ -33,6 +33,8 @@ import type { ActionResult } from './jobs';
 function revalidateSupplier(supplierId: string) {
   revalidatePath(`/suppliers/${supplierId}`);
   revalidatePath('/suppliers');
+  // Settings lists every supplier with its balance against its limit.
+  revalidatePath('/settings');
   revalidatePath('/');
 }
 
@@ -64,6 +66,8 @@ export async function createSupplier(formData: FormData): Promise<ActionResult> 
   }
 
   revalidatePath('/suppliers');
+  // A new supplier appears in Settings' Supplier Balance Limit list.
+  revalidatePath('/settings');
   revalidatePath('/');
   return { ok: true };
 }
@@ -248,6 +252,8 @@ export async function deleteSupplier(supplierId: string): Promise<ActionResult> 
   }
 
   revalidatePath('/suppliers');
+  // A deleted supplier leaves Settings' Supplier Balance Limit list.
+  revalidatePath('/settings');
   revalidatePath('/');
   return { ok: true };
 }
@@ -294,7 +300,8 @@ export async function setSupplierLimit(supplierId: string, limit: string): Promi
     return { ok: false, error: 'Could not save the limit just now — please try again.' };
   }
 
-  revalidatePath(`/suppliers/${supplierId}`);
+  revalidatePath('/suppliers');
+  revalidatePath('/settings');
   checkSupplierLimitAfterResponse(supplierId);
   return { ok: true };
 }
@@ -313,7 +320,8 @@ export async function clearSupplierLimit(supplierId: string): Promise<ActionResu
     return { ok: false, error: 'Could not remove the limit just now — please try again.' };
   }
 
-  revalidatePath(`/suppliers/${supplierId}`);
+  revalidatePath('/suppliers');
+  revalidatePath('/settings');
   return { ok: true };
 }
 

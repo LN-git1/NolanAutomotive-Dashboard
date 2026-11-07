@@ -4,10 +4,12 @@ import { AssigneesCard } from '@/components/settings/assignees-card';
 import { FactoryReset } from '@/components/settings/factory-reset';
 import { NotificationsCard } from '@/components/settings/notifications-card';
 import { SettingsForm } from '@/components/settings/settings-form';
+import { SupplierLimitsCard } from '@/components/settings/supplier-limits-card';
 import { TimeOffCard } from '@/components/settings/time-off';
 import { Card, CardBody, CardHeader } from '@/components/ui';
 import { listAssigneesWithJobCounts } from '@/lib/db/queries/assignees';
-import { getResetCounts } from '@/lib/db/queries/overview';
+import { getResetCounts, listSuppliersWithTotals } from '@/lib/db/queries/overview';
+import { listSupplierLimits } from '@/lib/db/queries/supplier-limits';
 import { getSettings } from '@/lib/db/queries/settings';
 import { listAllTimeOff } from '@/lib/db/queries/time-off';
 import { peekNextNumber } from '@/lib/counters';
@@ -28,11 +30,13 @@ const EXPORTS = [
 ] as const;
 
 export default async function SettingsPage() {
-  const [settings, resetCounts, timeOffEntries, team] = await Promise.all([
+  const [settings, resetCounts, timeOffEntries, team, suppliers, supplierLimits] = await Promise.all([
     getSettings(),
     getResetCounts(),
     listAllTimeOff(),
     listAssigneesWithJobCounts(),
+    listSuppliersWithTotals(),
+    listSupplierLimits(),
   ]);
 
   // Shown so the owner can see where the sequence currently stands.
@@ -54,6 +58,18 @@ export default async function SettingsPage() {
       <SettingsForm settings={settings} />
 
       <NotificationsCard />
+
+      {/* Hidden (not an error) if the limits table cannot be read yet. */}
+      {supplierLimits ? (
+        <SupplierLimitsCard
+          rows={suppliers.map((supplier) => ({
+            id: supplier.id,
+            name: supplier.name,
+            balanceCents: Number(supplier.balanceCents),
+            limitCents: supplierLimits.get(supplier.id) ?? null,
+          }))}
+        />
+      ) : null}
 
       <Card>
         <CardHeader

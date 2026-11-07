@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { SupplierLimitBar } from '@/components/suppliers/limit-bar';
 import { SupplierActions } from '@/components/suppliers/supplier-actions';
 import { SupplierForm } from '@/components/suppliers/supplier-form';
 import { Card, CardBody, CardHeader, Empty, LinkButton, Table, Td, Th } from '@/components/ui';
 import { countChargesMissingReceipts } from '@/lib/db/queries/missing-receipts';
 import { listSuppliersWithTotals } from '@/lib/db/queries/overview';
+import { listSupplierLimits } from '@/lib/db/queries/supplier-limits';
 import { formatDate } from '@/lib/format';
 import { formatEur } from '@/lib/money';
 
@@ -13,9 +15,11 @@ export const metadata: Metadata = { title: 'Owed to others' };
 export const dynamic = 'force-dynamic';
 
 export default async function SuppliersPage() {
-  const [suppliers, missingReceipts] = await Promise.all([
+  const [suppliers, missingReceipts, limits] = await Promise.all([
     listSuppliersWithTotals(),
     countChargesMissingReceipts(),
+    // Null when the limits table cannot be read: the page just shows no bars.
+    listSupplierLimits(),
   ]);
 
   /*
@@ -78,6 +82,11 @@ export default async function SuppliersPage() {
                       {supplier.notes ? (
                         <div className="text-xs text-muted">{supplier.notes}</div>
                       ) : null}
+                      <SupplierLimitBar
+                        balanceCents={Number(supplier.balanceCents)}
+                        limitCents={limits?.get(supplier.id) ?? null}
+                        className="mt-2 max-w-xs"
+                      />
                     </Td>
                     <Td label="Last entry" className="text-muted">
                       {supplier.lastEntryDate ? formatDate(supplier.lastEntryDate) : '—'}
