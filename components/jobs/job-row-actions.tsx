@@ -4,6 +4,7 @@ import { MoreHorizontal, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
+import { JobWorkSummary, type JobWork } from '@/components/jobs/job-work-summary';
 import { useToast } from '@/components/providers/toast-provider';
 import { Alert, Button, LinkButton, Select } from '@/components/ui';
 import { ResponsiveModal } from '@/components/ui/responsive-modal';
@@ -19,8 +20,9 @@ import { JOB_STATUS_LABELS } from '@/lib/validation/job';
 const ROW_STATUSES = ['active', 'completed', 'invoiced'] as const;
 
 /**
- * The quick actions for one job on the Jobs list: open it, change its status,
- * or delete it. A bottom sheet on a phone, the usual centred pop-up on a wide
+ * The quick view for one job on the Jobs list: what work and parts the job needs
+ * (the invoice text), then open it, change its status, or delete it. Read it,
+ * swipe the sheet away, and check the next job. A bottom sheet on a phone, the usual centred pop-up on a wide
  * screen. Uses the same server actions as the job page, so every rule that
  * applies there applies here.
  */
@@ -28,10 +30,13 @@ export function JobRowActions({
   jobId,
   jobNumber,
   status,
+  work,
 }: {
   jobId: string;
   jobNumber: string;
   status: JobStatus;
+  /** The invoice text for this job, shown above the actions. */
+  work: JobWork;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -104,6 +109,8 @@ export function JobRowActions({
         </div>
 
         <div className="flex flex-col gap-3 p-4">
+          <JobWorkSummary work={work} />
+
           {error ? <Alert>{error}</Alert> : null}
 
           <LinkButton href={`/jobs/${jobId}`} className="justify-center">

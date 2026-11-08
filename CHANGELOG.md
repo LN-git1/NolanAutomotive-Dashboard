@@ -1,5 +1,23 @@
 # Changelog
 
+## 08/11/2026 @ 04:52:45 IST — "claude-sonnet-5-5"
+
+**Project completion: 75.00%**
+
+Basis: 3 of 4 phases of the "iPhone/iPad-native feel" plan are deployed (phase 1 Apple look-and-feel, phase 2 bottom sheets and pull-to-refresh, phase 3 web push). Phase 2 went live on 08/11/2026 and its post-deploy check passed, but its touch behaviours have not yet been tried on a phone, so this figure is the deployed count, not a phone-verified one. Phase 4 (the other Nolan sites) is built for the portal and books apps (see `shop-stack/CHANGELOG.md`) but they are not deployed, so it does not count yet. Previous entries said 50.00% because they counted only phases confirmed live at the time.
+
+**Goal:** Let the owner read what a job needs (the work and the parts) from the Jobs list without opening the job: tap Actions, read, swipe the sheet away, and check the next job.
+
+### Added — the work and parts on the Jobs Actions sheet
+
+**Why.** The owner asked for the Actions sheet to carry "all the text that's going to be on an invoice" so the people in the workshop can see what parts a job needs and what work is being done just by tapping Actions, then swipe down and look at another job, with status, delete and open-the-job still there.
+
+**What.** The sheet now opens with the vehicle line (make, model, year, colour, registration) and customer, then the invoice's three text sections: Work carried out (each line with its hours), Parts (name, part number and quantity) and Other comments. The status picker, Open job and Delete job follow underneath, and a long job scrolls inside the sheet. Blank lines left in the job form are dropped, as on the invoice. Left out on purpose: prices and totals (the point is what to do and what to fetch, and the owner described text), and the job's private notes (the schema marks them never printed on an invoice). The Jobs list already loads every job's full row, so this needed no extra database query.
+
+**Verification.** `pnpm typecheck` clean, eslint 0 errors (one old warning), full unit suite 365 passed (4 new in `tests/job-work-summary.test.ts`: the vehicle line, blank-line removal, a bare job, the rendered text including part numbers and quantities, no prices, and the empty message), 100 database tests skipped as before. The sheet was opened in headless Chrome at phone size with realistic data (a brake job with three work lines, three parts and a comment) and the screenshot was looked at: everything reads in order, the actions sit below, and it scrolls. **Not verified:** a real job from the live database, a very long job on a real phone, and swiping between jobs on a real phone. A temporary test page was used for the screenshot and deleted afterwards.
+
+**Files touched:** `components/jobs/job-work-summary.tsx` (new), `components/jobs/job-row-actions.tsx`, `app/(dashboard)/jobs/page.tsx`, `tests/job-work-summary.test.ts` (new), `CHANGELOG.md`
+
 ## 08/11/2026 @ 04:09:24 IST — "claude-sonnet-5-5"
 
 **Project completion: 50.00%**

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { JobRowActions } from '@/components/jobs/job-row-actions';
+import { jobWorkFromJob } from '@/components/jobs/job-work-summary';
 import {
   Badge,
   Card,
@@ -217,7 +218,12 @@ export default async function JobsPage({ searchParams }: PageProps<'/jobs'>) {
                   </Td>
                   <Td label="Actions" className="text-right">
                     <div className="flex justify-end">
-                      <JobRowActions jobId={job.id} jobNumber={job.jobNumber} status={job.status} />
+                      <JobRowActions
+                        jobId={job.id}
+                        jobNumber={job.jobNumber}
+                        status={job.status}
+                        work={jobWorkFromJob(job)}
+                      />
                     </div>
                   </Td>
                 </tr>
