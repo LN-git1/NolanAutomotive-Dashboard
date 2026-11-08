@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition, type FormEvent } from 'react';
 
 import { Alert, Button, Card, CardBody, CardHeader, Field, Input } from '@/components/ui';
+import { ResponsiveModal } from '@/components/ui/responsive-modal';
 import { useToast } from '@/components/providers/toast-provider';
 import { addTimeOff, deleteTimeOff } from '@/lib/actions/time-off';
 import { formatDate } from '@/lib/format';
@@ -121,18 +122,8 @@ export function TimeOffCard({ entries }: { entries: TimeOff[] }) {
         </Button>
       </CardBody>
 
-      {open ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={closeModal}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Add time off"
-            className="w-full max-w-sm rounded-lg border border-line bg-surface p-4 shadow-lg"
-            onClick={(event) => event.stopPropagation()}
-          >
+      <ResponsiveModal open={open} onClose={closeModal} label="Add time off">
+          <div className="p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-ink">Add time off</h2>
               <button
@@ -175,8 +166,7 @@ export function TimeOffCard({ entries }: { entries: TimeOff[] }) {
               </div>
             </form>
           </div>
-        </div>
-      ) : null}
+      </ResponsiveModal>
     </Card>
   );
 }

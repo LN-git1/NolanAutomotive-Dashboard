@@ -1,5 +1,37 @@
 # Changelog
 
+## 08/11/2026 @ 04:09:24 IST — "claude-sonnet-5-5"
+
+**Project completion: 50.00%**
+
+Basis: 2 of 4 phases of the "iPhone/iPad-native feel" plan are live (phase 1, phase 3). Phase 2 is now built and committed but NOT yet on the live site, so it does not count until it is pushed and checked on a phone. Still open: phase 4 (the other Nolan sites).
+
+**Goal:** Phase 2 of the plan, for every device: bottom sheets on phone-width screens, pull-to-refresh in the installed app, and a springier press on buttons. Wide screens keep today's centred pop-ups.
+
+### Added — one shared modal that is a bottom sheet on phones (`components/ui/responsive-modal.tsx`)
+
+**Why.** The app had three hand-built centred pop-ups. On a phone a centred box over a dimmed page does not feel like a phone app; a sheet that slides up and swipes down does. One shared component means one set of behaviour, chosen by screen width (below 640px), not by device make, so iPhone and Android phones are treated the same (the owner asked for features on all devices, not one).
+
+**What.** Phone width: a vaul bottom sheet with a drag handle, swipe down or tap outside to close, Escape to close. Wider: the same centred pop-up markup as before, unchanged. Converted: Add time off (Settings), Add to bill / Mark paid on a supplier, and the Mark-as-paid payment modal. That last one passes `dismissible={false}` so it still cannot be swiped, tapped or Escaped away, only Cancel or recording the payment, because skipping it would let a job be marked paid with no money recorded. A new test locks that.
+
+### Added — actions sheet on the Jobs list (`components/jobs/job-row-actions.tsx`)
+
+A new Actions button on every job row opens a sheet (a centred pop-up on wide screens) with Open job, a status picker and Delete job. It uses the same server actions as the job page. `paid` is not offered: it can only be set by recording a payment on the job's page, as before.
+
+### Added — pull-to-refresh (`components/pwa/pull-to-refresh.tsx`)
+
+Pull down from the very top of Jobs, Awaiting payments, Schedule or Owed to others to reload, with a small spring-animated indicator (Motion). It only runs in the installed Home Screen app: a normal browser tab already refreshes on pull-down and two would fight, while an installed iPhone app has none. In an installed Android app the browser's own is switched off while it runs, so both phones behave the same. It does nothing while a dialog is open or on sideways drags.
+
+### Changed — button press
+
+Buttons already shrank slightly when pressed, but instantly. The shared button style now eases that with a small overshoot (150ms). CSS only; no library.
+
+**Libraries added:** `vaul` (sheet), `motion` (pull indicator).
+
+**Verification.** `pnpm typecheck` clean; eslint 0 errors (one old warning in `lib/client/session.ts`); full unit suite 361 passed (3 new in `tests/modal-dismissal.test.ts`), 100 database tests skipped as before. A tappable mock of the three behaviours was shown to and approved by the owner. **Browser test (headless Chrome, a temporary test page that was deleted afterwards, 14 of 14 checks passed).** At phone size (390x844, touch): the modal opens as a vaul bottom sheet flush with the bottom of the screen; swiping down closes it; Escape closes it; tapping outside closes it; a field inside takes typing; its Cancel closes it. The locked sheet (the payment modal setting) ignored swipe-down, Escape and tapping outside, and closed only with its own Cancel. At desktop size (1280x800): the old centred pop-up appears (not a sheet), clicking outside closes the dismissible one, and the locked one ignores an outside click and closes with Cancel. Screenshots were looked at. **Not verified:** pull-to-refresh (it needs the installed app and a signed-in list page, so the test page could not reach it), the sheet over a real on-screen keyboard, real iPhone or Android touch (the swipe was driven with a mouse), and the Jobs actions sheet and converted forms against the live database.
+
+**Files touched:** `components/ui/responsive-modal.tsx` (new), `components/jobs/job-row-actions.tsx` (new), `components/pwa/pull-to-refresh.tsx` (new), `components/settings/time-off.tsx`, `components/suppliers/supplier-account-actions.tsx`, `components/payments/mark-paid-modal.tsx`, `components/layout/dashboard-shell.tsx`, `components/ui/index.tsx`, `app/(dashboard)/jobs/page.tsx`, `tests/modal-dismissal.test.ts` (new), `package.json`, `pnpm-lock.yaml`, `CHANGELOG.md`
+
 ## 07/11/2026 @ 23:45:36 IST — "claude-sonnet-5-5"
 
 **Project completion: 50.00%**

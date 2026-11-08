@@ -6,6 +6,7 @@ import { useState, useTransition } from 'react';
 import { PaymentForm } from '@/components/payments/payment-form';
 import { useToast } from '@/components/providers/toast-provider';
 import { Alert, Button, LinkButton } from '@/components/ui';
+import { ResponsiveModal } from '@/components/ui/responsive-modal';
 import { recordPayment } from '@/lib/actions/payments';
 import { formatEur } from '@/lib/money';
 
@@ -69,13 +70,13 @@ export function MarkPaidModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Record payment for ${jobNumber}`}
-        className="w-full max-w-sm rounded-lg border border-line bg-surface p-4 shadow-lg"
-      >
+    <ResponsiveModal
+      open
+      onClose={onClose}
+      label={`Record payment for ${jobNumber}`}
+      dismissible={false}
+    >
+      <div className="p-4">
         <h2 className="text-sm font-semibold text-ink">Record the payment</h2>
 
         {invoice && invoice.remainingCents <= 0 ? (
@@ -140,6 +141,6 @@ export function MarkPaidModal({
           </>
         )}
       </div>
-    </div>
+    </ResponsiveModal>
   );
 }

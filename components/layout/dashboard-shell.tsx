@@ -11,6 +11,7 @@ import {
   useSidebarCollapsed,
 } from '@/components/layout/sidebar';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
+import { PullToRefresh } from '@/components/pwa/pull-to-refresh';
 import { cn } from '@/lib/utils';
 
 /**
@@ -62,6 +63,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       </div>
 
       <MobileTabBar />
+      <PullToRefresh />
     </div>
   );
 }

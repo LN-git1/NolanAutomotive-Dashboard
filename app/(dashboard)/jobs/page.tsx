@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { JobRowActions } from '@/components/jobs/job-row-actions';
 import {
   Badge,
   Card,
@@ -179,6 +180,7 @@ export default async function JobsPage({ searchParams }: PageProps<'/jobs'>) {
                 <Th>Status</Th>
                 <Th>Priority</Th>
                 <Th>Due</Th>
+                <Th className="text-right">Actions</Th>
               </tr>
             </thead>
             <tbody>
@@ -212,6 +214,11 @@ export default async function JobsPage({ searchParams }: PageProps<'/jobs'>) {
                   </Td>
                   <Td label="Due" className="text-muted">
                     {formatDueDateTime(job.dueDate, job.dueTime, settings.timeFormat)}
+                  </Td>
+                  <Td label="Actions" className="text-right">
+                    <div className="flex justify-end">
+                      <JobRowActions jobId={job.id} jobNumber={job.jobNumber} status={job.status} />
+                    </div>
                   </Td>
                 </tr>
               ))}

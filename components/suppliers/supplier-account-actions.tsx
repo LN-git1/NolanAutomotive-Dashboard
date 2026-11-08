@@ -8,6 +8,7 @@ import { PaymentForm } from '@/components/payments/payment-form';
 import { useToast } from '@/components/providers/toast-provider';
 import { ChargeForm } from '@/components/suppliers/charge-form';
 import { Alert, Button } from '@/components/ui';
+import { ResponsiveModal } from '@/components/ui/responsive-modal';
 import { recordSupplierPayment } from '@/lib/actions/suppliers';
 import { formatEur } from '@/lib/money';
 
@@ -94,22 +95,16 @@ export function SupplierAccountActions({
         </Button>
       </div>
 
-      {open ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={close}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={
-              open === 'charge'
-                ? `Add a purchase to ${supplierName}`
-                : `Record a payment to ${supplierName}`
-            }
-            className="max-h-full w-full max-w-sm overflow-y-auto rounded-lg border border-line bg-surface shadow-lg"
-            onClick={(event) => event.stopPropagation()}
-          >
+      <ResponsiveModal
+        open={open !== null}
+        onClose={close}
+        label={
+          open === 'payment'
+            ? `Record a payment to ${supplierName}`
+            : `Add a purchase to ${supplierName}`
+        }
+      >
+          <div>
             <div className="flex items-center justify-between border-b border-line px-4 py-3">
               <h2 className="text-sm font-semibold text-ink">
                 {open === 'charge' ? 'Add to the bill' : 'Money paid off the bill'}
@@ -148,8 +143,7 @@ export function SupplierAccountActions({
               </div>
             )}
           </div>
-        </div>
-      ) : null}
+      </ResponsiveModal>
     </>
   );
 }

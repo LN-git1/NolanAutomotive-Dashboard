@@ -35,7 +35,7 @@ type ButtonSize = 'sm' | 'md';
  */
 const BUTTON_BASE =
   'inline-flex items-center justify-center gap-2 rounded-md border font-medium whitespace-nowrap ' +
-  'transition-colors active:scale-[0.97] ' +
+  'transition-[color,background-color,border-color,opacity,transform] duration-150 ease-[cubic-bezier(0.3,1.5,0.5,1)] active:scale-[0.97] ' +
   'disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-[1] focus-visible:outline-2 ' +
   'focus-visible:outline-offset-2 focus-visible:outline-brand';
 
