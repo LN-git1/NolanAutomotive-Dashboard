@@ -430,20 +430,20 @@ edit to that file.
 
 ## Resetting the dashboard
 
-**Settings → Danger zone → Reset all data** clears every job, invoice, customer record, supplier,
-bill and uploaded file, and restarts job and invoice numbering at `J-0001` / `NA-<year>-0001`.
+There is **no in-app reset any more.** **Settings → Danger zone** still shows what is stored (jobs,
+invoices, attachments, suppliers, supplier bills, payments), but its button is switched off and only
+shows a toast. The wipe was removed because it was too risky to leave one tap away, and the server
+action behind it (`lib/actions/danger.ts`) was deleted so nothing can call it.
 
-It is guarded three ways: the panel has to be revealed, an exact phrase (`RESET ALL DATA`) has to be
-typed, and that phrase is re-checked on the server — the client prompt is a speed bump, not the
-control. The current row counts are shown before you confirm, so you can see exactly what is about
-to be destroyed.
+If a wipe is ever genuinely needed, do it by hand in Supabase and R2. It has three parts:
 
-> ⚠️ **Only use this to clear test data before going live.** It resets the invoice counter, so
-> running it after real invoices have gone out would reissue numbers customers already hold, which
-> breaks the continuous sequence Revenue expects. There is no undo.
+1. Delete the rows, in this order: payments, then invoices, then jobs (`invoices` references `jobs`
+   with no `ON DELETE CASCADE`), then the rest.
+2. Empty the `nolan-attachments` and `nolan-invoices` R2 buckets.
+3. Reset the `counters` table to `next_value = 1`.
 
-Your business details, VAT settings and default hourly rate are **kept** — those are configuration,
-not data.
+> ⚠️ Resetting the counters after real invoices have gone out would reissue numbers customers
+> already hold, which breaks the continuous sequence Revenue expects. There is no undo.
 
 ---
 
@@ -728,3 +728,9 @@ tests/                       Vitest
   a live invoice and the payments against it, so a fully paid job cannot get stuck on the owed list.
   Every list, total and count meaning one of those three things imports the shared predicate.
 - **All euro arithmetic goes through `lib/money.ts`.** Never inline VAT maths.
+
+---
+
+## License
+
+Proprietary. All rights reserved. See [LICENSE](LICENSE).

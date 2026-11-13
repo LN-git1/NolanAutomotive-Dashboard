@@ -1,5 +1,35 @@
 # Changelog
 
+## 13/11/2026 @ 05:05:15 IST — "claude-sonnet-5-5"
+
+**Project completion: 75.00%**
+
+Basis: 3 of 4 phases of the "iPhone/iPad-native feel" plan are deployed (phases 1, 2 and 3). Phase 4 (the other Nolan sites) is open. This entry is housekeeping and does not move the figure.
+
+**Goal:** Take the factory reset out of the dashboard for good, and tidy the repo's front page so it reads as a finished product.
+
+### Changed — the "Reset all data" button is now a joke button
+
+**Cause.** The owner decided a one-tap-and-a-typed-phrase wipe of every job, invoice and supplier was too much risk to keep in a live back-office app. Relabelling the button alone would not remove the risk: the wipe lived in a `'use server'` action, which stays a callable endpoint even with no button pointing at it.
+
+**Fix.** `components/settings/factory-reset.tsx` keeps the "Currently stored" counts grid (the owner still wants to see the figures) and the Danger zone card. Its button now reads "Reset all data… (lol, no)" and only shows a toast, "Come on bro, this don't work no more". The reveal step, the typed `RESET ALL DATA` phrase and the final delete button are gone, and the component no longer imports any server code.
+
+### Removed — the wipe itself
+
+`lib/actions/danger.ts` (the six table deletes, the R2 object removal and the counter reset) and `lib/validation/danger.ts` (the confirmation phrase, only used by that action and the old input) are deleted. A search of the app code finds no remaining reference to `factoryReset` or `RESET_CONFIRMATION_PHRASE`. `getResetCounts` and its test stay, because the counts grid still uses them.
+
+### Changed — docs
+
+README's "Resetting the dashboard" section described a flow that no longer exists. It now says there is no in-app reset and records the manual route (delete payments, then invoices, then jobs, because `invoices` has no `ON DELETE CASCADE`; empty both R2 buckets; set `counters` back to 1). Added a `LICENSE` (proprietary, all rights reserved) and a License section in the README.
+
+### Decided — files left where they are
+
+The root config files (`vercel.json`, `next.config.ts`, `eslint.config.mjs`, `postcss.config.mjs`, `drizzle.config.ts`, `vitest.config.mts`, `tsconfig.json`, `proxy.ts`, the pnpm files) were reviewed and kept at the project root: Vercel (which reads the daily `/api/health` keep-alive cron from `vercel.json`), Next.js, ESLint, drizzle-kit, Vitest and pnpm only look for them there, so moving them would break the deploy. Build output (`tsconfig.tsbuildinfo`, `next-env.d.ts`) is already git-ignored.
+
+**Verification.** `pnpm typecheck` clean; `pnpm lint` 0 errors (2 old warnings in `last-ndc.ts` and `lib/client/session.ts`). The toast and the counts grid were not yet looked at in a browser.
+
+**Files touched:** `components/settings/factory-reset.tsx`, `lib/actions/danger.ts` (deleted), `lib/validation/danger.ts` (deleted), `README.md`, `LICENSE` (new), `CHANGELOG.md`
+
 ## 08/11/2026 @ 04:52:45 IST — "claude-sonnet-5-5"
 
 **Project completion: 75.00%**
